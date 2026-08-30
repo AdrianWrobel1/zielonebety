@@ -1,0 +1,422 @@
+# 08_DOMAIN_MODEL.md
+
+# Domain Model
+
+Version: 1.0
+
+Status: Authoritative
+
+This document defines the canonical data model of the Zielone Bety platform.
+
+Every internal module MUST operate exclusively on this domain model.
+
+Provider-specific models must never leave the Provider layer.
+
+The canonical model is the only language spoken inside the system.
+
+---
+
+# Philosophy
+
+Every bookmaker represents the same real-world event differently.
+
+The responsibility of the system is to transform those differences into one consistent internal representation.
+
+After normalization, no module should know which bookmaker originally produced the data.
+
+---
+
+# Core Domain Objects
+
+The platform consists of the following core entities.
+
+Competition
+
+↓
+
+Event
+
+↓
+
+Market
+
+↓
+
+Selection
+
+↓
+
+Odds
+
+Every entity has exactly one responsibility.
+
+---
+
+# Competition
+
+Represents a sports competition.
+
+Examples:
+
+Premier League
+
+Champions League
+
+NBA
+
+ATP Wimbledon
+
+Properties include:
+
+- internal_id
+- provider_ids
+- sport
+- country
+- name
+- season
+
+Competition does NOT contain markets or odds.
+
+---
+
+# Event
+
+Represents a single sporting event.
+
+Examples:
+
+Manchester City vs Arsenal
+
+Barcelona vs Real Madrid
+
+Properties include:
+
+- internal_id
+- provider_ids
+- competition_id
+- home_participant
+- away_participant
+- scheduled_start
+- status
+
+Event never contains odds directly.
+
+---
+
+# Market
+
+Represents one betting market.
+
+Examples:
+
+Match Winner
+
+Over/Under 2.5
+
+Both Teams To Score
+
+Asian Handicap
+
+Properties include:
+
+- internal_id
+- event_id
+- market_type
+- line
+- status
+
+A Market owns Selections.
+
+---
+
+# Selection
+
+Represents one betting outcome.
+
+Examples:
+
+Home
+
+Draw
+
+Away
+
+Over
+
+Under
+
+Yes
+
+No
+
+Properties include:
+
+- internal_id
+- market_id
+- selection_type
+- line
+- participant
+
+Selections never store bookmaker information.
+
+---
+
+# Odds
+
+Represents one bookmaker's price for one selection.
+
+Properties include:
+
+- internal_id
+- selection_id
+- bookmaker
+- decimal_odds
+- timestamp
+
+Odds are immutable snapshots.
+
+Historical odds are never overwritten.
+
+---
+
+# Provider Identity
+
+Provider identifiers are preserved.
+
+Every canonical entity may reference one or more provider identifiers.
+
+Example
+
+Event
+
+↓
+
+provider_ids
+
+↓
+
+Betclic
+
+↓
+
+123456
+
+↓
+
+Superbet
+
+↓
+
+998877
+
+↓
+
+STS
+
+↓
+
+ABC123
+
+Internal IDs are never replaced by provider IDs.
+
+---
+
+# Canonical IDs
+
+Every canonical object owns exactly one permanent internal identifier.
+
+Internal IDs never change.
+
+Internal IDs never depend on provider identifiers.
+
+---
+
+# Relationships
+
+Competition
+
+1
+
+↓
+
+N
+
+Events
+
+↓
+
+1
+
+↓
+
+N
+
+Markets
+
+↓
+
+1
+
+↓
+
+N
+
+Selections
+
+↓
+
+1
+
+↓
+
+N
+
+Odds Snapshots
+
+---
+
+# Object Ownership
+
+Competition owns Events.
+
+Event owns Markets.
+
+Market owns Selections.
+
+Selection owns Odds.
+
+Ownership never points upward.
+
+---
+
+# Mutability
+
+Competition
+
+Mutable
+
+Event
+
+Mutable
+
+Market
+
+Mutable
+
+Selection
+
+Mostly immutable
+
+Odds
+
+Immutable
+
+Historical odds are append-only.
+
+---
+
+# Time
+
+Every object must contain timestamps where appropriate.
+
+Examples:
+
+created_at
+
+updated_at
+
+provider_timestamp
+
+snapshot_timestamp
+
+All timestamps must use UTC.
+
+---
+
+# Business Rules
+
+Business rules never exist inside domain objects.
+
+Domain objects represent data only.
+
+Business logic belongs to dedicated services.
+
+---
+
+# Validation
+
+Every domain object must be valid before persistence.
+
+Mandatory fields must never be null.
+
+Relationships must remain consistent.
+
+Invalid objects are rejected before entering the database.
+
+---
+
+# Extensibility
+
+New providers must never require modifications to existing domain objects.
+
+New market types should extend the model without breaking existing relationships.
+
+---
+
+# Forbidden
+
+Domain objects must never:
+
+contain HTTP logic
+
+contain parsing logic
+
+contain provider-specific behaviour
+
+contain database queries
+
+contain scanner logic
+
+contain notification logic
+
+contain UI logic
+
+---
+
+# Design Goals
+
+The canonical model must be:
+
+simple
+
+predictable
+
+stable
+
+provider-independent
+
+easy to serialize
+
+easy to test
+
+easy to extend
+
+---
+
+# Definition of Success
+
+The domain model is considered successful when:
+
+every provider can map into it
+
+every scanner consumes it
+
+every database stores it
+
+every API exposes it
+
+every frontend understands it
+
+without requiring provider-specific logic.
+
+End of document.

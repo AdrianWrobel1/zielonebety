@@ -1,0 +1,117 @@
+# 10_SCRAPER_FRAMEWORK.md
+
+# Production-Grade Scraper Framework
+
+Version: 1.0
+
+Status: Authoritative
+
+This document defines the architecture, design principles, components, and extensibility contract of the Zielone Bety Scraper Framework.
+
+Every bookmaker provider MUST be built using this framework. No provider may bypass or reimplement framework internals.
+
+---
+
+# Architecture Overview
+
+The Scraper Framework serves as the robust, bookmaker-agnostic data collection layer at the edge of the platform pipeline.
+
+```
+External Bookmaker (HTTP / Web Browser)
+                 │
+                 ▼
+  ┌──────────────────────────────┐
+  │      Scraper Framework       │
+  │                              │
+  │  - Browser & Session Pools   │
+  │  - Navigation & Wait Engine  │
+  │  - Rate Limiter & Proxies    │
+  │  - Interceptor Chains        │
+  │  - Priority Extraction Engine│
+  │  - Retry & Error Classifier  │
+  │  - Observability & Metrics   │
+  │  - Diagnostics & Screenshots │
+  │  - Health & Quality Monitors │
+  └──────────────┬───────────────┘
+                 │ ProviderResult
+                 ▼
+       Normalization Layer
+```
+
+---
+
+# Core Principles
+
+1. High Reliability: Automatic recovery from network blips, browser crashes, session expirations, and rate limits.
+2. Strong Observability: Every execution produces structured logs, diagnostic bundles, screenshots, HTML snapshots, network response logs, and quality reports.
+3. Deterministic Execution: Given the same input payloads, extraction strategies produce identical output.
+4. Separation of Concerns: Provider implementations define discovery rules, selectors, and models. Framework handles network, browser, retries, timing, logging, metrics, diagnostics, and quality.
+5. Minimal Provider-Specific Code: Adding a new bookmaker requires implementing discovery, fetch/scrape rules, parsing, and validation.
+
+---
+
+# Component Layer Responsibilities
+
+## 1. Execution Engine (`ExecutionEngine`)
+- Coordinates isolated execution of provider instances.
+- Enforces stage timeouts, timing profiler, and fault isolation.
+- Guarantees a valid `ProviderResult` return object under all conditions (never raises uncaught exceptions to caller).
+
+## 2. Recovery & Retry (`RetryEngine`, `ErrorClassifier`, `RecoveryStrategy`)
+- Classifies errors into `RETRYABLE`, `NON_RETRYABLE`, or `FATAL`.
+- Applies exponential backoff with random jitter.
+- Triggers recovery strategies (browser restart, session refresh, proxy rotation) between attempts.
+
+## 3. Rate Limiter (`RateLimiter`)
+- Token bucket implementation supporting requests per second, burst limits, and cooldown intervals.
+
+## 4. Interceptors (`RequestInterceptor`, `ResponseInterceptor`)
+- Chainable request/response interceptors for header injection, auth tokens, logging, status code validation, and empty body checks.
+
+## 5. Browser Automation (`BrowserManager`, `BrowserPool`, `BrowserContextManager`, `PageManager`, `ResourceInterceptor`)
+- Manages Playwright browser processes and isolated browser contexts.
+- Resource interceptor blocks images, fonts, and stylesheets to save bandwidth and boost speed.
+
+## 6. HTTP Scraping (`SessionManager`, `CookieManager`, `ProxyManager`)
+- Manages HTTP connection pooling, cookie jars, and rotating proxy configurations.
+
+## 7. Priority Extraction Engine (`BaseExtractor`)
+- Supports priority-ordered extraction:
+  1. Network Response Extraction (`NetworkResponseExtractor`)
+  2. Embedded JSON Extraction (`EmbeddedJsonExtractor`)
+  3. DOM Extraction (`DomExtractor`)
+  4. Provider Fallback
+
+## 8. Observability & Health (`DiagnosticsCollector`, `MetricsCollector`, `HealthMonitor`, `QualityReportBuilder`)
+- Collects metrics, diagnostic events, screenshots, HTML snapshots, and console logs.
+- Builds automated `QualityReport` assessing data coverage, missing fields, and status.
+- Tracks long-term provider health (consecutive failures, failure rate, rolling avg duration).
+
+---
+
+# Provider Extensibility Contract
+
+To add a new bookmaker (e.g. Fortuna, STS, Superbet), a developer implements:
+
+1. Provider Directory: `providers/<bookmaker_name>/`
+2. Class: Inherits `BaseProvider`
+3. Lifecycle Methods:
+   - `discover()`: Returns list of discovered event references
+   - `fetch()`: Downloads or intercepts raw provider data
+   - `parse()`: Maps raw responses to provider-specific domain models
+   - `validate()`: Validates completeness of parsed objects
+4. Explicit Registration: Registers provider class in `ProviderRegistry`
+
+No modifications to framework internals are required.
+
+---
+
+# Definition of Framework Success
+
+The Scraper Framework is successful when:
+- Adding a new bookmaker requires < 200 lines of provider-specific code.
+- One provider crash or timeout never impacts other providers.
+- Debugging any failure requires zero guessing (diagnostics bundle contains screenshot, HTML, console log, failed requests, and network responses).
+- Replay tests allow offline testing without live network calls.
+
+End of Document.

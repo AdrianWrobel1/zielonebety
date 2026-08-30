@@ -1,0 +1,340 @@
+# 30_STAGE_11_DEPLOYMENT
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: Medium
+
+Dependencies
+
+- Stage 01–10
+
+---
+
+# Objective
+
+Prepare the Zielone Bety platform for secure, automated and reproducible production deployment.
+
+Deployment must be fully automated.
+
+Manual production deployments are forbidden.
+
+The entire platform should be deployable from a clean repository using a single command or CI/CD pipeline.
+
+---
+
+# Scope
+
+Included
+
+- Docker
+- Docker Compose
+- Production Configuration
+- Environment Management
+- Reverse Proxy
+- HTTPS
+- CI/CD
+- Monitoring
+- Logging
+- Backup Automation
+- Rollback Strategy
+- Release Management
+
+Not Included
+
+- Business Logic
+- Scanner Algorithms
+- Provider Logic
+
+---
+
+# Architecture
+
+```
+Git Repository
+
+↓
+
+CI/CD
+
+↓
+
+Docker Images
+
+↓
+
+Production Server
+
+↓
+
+Reverse Proxy
+
+↓
+
+Backend
+
+↓
+
+Frontend
+
+↓
+
+PostgreSQL
+
+↓
+
+Monitoring
+```
+
+---
+
+# Infrastructure
+
+Production consists of
+
+- Backend
+- Frontend
+- PostgreSQL
+- Redis (optional)
+- Reverse Proxy
+- Monitoring
+- Log Aggregation
+
+Every component runs independently.
+
+---
+
+# Environment Management
+
+Support
+
+Development
+
+Testing
+
+Staging
+
+Production
+
+Every environment has its own configuration.
+
+No environment-specific code.
+
+---
+
+# Configuration
+
+Secrets
+
+API Keys
+
+Database Credentials
+
+Telegram Tokens
+
+JWT Secrets
+
+Environment Variables
+
+No secrets committed to Git.
+
+---
+
+# Docker
+
+Every service provides
+
+- Dockerfile
+- Healthcheck
+- Minimal image
+- Multi-stage build
+
+Images should be reproducible.
+
+---
+
+# CI/CD
+
+Pipeline
+
+Lint
+
+↓
+
+Static Analysis
+
+↓
+
+Unit Tests
+
+↓
+
+Integration Tests
+
+↓
+
+Docker Build
+
+↓
+
+Security Scan
+
+↓
+
+Deploy
+
+↓
+
+Health Verification
+
+Deployment stops immediately if any step fails.
+
+---
+
+# Release Strategy
+
+Support
+
+Development Releases
+
+Staging Releases
+
+Production Releases
+
+Every release is versioned.
+
+Rollback must always be possible.
+
+---
+
+# Monitoring
+
+Monitor
+
+- Backend
+- Frontend
+- Database
+- Scanner
+- Providers
+- Notifications
+- API
+- Server Resources
+
+Monitoring is enabled by default.
+
+---
+
+# Logging
+
+Centralize
+
+Application Logs
+
+Scanner Logs
+
+Provider Logs
+
+Database Logs
+
+API Logs
+
+Infrastructure Logs
+
+Logs must support production debugging.
+
+---
+
+# Backup
+
+Automate
+
+Database Backup
+
+Snapshot Backup
+
+Configuration Backup
+
+Retention
+
+Backup Verification
+
+Backups are tested regularly.
+
+---
+
+# Disaster Recovery
+
+Recovery plan includes
+
+- infrastructure recovery
+- database restore
+- configuration restore
+- application deployment
+- verification
+
+Recovery procedure must be documented.
+
+---
+
+# Security
+
+Production requirements
+
+- HTTPS
+- Secure Headers
+- Secret Management
+- Firewall
+- Rate Limiting
+- Automatic Updates
+- Dependency Scanning
+
+---
+
+# Performance
+
+Deployment must support
+
+- horizontal scaling
+- rolling deployments
+- zero-downtime updates (future)
+- resource monitoring
+
+---
+
+# Testing
+
+Required
+
+- deployment tests
+- rollback tests
+- backup restore tests
+- health tests
+- monitoring verification
+- load tests
+
+---
+
+# Acceptance Criteria
+
+- Docker completed
+- CI/CD completed
+- HTTPS enabled
+- Monitoring enabled
+- Logging centralized
+- Backup automated
+- Rollback tested
+- Deployment reproducible
+- Production validation completed
+
+---
+
+# Definition of Done
+
+The entire Zielone Bety platform can be deployed automatically to a clean production environment with minimal manual intervention.
+
+Infrastructure is reproducible, secure and monitored.
+
+The project is ready for the final stage — Testing & QA.
+
+End of Stage 11.

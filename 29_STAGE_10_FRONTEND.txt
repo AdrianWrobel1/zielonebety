@@ -1,0 +1,321 @@
+# 29_STAGE_10_FRONTEND
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Stage 07 — Scanner Engine
+- Stage 08 — Notifications
+- Stage 09 — API
+
+---
+
+# Objective
+
+Build a modern, responsive web application for monitoring betting opportunities, managing providers and analyzing historical market data.
+
+The Frontend is a presentation layer.
+
+It never contains business logic.
+
+All data comes exclusively from the API.
+
+---
+
+# Scope
+
+Included
+
+- Dashboard
+- Authentication
+- Opportunity Explorer
+- Event Browser
+- Provider Status
+- Historical Charts
+- Scanner Dashboard
+- Notification Center
+- Settings
+- User Preferences
+- Dark Mode
+- Responsive Layout
+
+Not Included
+
+- Scanner Logic
+- Provider Logic
+- Database Logic
+- Direct API Integrations outside Backend
+
+---
+
+# Architecture
+
+```
+User
+
+↓
+
+Frontend
+
+↓
+
+REST API
+
+↓
+
+Backend
+
+↓
+
+Database
+```
+
+Frontend communicates only with the REST API.
+
+No direct database access.
+
+---
+
+# Main Views
+
+Dashboard
+
+Live Opportunities
+
+Surebets
+
+Valuebets
+
+Events
+
+Markets
+
+Providers
+
+History
+
+Statistics
+
+Notifications
+
+Settings
+
+Admin
+
+---
+
+# Dashboard
+
+Display
+
+- live scanner status
+- active providers
+- opportunities found
+- provider health
+- notification status
+- recent activity
+- system health
+
+Dashboard should become the main control center.
+
+---
+
+# Opportunity Explorer
+
+Features
+
+- filtering
+- sorting
+- search
+- provider comparison
+- odds comparison
+- ROI
+- EV
+- confidence score
+
+Results update in near real-time.
+
+---
+
+# Historical Analysis
+
+Support
+
+- odds history
+- market movement
+- provider comparison
+- timeline
+- historical replay
+- trend visualization
+
+Historical data comes from Stage 06.
+
+---
+
+# Provider Management
+
+Display
+
+- provider status
+- last execution
+- health
+- execution time
+- discovered events
+- failures
+- version
+
+No provider configuration stored locally.
+
+---
+
+# Notifications
+
+Display
+
+- active alerts
+- notification history
+- delivery status
+- failures
+- retries
+
+Future
+
+Push Notifications
+
+Email
+
+Discord
+
+---
+
+# User Settings
+
+Support
+
+Theme
+
+Language
+
+Time Zone
+
+Favorite Providers
+
+Favorite Sports
+
+Scanner Preferences
+
+Notification Rules
+
+---
+
+# UI Principles
+
+Responsive
+
+Fast
+
+Minimal
+
+Accessible
+
+Consistent
+
+Predictable
+
+The interface should prioritize information density without becoming cluttered.
+
+---
+
+# State Management
+
+Frontend owns only
+
+- UI state
+- navigation
+- filters
+- cached API responses
+
+Business state remains in the backend.
+
+---
+
+# Performance
+
+Requirements
+
+- lazy loading
+- route splitting
+- virtualized tables
+- request caching
+- optimistic UI where appropriate
+
+Large datasets must remain responsive.
+
+---
+
+# Error Handling
+
+Handle
+
+- API unavailable
+- authentication expired
+- timeout
+- validation errors
+- network interruption
+
+Errors should always be understandable.
+
+---
+
+# Metrics
+
+Collect
+
+- page load time
+- API latency
+- rendering time
+- client errors
+- user interactions
+
+---
+
+# Testing
+
+Required
+
+- component tests
+- integration tests
+- responsive tests
+- accessibility tests
+- E2E tests
+- performance tests
+
+---
+
+# Acceptance Criteria
+
+- Dashboard implemented
+- Opportunity Explorer implemented
+- Provider Monitor implemented
+- Historical Analysis implemented
+- Notification Center implemented
+- Settings implemented
+- Responsive layout completed
+- Dark mode supported
+- Tests passing
+
+---
+
+# Definition of Done
+
+The Frontend provides a complete production interface for the Zielone Bety platform.
+
+All business operations are performed through the API.
+
+The project is ready for Stage 11 — Deployment.
+
+End of Stage 10.

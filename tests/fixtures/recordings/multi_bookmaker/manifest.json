@@ -1,0 +1,10 @@
+{
+  "fixture_version": "1.0",
+  "description": "Sanitized recorded production multi-bookmaker dataset for Superbet + Betclic",
+  "captured_at": "2026-08-17T10:30:00Z",
+  "sports": [
+    "football"
+  ],
+  "superbet_events_count": 127,
+  "betclic_events_count": 20
+}

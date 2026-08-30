@@ -1,0 +1,390 @@
+# 07_DATA_PIPELINE.md
+
+# Data Pipeline
+
+Version: 1.0
+
+Status: Authoritative
+
+This document defines the complete lifecycle of betting data inside the system.
+
+Every piece of data entering the platform MUST follow this pipeline.
+
+No component may skip a stage.
+
+No component may modify the pipeline.
+
+---
+
+# Philosophy
+
+The platform is a data processing pipeline.
+
+Every stage has one responsibility.
+
+Every stage receives input,
+produces output,
+and hands control to the next stage.
+
+No stage performs responsibilities belonging to another stage.
+
+---
+
+# High-Level Pipeline
+
+Bookmaker
+
+↓
+
+Provider
+
+↓
+
+Raw Snapshot
+
+↓
+
+Parser
+
+↓
+
+Validation
+
+↓
+
+Normalizer
+
+↓
+
+Canonical Model
+
+↓
+
+Persistence
+
+↓
+
+Scanner
+
+↓
+
+Opportunity Engine
+
+↓
+
+Notifications
+
+↓
+
+Frontend / API
+
+---
+
+# Stage 1 — Provider
+
+Input
+
+Bookmaker website or API.
+
+Responsibilities
+
+- communicate with bookmaker
+- fetch raw data
+- collect provider metadata
+
+Output
+
+Raw provider response.
+
+The output must remain unchanged.
+
+No parsing.
+
+No normalization.
+
+---
+
+# Stage 2 — Raw Snapshot
+
+Responsibilities
+
+Store the original provider response exactly as received.
+
+Purpose
+
+- debugging
+- reproducibility
+- regression testing
+- parser development
+
+Snapshots are immutable.
+
+Snapshots are never modified.
+
+---
+
+# Stage 3 — Parser
+
+Responsibilities
+
+Extract structured provider data.
+
+Examples
+
+events
+
+markets
+
+odds
+
+competitions
+
+participants
+
+Output
+
+Parsed provider objects.
+
+No normalization.
+
+No business logic.
+
+---
+
+# Stage 4 — Validation
+
+Responsibilities
+
+Verify parsed objects.
+
+Detect:
+
+missing values
+
+invalid structures
+
+duplicate objects
+
+unsupported formats
+
+Output
+
+Validated provider objects.
+
+Rejected objects must contain a rejection reason.
+
+---
+
+# Stage 5 — Normalization
+
+Responsibilities
+
+Convert provider objects into the canonical internal model.
+
+Every bookmaker becomes identical from this point onward.
+
+After normalization:
+
+Scanner never knows which bookmaker produced the data.
+
+---
+
+# Stage 6 — Canonical Model
+
+The canonical model becomes the single source of truth.
+
+Every downstream module consumes only canonical objects.
+
+No downstream module may consume provider-specific objects.
+
+---
+
+# Stage 7 — Persistence
+
+Responsibilities
+
+Persist:
+
+events
+
+markets
+
+odds
+
+snapshots
+
+metadata
+
+history
+
+The database never stores business logic.
+
+---
+
+# Stage 8 — Scanner
+
+Responsibilities
+
+Analyze canonical data.
+
+Detect:
+
+surebets
+
+value bets
+
+configured opportunity types
+
+Scanner never accesses providers.
+
+Scanner never parses responses.
+
+Scanner never normalizes data.
+
+---
+
+# Stage 9 — Opportunity Engine
+
+Responsibilities
+
+Rank opportunities.
+
+Remove duplicates.
+
+Calculate confidence.
+
+Prepare notification payloads.
+
+No provider communication.
+
+---
+
+# Stage 10 — Notifications
+
+Responsibilities
+
+Deliver notifications.
+
+Retry failed deliveries.
+
+Track delivery status.
+
+Notifications never create opportunities.
+
+---
+
+# Stage 11 — API
+
+Responsibilities
+
+Expose system state.
+
+Expose opportunities.
+
+Expose diagnostics.
+
+Expose statistics.
+
+API contains no business logic.
+
+---
+
+# Stage 12 — Frontend
+
+Responsibilities
+
+Display information.
+
+Display diagnostics.
+
+Display opportunities.
+
+Trigger user actions.
+
+Frontend never calculates opportunities.
+
+---
+
+# Pipeline Guarantees
+
+Every stage has one responsibility.
+
+Every stage has deterministic input.
+
+Every stage has deterministic output.
+
+Every stage can be tested independently.
+
+Every stage can be replaced independently.
+
+---
+
+# Forbidden Behaviour
+
+No stage may:
+
+skip validation
+
+modify historical snapshots
+
+contain hidden business logic
+
+depend on frontend
+
+depend on unrelated stages
+
+perform work belonging to another stage
+
+---
+
+# Error Handling
+
+Failures stop only the current stage.
+
+Previous stages remain valid.
+
+Independent providers continue working.
+
+Every failure produces diagnostic information.
+
+---
+
+# Replay Support
+
+The pipeline must support replay.
+
+Previously stored snapshots should be reusable without contacting bookmakers.
+
+This allows:
+
+parser testing
+
+normalizer testing
+
+scanner testing
+
+regression testing
+
+without network access.
+
+---
+
+# Success Criteria
+
+A successful pipeline:
+
+is deterministic
+
+is observable
+
+is testable
+
+is reproducible
+
+is modular
+
+is fault tolerant
+
+is easy to extend
+
+End of document.

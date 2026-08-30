@@ -1,0 +1,15 @@
+{
+  "recorded_at": "2026-08-16T21:30:00Z",
+  "sanitized": true,
+  "provider": "superbet",
+  "sport": "football",
+  "sport_id": 5,
+  "recordings": [
+    {
+      "url": "https://production-superbet-offer-pl.freetls.fastly.net/v3/pl-PL/events",
+      "method": "GET",
+      "status_code": 200,
+      "payload_file": "response_000.json"
+    }
+  ]
+}

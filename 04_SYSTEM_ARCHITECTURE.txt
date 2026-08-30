@@ -1,0 +1,391 @@
+# 04_SYSTEM_ARCHITECTURE.md
+
+# System Architecture
+
+Version: 1.0
+
+Status: Authoritative
+
+This document defines the high-level architecture of the Zielone Bety platform.
+
+Every implementation must conform to this architecture.
+
+No module may violate these boundaries.
+
+---
+
+# System Overview
+
+The platform is organized as a layered architecture.
+
+Each layer has exactly one responsibility.
+
+Communication between layers occurs only through explicitly defined interfaces.
+
+No layer may directly access the internal implementation of another layer.
+
+---
+
+# High-Level Architecture
+
+                External Providers
+                        │
+                        ▼
+               Provider Framework
+                        │
+                        ▼
+                 Normalization Layer
+                        │
+                        ▼
+                 Validation Layer
+                        │
+                        ▼
+                    Persistence
+                        │
+                        ▼
+                Analysis Engine
+                        │
+         ┌──────────────┴──────────────┐
+         ▼                             ▼
+  Opportunity Engine            Analytics Engine
+         ▼                             ▼
+   Notification Engine         Dashboard / API
+
+---
+
+# Layer Responsibilities
+
+## Provider Layer
+
+Responsibilities
+
+- Fetch bookmaker data.
+- Handle provider-specific communication.
+- Handle authentication.
+- Handle retries.
+- Handle rate limits.
+- Return raw provider data.
+
+Must NOT
+
+- Normalize data.
+- Detect opportunities.
+- Write to database.
+- Send notifications.
+- Perform business logic.
+
+---
+
+## Normalization Layer
+
+Responsibilities
+
+- Convert raw provider responses into a unified internal model.
+- Resolve naming differences.
+- Standardize structures.
+
+Must NOT
+
+- Fetch data.
+- Persist data.
+- Detect opportunities.
+
+---
+
+## Validation Layer
+
+Responsibilities
+
+- Verify normalized data.
+- Detect malformed records.
+- Reject invalid objects.
+- Produce validation reports.
+
+Must NOT
+
+- Modify provider behaviour.
+- Perform analytics.
+
+---
+
+## Persistence Layer
+
+Responsibilities
+
+- Store validated data.
+- Store historical data.
+- Store snapshots.
+- Store metadata.
+
+Must NOT
+
+- Analyze data.
+- Generate alerts.
+
+---
+
+## Analysis Layer
+
+Responsibilities
+
+- Compare markets.
+- Compare bookmakers.
+- Detect changes.
+- Produce analysis results.
+
+Must NOT
+
+- Access providers directly.
+- Render UI.
+
+---
+
+## Opportunity Engine
+
+Responsibilities
+
+- Detect surebets.
+- Detect value bets.
+- Detect configured opportunity types.
+
+Must NOT
+
+- Fetch provider data.
+- Normalize data.
+- Communicate with providers.
+
+---
+
+## Notification Layer
+
+Responsibilities
+
+- Deliver notifications.
+- Handle delivery failures.
+- Retry sending.
+
+Must NOT
+
+- Decide whether an opportunity exists.
+
+---
+
+## API Layer
+
+Responsibilities
+
+- Expose system data.
+- Expose analysis results.
+- Expose diagnostics.
+
+Must NOT
+
+- Perform business logic.
+
+---
+
+## Frontend
+
+Responsibilities
+
+- Display data.
+- Display diagnostics.
+- Display opportunities.
+- Trigger user actions.
+
+Must NOT
+
+- Calculate opportunities.
+- Normalize data.
+- Execute business logic.
+
+---
+
+# Dependency Rules
+
+Allowed
+
+Frontend
+
+↓
+
+API
+
+↓
+
+Services
+
+↓
+
+Database
+
+Allowed
+
+Provider
+
+↓
+
+Normalizer
+
+↓
+
+Validator
+
+↓
+
+Database
+
+Forbidden
+
+Frontend
+
+→ Providers
+
+Scanner
+
+→ Providers
+
+Database
+
+→ Providers
+
+Notifications
+
+→ Providers
+
+Providers
+
+→ Scanner
+
+Providers
+
+→ Database
+
+UI
+
+→ Database
+
+---
+
+# Provider Contract
+
+Every bookmaker provider must expose exactly the same public interface.
+
+Every provider must:
+
+- initialize
+- fetch events
+- fetch markets
+- fetch odds
+- report provider metadata
+- report health status
+
+Internal implementation may differ.
+
+Public interface must remain identical.
+
+---
+
+# Data Flow
+
+Provider
+
+↓
+
+Raw Response
+
+↓
+
+Normalization
+
+↓
+
+Validation
+
+↓
+
+Database
+
+↓
+
+Analysis
+
+↓
+
+Opportunity Detection
+
+↓
+
+Notifications
+
+↓
+
+Frontend
+
+Every object moves through this pipeline exactly once.
+
+---
+
+# Error Handling
+
+Failures are isolated.
+
+One provider failure must never stop:
+
+other providers
+
+database
+
+analysis
+
+notifications
+
+frontend
+
+The system must continue operating whenever possible.
+
+---
+
+# Scalability
+
+Adding a new bookmaker should require:
+
+1. Implement Provider Interface
+
+2. Register Provider
+
+Nothing else.
+
+No existing module should require modification.
+
+---
+
+# Architectural Constraints
+
+No circular dependencies.
+
+No duplicated business logic.
+
+No hidden communication.
+
+No implicit state sharing.
+
+No module may bypass another layer.
+
+No module owns responsibilities outside its layer.
+
+---
+
+# Definition of Architectural Success
+
+The architecture is considered successful when:
+
+- every layer has one responsibility
+- dependencies remain one-directional
+- providers are interchangeable
+- new providers require minimal work
+- modules are independently testable
+- failures remain isolated
+- business logic exists only in designated layers
+
+End of document.

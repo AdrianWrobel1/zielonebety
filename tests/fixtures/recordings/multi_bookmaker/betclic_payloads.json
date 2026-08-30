@@ -1,0 +1,5253 @@
+[
+  {
+    "matchId": "1198919289667584",
+    "name": "ATK Mohun Bagan - Jamshedpur",
+    "matchDateUtc": "2026-08-17T10:30:00.0000000Z",
+    "isLive": true,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543842993267267",
+        "name": "ATK Mohun Bagan",
+        "shortName": "ATK Mohun Bagan",
+        "players": [],
+        "formResults": [],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "543842181968009",
+        "name": "Jamshedpur",
+        "shortName": "Jamshedpur",
+        "players": [],
+        "formResults": [],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": false,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 106,
+    "competition": {
+      "id": "29400",
+      "name": "Indie Durand Cup",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "IN"
+    },
+    "market": {
+      "id": "1199898327265323",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1199898328305812",
+          "isLive": true,
+          "keys": [
+            "contestant:543842993267267",
+            "contestant:543842181968009"
+          ],
+          "name": "ATK Mohun Bagan",
+          "betslipName": "ATK Mohun Bagan",
+          "odds": 1.35,
+          "status": 1,
+          "betslipMarketId": "1199898327265323",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199898328305813",
+          "isLive": true,
+          "keys": [
+            "contestant:543842993267267",
+            "contestant:543842181968009"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.9,
+          "status": 1,
+          "betslipMarketId": "1199898327265323",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199898328305814",
+          "isLive": true,
+          "keys": [
+            "contestant:543842993267267",
+            "contestant:543842181968009"
+          ],
+          "name": "Jamshedpur",
+          "betslipName": "Jamshedpur",
+          "odds": 5.75,
+          "status": 1,
+          "betslipMarketId": "1199898327265323",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1199898327265323"
+      ],
+      "groupLayout": 0,
+      "matchId": "1198919289667584",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "scoreboard": {
+      "sportCode": "football",
+      "liveDisplayStatus": 2,
+      "periodType": "",
+      "endedPeriodScore": [],
+      "matchId": "1198919289667584",
+      "isRestricted": false,
+      "currentScore": {
+        "contestant1": "0",
+        "contestant2": "0"
+      },
+      "currentPeriodScore": {
+        "periodIndex": 1,
+        "periodType": "ftb_first_half",
+        "score": {
+          "contestant1": "0",
+          "contestant2": "0"
+        }
+      },
+      "liveActions": {
+        "goalScorersHome": [],
+        "goalScorersAway": [],
+        "penaltyKicksHome": [],
+        "penaltyKicksAway": []
+      },
+      "periodTimerConfig": {
+        "elapsedTimeInSecs": "15",
+        "periodFullTime": 45,
+        "periodType": "ftb_first_half",
+        "timerShowSeconds": false,
+        "periodName": "1. połowa",
+        "periodShortName": "P1",
+        "isTimerPaused": false,
+        "isTimerDescending": false,
+        "isAdditionalTimeHidden": false
+      }
+    },
+    "matchInfo": {
+      "matchId": "1198919289667584",
+      "name": "ATK Mohun Bagan - Jamshedpur",
+      "matchDateUtc": "2026-08-17T10:30:00.0000000Z",
+      "isLive": true,
+      "hasLiveStream": false,
+      "openMarketCount": 106,
+      "contestants": [
+        {
+          "contestantId": "543842993267267",
+          "name": "ATK Mohun Bagan",
+          "shortName": "ATK Mohun Bagan",
+          "players": [],
+          "formResults": [],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "543842181968009",
+          "name": "Jamshedpur",
+          "shortName": "Jamshedpur",
+          "players": [],
+          "formResults": [],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "29400",
+        "name": "Indie Durand Cup",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "IN"
+      },
+      "scoreboard": {
+        "sportCode": "football",
+        "liveDisplayStatus": 2,
+        "periodType": "",
+        "endedPeriodScore": [],
+        "matchId": "1198919289667584",
+        "isRestricted": false,
+        "currentScore": {
+          "contestant1": "0",
+          "contestant2": "0"
+        },
+        "currentPeriodScore": {
+          "periodIndex": 1,
+          "periodType": "ftb_first_half",
+          "score": {
+            "contestant1": "0",
+            "contestant2": "0"
+          }
+        },
+        "liveActions": {
+          "goalScorersHome": [],
+          "goalScorersAway": [],
+          "penaltyKicksHome": [],
+          "penaltyKicksAway": []
+        },
+        "periodTimerConfig": {
+          "elapsedTimeInSecs": "15",
+          "periodFullTime": 45,
+          "periodType": "ftb_first_half",
+          "timerShowSeconds": false,
+          "periodName": "1. połowa",
+          "periodShortName": "P1",
+          "isTimerPaused": false,
+          "isTimerDescending": false,
+          "isAdditionalTimeHidden": false
+        }
+      }
+    }
+  },
+  {
+    "matchId": "1198884007182336",
+    "name": "Ayeyawady United FC K. - Jurong K.",
+    "matchDateUtc": "2026-08-17T09:30:00.0000000Z",
+    "isLive": true,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543843241779653",
+        "name": "Ayeyawady United FC K.",
+        "shortName": "Ayeyawady Utd K.",
+        "players": [],
+        "formResults": [],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "1195351906430976",
+        "name": "Jurong K.",
+        "shortName": "Jurong K.",
+        "players": [],
+        "formResults": [],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": false,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 105,
+    "competition": {
+      "id": "37290",
+      "name": "AFC Liga Mistrzów K.",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "ZZ"
+    },
+    "market": {
+      "id": "1199860576440362",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1199860576432273",
+          "isLive": true,
+          "keys": [
+            "contestant:543843241779653",
+            "contestant:1195351906430976"
+          ],
+          "name": "Ayeyawady United FC K.",
+          "betslipName": "Ayeyawady United FC K.",
+          "odds": 1.03,
+          "status": 1,
+          "betslipMarketId": "1199860576440362",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199860576432274",
+          "isLive": true,
+          "keys": [
+            "contestant:543843241779653",
+            "contestant:1195351906430976"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 6.75,
+          "status": 1,
+          "betslipMarketId": "1199860576440362",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199860576432275",
+          "isLive": true,
+          "keys": [
+            "contestant:543843241779653",
+            "contestant:1195351906430976"
+          ],
+          "name": "Jurong K.",
+          "betslipName": "Jurong K.",
+          "odds": 19,
+          "status": 1,
+          "betslipMarketId": "1199860576440362",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1199860576440362"
+      ],
+      "groupLayout": 0,
+      "matchId": "1198884007182336",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "scoreboard": {
+      "sportCode": "football",
+      "liveDisplayStatus": 2,
+      "periodType": "",
+      "endedPeriodScore": [
+        {
+          "periodIndex": 1,
+          "periodType": "ftb_first_half",
+          "score": {
+            "contestant1": "1",
+            "contestant2": "0"
+          }
+        }
+      ],
+      "matchId": "1198884007182336",
+      "isRestricted": false,
+      "currentScore": {
+        "contestant1": "1",
+        "contestant2": "0"
+      },
+      "liveActions": {
+        "goalScorersHome": [
+          {
+            "name": "-",
+            "contestantId": "",
+            "goals": [
+              {
+                "periodFullTime": 45,
+                "elapsedSeconds": 2100,
+                "goalType": 1,
+                "periodType": ""
+              }
+            ]
+          }
+        ],
+        "goalScorersAway": [],
+        "penaltyKicksHome": [],
+        "penaltyKicksAway": [],
+        "redCards": {
+          "contestant1": 0,
+          "contestant2": 0
+        },
+        "server": 0
+      },
+      "periodTimerConfig": {
+        "periodType": "ftb_halftime",
+        "isTimerHidden": true,
+        "timerShowSeconds": false,
+        "periodName": "Połowa",
+        "periodShortName": "Poł.",
+        "isTimerPaused": false,
+        "isTimerDescending": false,
+        "isAdditionalTimeHidden": false
+      }
+    },
+    "matchInfo": {
+      "matchId": "1198884007182336",
+      "name": "Ayeyawady United FC K. - Jurong K.",
+      "matchDateUtc": "2026-08-17T09:30:00.0000000Z",
+      "isLive": true,
+      "hasLiveStream": false,
+      "openMarketCount": 105,
+      "contestants": [
+        {
+          "contestantId": "543843241779653",
+          "name": "Ayeyawady United FC K.",
+          "shortName": "Ayeyawady Utd K.",
+          "players": [],
+          "formResults": [],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "1195351906430976",
+          "name": "Jurong K.",
+          "shortName": "Jurong K.",
+          "players": [],
+          "formResults": [],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "37290",
+        "name": "AFC Liga Mistrzów K.",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "ZZ"
+      },
+      "scoreboard": {
+        "sportCode": "football",
+        "liveDisplayStatus": 2,
+        "periodType": "",
+        "endedPeriodScore": [
+          {
+            "periodIndex": 1,
+            "periodType": "ftb_first_half",
+            "score": {
+              "contestant1": "1",
+              "contestant2": "0"
+            }
+          }
+        ],
+        "matchId": "1198884007182336",
+        "isRestricted": false,
+        "currentScore": {
+          "contestant1": "1",
+          "contestant2": "0"
+        },
+        "liveActions": {
+          "goalScorersHome": [
+            {
+              "name": "-",
+              "contestantId": "",
+              "goals": [
+                {
+                  "periodFullTime": 45,
+                  "elapsedSeconds": 2100,
+                  "goalType": 1,
+                  "periodType": ""
+                }
+              ]
+            }
+          ],
+          "goalScorersAway": [],
+          "penaltyKicksHome": [],
+          "penaltyKicksAway": [],
+          "redCards": {
+            "contestant1": 0,
+            "contestant2": 0
+          },
+          "server": 0
+        },
+        "periodTimerConfig": {
+          "periodType": "ftb_halftime",
+          "isTimerHidden": true,
+          "timerShowSeconds": false,
+          "periodName": "Połowa",
+          "periodShortName": "Poł.",
+          "isTimerPaused": false,
+          "isTimerDescending": false,
+          "isAdditionalTimeHidden": false
+        }
+      }
+    }
+  },
+  {
+    "matchId": "1197239208783872",
+    "name": "Swansea City U21 - Sheffield United U21",
+    "matchDateUtc": "2026-08-17T12:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543844281217408",
+        "name": "Swansea City U21",
+        "shortName": "Swansea City U21",
+        "players": [],
+        "formResults": [
+          3,
+          3,
+          1,
+          2,
+          1
+        ],
+        "displayImage": false,
+        "ranking": "#12",
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "543844352520330",
+        "name": "Sheffield United U21",
+        "shortName": "Sheffield United U21",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          3,
+          2,
+          2
+        ],
+        "displayImage": false,
+        "ranking": "#3",
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73601674",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73601674",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73601674",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73601674",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 25,
+    "competition": {
+      "id": "21283",
+      "name": "Anglia Development League",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "EN"
+    },
+    "market": {
+      "id": "1199061971505153",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1199061971513349",
+          "isLive": false,
+          "keys": [
+            "contestant:543844281217408",
+            "contestant:543844352520330"
+          ],
+          "name": "Swansea City U21",
+          "betslipName": "Swansea City U21",
+          "odds": 2.02,
+          "status": 1,
+          "betslipMarketId": "1199061971505153",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 81,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199061971513350",
+          "isLive": false,
+          "keys": [
+            "contestant:543844281217408",
+            "contestant:543844352520330"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.8,
+          "status": 1,
+          "betslipMarketId": "1199061971505153",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 7,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199061971513351",
+          "isLive": false,
+          "keys": [
+            "contestant:543844281217408",
+            "contestant:543844352520330"
+          ],
+          "name": "Sheffield United U21",
+          "betslipName": "Sheffield United U21",
+          "odds": 2.62,
+          "status": 1,
+          "betslipMarketId": "1199061971505153",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 12,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1199061971505153"
+      ],
+      "groupLayout": 0,
+      "matchId": "1197239208783872",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 1",
+      "matchLegType": 0,
+      "competitionRoundName": "D1",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1197239208783872",
+      "name": "Swansea City U21 - Sheffield United U21",
+      "matchDateUtc": "2026-08-17T12:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 25,
+      "contestants": [
+        {
+          "contestantId": "543844281217408",
+          "name": "Swansea City U21",
+          "shortName": "Swansea City U21",
+          "players": [],
+          "formResults": [
+            3,
+            3,
+            1,
+            2,
+            1
+          ],
+          "displayImage": false,
+          "ranking": "#12",
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "543844352520330",
+          "name": "Sheffield United U21",
+          "shortName": "Sheffield United U21",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            3,
+            2,
+            2
+          ],
+          "displayImage": false,
+          "ranking": "#3",
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "21283",
+        "name": "Anglia Development League",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "EN"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 1",
+        "matchLegType": 0,
+        "competitionRoundName": "D1",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1199878653882368",
+    "name": "LD Sofala - Ferroviario de Lichinga",
+    "matchDateUtc": "2026-08-17T12:45:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "1145613467676672",
+        "name": "LD Sofala",
+        "shortName": "LD Sofala",
+        "players": [],
+        "formResults": [
+          3,
+          3,
+          1,
+          2,
+          2
+        ],
+        "displayImage": false,
+        "ranking": "#10",
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "543842307797008",
+        "name": "Ferroviario de Lichinga",
+        "shortName": "Ferroviario de Lichinga",
+        "players": [],
+        "formResults": [
+          3,
+          1,
+          1,
+          2,
+          2
+        ],
+        "displayImage": false,
+        "ranking": "#8",
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73778766",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73778766",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73778766",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73778766",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 25,
+    "competition": {
+      "id": "25661",
+      "name": "Mozambik Moçambola",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "MZ"
+    },
+    "market": {
+      "id": "1199878659125252",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1199878659112969",
+          "isLive": false,
+          "keys": [
+            "contestant:1145613467676672",
+            "contestant:543842307797008"
+          ],
+          "name": "LD Sofala",
+          "betslipName": "LD Sofala",
+          "odds": 2.43,
+          "status": 1,
+          "betslipMarketId": "1199878659125252",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 50,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199878659112970",
+          "isLive": false,
+          "keys": [
+            "contestant:1145613467676672",
+            "contestant:543842307797008"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 2.47,
+          "status": 1,
+          "betslipMarketId": "1199878659125252",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 32,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199878659112971",
+          "isLive": false,
+          "keys": [
+            "contestant:1145613467676672",
+            "contestant:543842307797008"
+          ],
+          "name": "Ferroviario de Lichinga",
+          "betslipName": "Ferroviario de Lichinga",
+          "odds": 3.1,
+          "status": 1,
+          "betslipMarketId": "1199878659125252",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 18,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1199878659125252"
+      ],
+      "groupLayout": 0,
+      "matchId": "1199878653882368",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 15",
+      "matchLegType": 0,
+      "competitionRoundName": "D15",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1199878653882368",
+      "name": "LD Sofala - Ferroviario de Lichinga",
+      "matchDateUtc": "2026-08-17T12:45:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 25,
+      "contestants": [
+        {
+          "contestantId": "1145613467676672",
+          "name": "LD Sofala",
+          "shortName": "LD Sofala",
+          "players": [],
+          "formResults": [
+            3,
+            3,
+            1,
+            2,
+            2
+          ],
+          "displayImage": false,
+          "ranking": "#10",
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "543842307797008",
+          "name": "Ferroviario de Lichinga",
+          "shortName": "Ferroviario de Lichinga",
+          "players": [],
+          "formResults": [
+            3,
+            1,
+            1,
+            2,
+            2
+          ],
+          "displayImage": false,
+          "ranking": "#8",
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "25661",
+        "name": "Mozambik Moçambola",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "MZ"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 15",
+        "matchLegType": 0,
+        "competitionRoundName": "D15",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1197277148360704",
+    "name": "Huracán K. - CA Independiente K.",
+    "matchDateUtc": "2026-08-17T13:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": true,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543842181968727",
+        "name": "Huracán K.",
+        "shortName": "Huracán K.",
+        "players": [],
+        "formResults": [
+          2,
+          2,
+          1,
+          2,
+          1
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "612092999827456",
+        "name": "CA Independiente K.",
+        "shortName": "CA Independiente K.",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          2,
+          2,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73669906",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73669906",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73669906",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73669906",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 19,
+    "competition": {
+      "id": "21829",
+      "name": "Argentyna Primera K.",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "AR"
+    },
+    "market": {
+      "id": "1199098383323138",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1199098383314949",
+          "isLive": false,
+          "keys": [
+            "contestant:543842181968727",
+            "contestant:612092999827456"
+          ],
+          "name": "Huracán K.",
+          "betslipName": "Huracán K.",
+          "odds": 1.75,
+          "status": 1,
+          "betslipMarketId": "1199098383323138",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 96,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199098383314950",
+          "isLive": false,
+          "keys": [
+            "contestant:543842181968727",
+            "contestant:612092999827456"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.05,
+          "status": 1,
+          "betslipMarketId": "1199098383323138",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 2,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199098383314951",
+          "isLive": false,
+          "keys": [
+            "contestant:543842181968727",
+            "contestant:612092999827456"
+          ],
+          "name": "CA Independiente K.",
+          "betslipName": "CA Independiente K.",
+          "odds": 4.15,
+          "status": 1,
+          "betslipMarketId": "1199098383323138",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 1,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1199098383323138"
+      ],
+      "groupLayout": 0,
+      "matchId": "1197277148360704",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Grupa Clausura, Dzień 4",
+      "matchLegType": 0,
+      "competitionRoundName": "D4",
+      "groupName": "Gr.Clausura"
+    },
+    "streamingProviderType": 3,
+    "matchInfo": {
+      "matchId": "1197277148360704",
+      "name": "Huracán K. - CA Independiente K.",
+      "matchDateUtc": "2026-08-17T13:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": true,
+      "openMarketCount": 19,
+      "contestants": [
+        {
+          "contestantId": "543842181968727",
+          "name": "Huracán K.",
+          "shortName": "Huracán K.",
+          "players": [],
+          "formResults": [
+            2,
+            2,
+            1,
+            2,
+            1
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "612092999827456",
+          "name": "CA Independiente K.",
+          "shortName": "CA Independiente K.",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            2,
+            2,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "21829",
+        "name": "Argentyna Primera K.",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "AR"
+      },
+      "competitionInfo": {
+        "roundName": "Grupa Clausura, Dzień 4",
+        "matchLegType": 0,
+        "competitionRoundName": "D4",
+        "groupName": "Gr.Clausura"
+      }
+    }
+  },
+  {
+    "matchId": "1197238497849344",
+    "name": "Kallithea FC Athén - Larissa",
+    "matchDateUtc": "2026-08-17T14:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543842601099775",
+        "name": "Kallithea FC Athén",
+        "shortName": "Kallithea FC Athén",
+        "players": [],
+        "formResults": [
+          1,
+          3,
+          3,
+          1,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "543841537094329",
+        "name": "Larissa",
+        "shortName": "Larissa",
+        "players": [],
+        "formResults": [
+          3,
+          3,
+          1,
+          2,
+          1
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73663420",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73663420",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73663420",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73663420",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 125,
+    "competition": {
+      "id": "133",
+      "name": "Grecja Puchar",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "GR"
+    },
+    "market": {
+      "id": "1197238498889734",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1197238499946501",
+          "isLive": false,
+          "keys": [
+            "contestant:543842601099775",
+            "contestant:543841537094329"
+          ],
+          "name": "Kallithea FC Athén",
+          "betslipName": "Kallithea FC Athén",
+          "odds": 2.98,
+          "status": 1,
+          "betslipMarketId": "1197238498889734",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 31,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1197238499946502",
+          "isLive": false,
+          "keys": [
+            "contestant:543842601099775",
+            "contestant:543841537094329"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 2.95,
+          "status": 1,
+          "betslipMarketId": "1197238498889734",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 29,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1197238499946503",
+          "isLive": false,
+          "keys": [
+            "contestant:543842601099775",
+            "contestant:543841537094329"
+          ],
+          "name": "Larissa",
+          "betslipName": "Larissa",
+          "odds": 2.45,
+          "status": 1,
+          "betslipMarketId": "1197238498889734",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 40,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1197238498889734"
+      ],
+      "groupLayout": 0,
+      "matchId": "1197238497849344",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "2. kolejka kwalifikacji",
+      "matchLegType": 0,
+      "competitionRoundName": "",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1197238497849344",
+      "name": "Kallithea FC Athén - Larissa",
+      "matchDateUtc": "2026-08-17T14:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 125,
+      "contestants": [
+        {
+          "contestantId": "543842601099775",
+          "name": "Kallithea FC Athén",
+          "shortName": "Kallithea FC Athén",
+          "players": [],
+          "formResults": [
+            1,
+            3,
+            3,
+            1,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "543841537094329",
+          "name": "Larissa",
+          "shortName": "Larissa",
+          "players": [],
+          "formResults": [
+            3,
+            3,
+            1,
+            2,
+            1
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "133",
+        "name": "Grecja Puchar",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "GR"
+      },
+      "competitionInfo": {
+        "roundName": "2. kolejka kwalifikacji",
+        "matchLegType": 0,
+        "competitionRoundName": "",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1197316056825856",
+    "name": "Social Atletico Television K. - San Lorenzo de Almagro K.",
+    "matchDateUtc": "2026-08-17T14:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": true,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543844422775762",
+        "name": "Social Atletico Television K.",
+        "shortName": "Social Atletico Television K.",
+        "players": [],
+        "formResults": [
+          2,
+          1,
+          1,
+          3,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "612092540551168",
+        "name": "San Lorenzo de Almagro K.",
+        "shortName": "San Lorenzo de Almagro K.",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          1,
+          3,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73669908",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73669908",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73669908",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73669908",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 19,
+    "competition": {
+      "id": "21829",
+      "name": "Argentyna Primera K.",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "AR"
+    },
+    "market": {
+      "id": "1199136131006466",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1199136131010565",
+          "isLive": false,
+          "keys": [
+            "contestant:543844422775762",
+            "contestant:612092540551168"
+          ],
+          "name": "Social Atletico Television K.",
+          "betslipName": "Social Atletico Television K.",
+          "odds": 3.8,
+          "status": 1,
+          "betslipMarketId": "1199136131006466",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 7,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199136131010566",
+          "isLive": false,
+          "keys": [
+            "contestant:543844422775762",
+            "contestant:612092540551168"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 2.9,
+          "status": 1,
+          "betslipMarketId": "1199136131006466",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 13,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1199136131010567",
+          "isLive": false,
+          "keys": [
+            "contestant:543844422775762",
+            "contestant:612092540551168"
+          ],
+          "name": "San Lorenzo de Almagro K.",
+          "betslipName": "San Lorenzo de Almagro K.",
+          "odds": 1.87,
+          "status": 1,
+          "betslipMarketId": "1199136131006466",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 80,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1199136131006466"
+      ],
+      "groupLayout": 0,
+      "matchId": "1197316056825856",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Grupa Clausura, Dzień 4",
+      "matchLegType": 0,
+      "competitionRoundName": "D4",
+      "groupName": "Gr.Clausura"
+    },
+    "streamingProviderType": 3,
+    "matchInfo": {
+      "matchId": "1197316056825856",
+      "name": "Social Atletico Television K. - San Lorenzo de Almagro K.",
+      "matchDateUtc": "2026-08-17T14:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": true,
+      "openMarketCount": 19,
+      "contestants": [
+        {
+          "contestantId": "543844422775762",
+          "name": "Social Atletico Television K.",
+          "shortName": "Social Atletico Television K.",
+          "players": [],
+          "formResults": [
+            2,
+            1,
+            1,
+            3,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "612092540551168",
+          "name": "San Lorenzo de Almagro K.",
+          "shortName": "San Lorenzo de Almagro K.",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            1,
+            3,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "21829",
+        "name": "Argentyna Primera K.",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "AR"
+      },
+      "competitionInfo": {
+        "roundName": "Grupa Clausura, Dzień 4",
+        "matchLegType": 0,
+        "competitionRoundName": "D4",
+        "groupName": "Gr.Clausura"
+      }
+    }
+  },
+  {
+    "matchId": "1191257370025984",
+    "name": "Anagennisi Karditsas 1904 - Aris Thessaloniki",
+    "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841650340115",
+        "name": "Anagennisi Karditsas 1904",
+        "shortName": "Anagennisi Karditsas 1904",
+        "players": [],
+        "formResults": [
+          2,
+          2,
+          2,
+          3,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "543841509532435",
+        "name": "Aris Thessaloniki",
+        "shortName": "Aris Thessaloniki",
+        "players": [],
+        "formResults": [
+          1,
+          1,
+          1,
+          3,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73347102",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73347102",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73347102",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73347102",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 118,
+    "competition": {
+      "id": "133",
+      "name": "Grecja Puchar",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "GR"
+    },
+    "market": {
+      "id": "1191257378422786",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1191257378418693",
+          "isLive": false,
+          "keys": [
+            "contestant:543841650340115",
+            "contestant:543841509532435"
+          ],
+          "name": "Anagennisi Karditsas 1904",
+          "betslipName": "Anagennisi Karditsas 1904",
+          "odds": 21,
+          "status": 1,
+          "betslipMarketId": "1191257378422786",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 1,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1191257378418694",
+          "isLive": false,
+          "keys": [
+            "contestant:543841650340115",
+            "contestant:543841509532435"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 8,
+          "status": 1,
+          "betslipMarketId": "1191257378422786",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 2,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1191257378418695",
+          "isLive": false,
+          "keys": [
+            "contestant:543841650340115",
+            "contestant:543841509532435"
+          ],
+          "name": "Aris Thessaloniki",
+          "betslipName": "Aris Thessaloniki",
+          "odds": 1.1,
+          "status": 1,
+          "betslipMarketId": "1191257378422786",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 97,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1191257378422786"
+      ],
+      "groupLayout": 0,
+      "matchId": "1191257370025984",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "2. kolejka kwalifikacji",
+      "matchLegType": 0,
+      "competitionRoundName": "",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1191257370025984",
+      "name": "Anagennisi Karditsas 1904 - Aris Thessaloniki",
+      "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 118,
+      "contestants": [
+        {
+          "contestantId": "543841650340115",
+          "name": "Anagennisi Karditsas 1904",
+          "shortName": "Anagennisi Karditsas 1904",
+          "players": [],
+          "formResults": [
+            2,
+            2,
+            2,
+            3,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "543841509532435",
+          "name": "Aris Thessaloniki",
+          "shortName": "Aris Thessaloniki",
+          "players": [],
+          "formResults": [
+            1,
+            1,
+            1,
+            3,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "133",
+        "name": "Grecja Puchar",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "GR"
+      },
+      "competitionInfo": {
+        "roundName": "2. kolejka kwalifikacji",
+        "matchLegType": 0,
+        "competitionRoundName": "",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1197352516849665",
+    "name": "FC Chernomorets 1919 - CSKA Sofia II",
+    "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841976447613",
+        "name": "FC Chernomorets 1919",
+        "shortName": "FC Chernomorets 1919",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          3,
+          1,
+          3
+        ],
+        "displayImage": false,
+        "ranking": "#10",
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "593962740514816",
+        "name": "CSKA Sofia II",
+        "shortName": "CSKA Sofia II",
+        "players": [],
+        "formResults": [
+          1,
+          1,
+          3,
+          1,
+          1
+        ],
+        "displayImage": false,
+        "ranking": "#3",
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "72466410",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "72466410",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "72466410",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "72466410",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 59,
+    "competition": {
+      "id": "16138",
+      "name": "Bułgaria 2. liga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "BG"
+    },
+    "market": {
+      "id": "1197372942077954",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1197372942073861",
+          "isLive": false,
+          "keys": [
+            "contestant:543841976447613",
+            "contestant:593962740514816"
+          ],
+          "name": "FC Chernomorets 1919",
+          "betslipName": "FC Chernomorets 1919",
+          "odds": 1.93,
+          "status": 1,
+          "betslipMarketId": "1197372942077954",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 12,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1197372942073862",
+          "isLive": false,
+          "keys": [
+            "contestant:543841976447613",
+            "contestant:593962740514816"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.15,
+          "status": 1,
+          "betslipMarketId": "1197372942077954",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 3,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1197372942073863",
+          "isLive": false,
+          "keys": [
+            "contestant:543841976447613",
+            "contestant:593962740514816"
+          ],
+          "name": "CSKA Sofia II",
+          "betslipName": "CSKA Sofia II",
+          "odds": 3.53,
+          "status": 1,
+          "betslipMarketId": "1197372942077954",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 84,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1197372942077954"
+      ],
+      "groupLayout": 0,
+      "matchId": "1197352516849665",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 4",
+      "matchLegType": 0,
+      "competitionRoundName": "D4",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1197352516849665",
+      "name": "FC Chernomorets 1919 - CSKA Sofia II",
+      "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 59,
+      "contestants": [
+        {
+          "contestantId": "543841976447613",
+          "name": "FC Chernomorets 1919",
+          "shortName": "FC Chernomorets 1919",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            3,
+            1,
+            3
+          ],
+          "displayImage": false,
+          "ranking": "#10",
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "593962740514816",
+          "name": "CSKA Sofia II",
+          "shortName": "CSKA Sofia II",
+          "players": [],
+          "formResults": [
+            1,
+            1,
+            3,
+            1,
+            1
+          ],
+          "displayImage": false,
+          "ranking": "#3",
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "16138",
+        "name": "Bułgaria 2. liga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "BG"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 4",
+        "matchLegType": 0,
+        "competitionRoundName": "D4",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1193737452535808",
+    "name": "Gnistan - Ilves",
+    "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841622778174",
+        "name": "Gnistan",
+        "shortName": "Gnistan",
+        "players": [],
+        "formResults": [
+          1,
+          1,
+          1,
+          2,
+          3
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841622778174.png",
+        "ranking": "#6",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841622778174.png"
+        }
+      },
+      {
+        "contestantId": "543841537094534",
+        "name": "Ilves",
+        "shortName": "Ilves",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          2,
+          1,
+          3
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537094534.png",
+        "ranking": "#9",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537094534.png"
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "67091470",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "67091470",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "67091470",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "67091470",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 80,
+    "competition": {
+      "id": "146",
+      "name": "Finlandia 1. liga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "FI"
+    },
+    "market": {
+      "id": "1193737459863557",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1193737459859463",
+          "isLive": false,
+          "keys": [
+            "contestant:543841622778174",
+            "contestant:543841537094534"
+          ],
+          "name": "Gnistan",
+          "betslipName": "Gnistan",
+          "odds": 2.43,
+          "status": 1,
+          "betslipMarketId": "1193737459863557",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 46,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1193737459859464",
+          "isLive": false,
+          "keys": [
+            "contestant:543841622778174",
+            "contestant:543841537094534"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.3,
+          "status": 1,
+          "betslipMarketId": "1193737459863557",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 45,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1193737459859465",
+          "isLive": false,
+          "keys": [
+            "contestant:543841622778174",
+            "contestant:543841537094534"
+          ],
+          "name": "Ilves",
+          "betslipName": "Ilves",
+          "odds": 2.45,
+          "status": 1,
+          "betslipMarketId": "1193737459863557",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 9,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1193737459863557"
+      ],
+      "groupLayout": 0,
+      "matchId": "1193737452535808",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Grupa Veikkausliiga, Dzień 20",
+      "matchLegType": 0,
+      "competitionRoundName": "D20",
+      "groupName": "Gr.Veikkausliiga"
+    },
+    "matchInfo": {
+      "matchId": "1193737452535808",
+      "name": "Gnistan - Ilves",
+      "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 80,
+      "contestants": [
+        {
+          "contestantId": "543841622778174",
+          "name": "Gnistan",
+          "shortName": "Gnistan",
+          "players": [],
+          "formResults": [
+            1,
+            1,
+            1,
+            2,
+            3
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841622778174.png",
+          "ranking": "#6",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841622778174.png"
+          }
+        },
+        {
+          "contestantId": "543841537094534",
+          "name": "Ilves",
+          "shortName": "Ilves",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537094534.png",
+          "ranking": "#9",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537094534.png"
+          }
+        }
+      ],
+      "competition": {
+        "id": "146",
+        "name": "Finlandia 1. liga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "FI"
+      },
+      "competitionInfo": {
+        "roundName": "Grupa Veikkausliiga, Dzień 20",
+        "matchLegType": 0,
+        "competitionRoundName": "D20",
+        "groupName": "Gr.Veikkausliiga"
+      }
+    }
+  },
+  {
+    "matchId": "1195371509334016",
+    "name": "Futbolo Akademija Siauliai - FK Panevezys",
+    "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": true,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841566154813",
+        "name": "Futbolo Akademija Siauliai",
+        "shortName": "Futbolo Akademija Siauliai",
+        "players": [],
+        "formResults": [
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841566154813.png",
+        "ranking": "#9",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841566154813.png"
+        }
+      },
+      {
+        "contestantId": "543841480471409",
+        "name": "FK Panevezys",
+        "shortName": "Panevezys",
+        "players": [],
+        "formResults": [
+          2,
+          3,
+          2,
+          3,
+          1
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471409.png",
+        "ranking": "#7",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471409.png"
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "71901844",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "71901844",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "71901844",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "71901844",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 79,
+    "competition": {
+      "id": "7846",
+      "name": "Litwa A Lyga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "LT"
+    },
+    "market": {
+      "id": "1195371516674048",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1195371516669952",
+          "isLive": false,
+          "keys": [
+            "contestant:543841566154813",
+            "contestant:543841480471409"
+          ],
+          "name": "Futbolo Akademija Siauliai",
+          "betslipName": "Futbolo Akademija Siauliai",
+          "odds": 2.72,
+          "status": 1,
+          "betslipMarketId": "1195371516674048",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 4,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1195371516669953",
+          "isLive": false,
+          "keys": [
+            "contestant:543841566154813",
+            "contestant:543841480471409"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.4,
+          "status": 1,
+          "betslipMarketId": "1195371516674048",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 47,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1195371516669954",
+          "isLive": false,
+          "keys": [
+            "contestant:543841566154813",
+            "contestant:543841480471409"
+          ],
+          "name": "FK Panevezys",
+          "betslipName": "FK Panevezys",
+          "odds": 2.18,
+          "status": 1,
+          "betslipMarketId": "1195371516674048",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 49,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1195371516674048"
+      ],
+      "groupLayout": 0,
+      "matchId": "1195371509334016",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 27",
+      "matchLegType": 0,
+      "competitionRoundName": "D27",
+      "groupName": ""
+    },
+    "streamingProviderType": 0,
+    "matchInfo": {
+      "matchId": "1195371509334016",
+      "name": "Futbolo Akademija Siauliai - FK Panevezys",
+      "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": true,
+      "openMarketCount": 79,
+      "contestants": [
+        {
+          "contestantId": "543841566154813",
+          "name": "Futbolo Akademija Siauliai",
+          "shortName": "Futbolo Akademija Siauliai",
+          "players": [],
+          "formResults": [
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841566154813.png",
+          "ranking": "#9",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841566154813.png"
+          }
+        },
+        {
+          "contestantId": "543841480471409",
+          "name": "FK Panevezys",
+          "shortName": "Panevezys",
+          "players": [],
+          "formResults": [
+            2,
+            3,
+            2,
+            3,
+            1
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471409.png",
+          "ranking": "#7",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471409.png"
+          }
+        }
+      ],
+      "competition": {
+        "id": "7846",
+        "name": "Litwa A Lyga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "LT"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 27",
+        "matchLegType": 0,
+        "competitionRoundName": "D27",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1198887300771840",
+    "name": "Auda - SC Grobinas",
+    "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841976447316",
+        "name": "Auda",
+        "shortName": "Auda",
+        "players": [],
+        "formResults": [
+          1,
+          1,
+          1,
+          1,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "543842337906945",
+        "name": "SC Grobinas",
+        "shortName": "SC Grobinas",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          3,
+          2,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73607386",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73607386",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73607386",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73607386",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 27,
+    "competition": {
+      "id": "15220",
+      "name": "Łotwa Puchar",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "LV"
+    },
+    "market": {
+      "id": "1198909436198912",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1198909436203009",
+          "isLive": false,
+          "keys": [
+            "contestant:543841976447316",
+            "contestant:543842337906945"
+          ],
+          "name": "Auda",
+          "betslipName": "Auda",
+          "odds": 1.37,
+          "status": 1,
+          "betslipMarketId": "1198909436198912",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 99,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1198909436203010",
+          "isLive": false,
+          "keys": [
+            "contestant:543841976447316",
+            "contestant:543842337906945"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 4.2,
+          "status": 1,
+          "betslipMarketId": "1198909436198912",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 0,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1198909436203011",
+          "isLive": false,
+          "keys": [
+            "contestant:543841976447316",
+            "contestant:543842337906945"
+          ],
+          "name": "SC Grobinas",
+          "betslipName": "SC Grobinas",
+          "odds": 5.75,
+          "status": 1,
+          "betslipMarketId": "1198909436198912",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 0,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1198909436198912"
+      ],
+      "groupLayout": 0,
+      "matchId": "1198887300771840",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Ćwierćfinał",
+      "matchLegType": 0,
+      "competitionRoundName": "",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1198887300771840",
+      "name": "Auda - SC Grobinas",
+      "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 27,
+      "contestants": [
+        {
+          "contestantId": "543841976447316",
+          "name": "Auda",
+          "shortName": "Auda",
+          "players": [],
+          "formResults": [
+            1,
+            1,
+            1,
+            1,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "543842337906945",
+          "name": "SC Grobinas",
+          "shortName": "SC Grobinas",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            3,
+            2,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "15220",
+        "name": "Łotwa Puchar",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "LV"
+      },
+      "competitionInfo": {
+        "roundName": "Ćwierćfinał",
+        "matchLegType": 0,
+        "competitionRoundName": "",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1194610262032384",
+    "name": "Slovan Bratislava B - FK Humenne",
+    "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543844422774966",
+        "name": "Slovan Bratislava B",
+        "shortName": "Slovan Bratislava B",
+        "players": [],
+        "formResults": [
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "displayImage": false,
+        "ranking": "#15",
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "543843022926792",
+        "name": "FK Humenne",
+        "shortName": "Humenne",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          2,
+          1,
+          1
+        ],
+        "displayImage": false,
+        "ranking": "#12",
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "72305122",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "72305122",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "72305122",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "72305122",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 62,
+    "competition": {
+      "id": "8936",
+      "name": "Słowacja 2. liga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "SK"
+    },
+    "market": {
+      "id": "1194610270404610",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1194610270408709",
+          "isLive": false,
+          "keys": [
+            "contestant:543844422774966",
+            "contestant:543843022926792"
+          ],
+          "name": "Slovan Bratislava B",
+          "betslipName": "Slovan Bratislava B",
+          "odds": 1.98,
+          "status": 1,
+          "betslipMarketId": "1194610270404610",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 26,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1194610270408710",
+          "isLive": false,
+          "keys": [
+            "contestant:543844422774966",
+            "contestant:543843022926792"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.35,
+          "status": 1,
+          "betslipMarketId": "1194610270404610",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 47,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1194610270408711",
+          "isLive": false,
+          "keys": [
+            "contestant:543844422774966",
+            "contestant:543843022926792"
+          ],
+          "name": "FK Humenne",
+          "betslipName": "FK Humenne",
+          "odds": 3.17,
+          "status": 1,
+          "betslipMarketId": "1194610270404610",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 27,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1194610270404610"
+      ],
+      "groupLayout": 0,
+      "matchId": "1194610262032384",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 4",
+      "matchLegType": 0,
+      "competitionRoundName": "D4",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1194610262032384",
+      "name": "Slovan Bratislava B - FK Humenne",
+      "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 62,
+      "contestants": [
+        {
+          "contestantId": "543844422774966",
+          "name": "Slovan Bratislava B",
+          "shortName": "Slovan Bratislava B",
+          "players": [],
+          "formResults": [
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "displayImage": false,
+          "ranking": "#15",
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "543843022926792",
+          "name": "FK Humenne",
+          "shortName": "Humenne",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            2,
+            1,
+            1
+          ],
+          "displayImage": false,
+          "ranking": "#12",
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "8936",
+        "name": "Słowacja 2. liga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "SK"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 4",
+        "matchLegType": 0,
+        "competitionRoundName": "D4",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1179820576735232",
+    "name": "Polissya Zhytomyr - Zorya Ługańsk",
+    "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543842245931603",
+        "name": "Polissya Zhytomyr",
+        "shortName": "Polissya Zhytomyr",
+        "players": [],
+        "formResults": [
+          2,
+          3,
+          2,
+          1,
+          1
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543842245931603.png",
+        "ranking": "#3",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543842245931603.png"
+        }
+      },
+      {
+        "contestantId": "543844252607328",
+        "name": "Zorya Ługańsk",
+        "shortName": "Zorya Ługańsk",
+        "players": [],
+        "formResults": [
+          2,
+          3,
+          2,
+          1,
+          2
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543844252607328.png",
+        "ranking": "#8",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543844252607328.png"
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "72409642",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "72409642",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "72409642",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "72409642",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 80,
+    "competition": {
+      "id": "530",
+      "name": "Ukraina 1. liga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "UA"
+    },
+    "market": {
+      "id": "1195309293113346",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1195309293121541",
+          "isLive": false,
+          "keys": [
+            "contestant:543842245931603",
+            "contestant:543844252607328"
+          ],
+          "name": "Polissya Zhytomyr",
+          "betslipName": "Polissya Zhytomyr",
+          "odds": 1.41,
+          "status": 1,
+          "betslipMarketId": "1195309293113346",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 98,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1195309293121542",
+          "isLive": false,
+          "keys": [
+            "contestant:543842245931603",
+            "contestant:543844252607328"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 4,
+          "status": 1,
+          "betslipMarketId": "1195309293113346",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 1,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1195309293121543",
+          "isLive": false,
+          "keys": [
+            "contestant:543842245931603",
+            "contestant:543844252607328"
+          ],
+          "name": "Zorya Ługańsk",
+          "betslipName": "Zorya Ługańsk",
+          "odds": 6.25,
+          "status": 1,
+          "betslipMarketId": "1195309293113346",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 1,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1195309293113346"
+      ],
+      "groupLayout": 0,
+      "matchId": "1179820576735232",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 3",
+      "matchLegType": 0,
+      "competitionRoundName": "D3",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1179820576735232",
+      "name": "Polissya Zhytomyr - Zorya Ługańsk",
+      "matchDateUtc": "2026-08-17T15:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 80,
+      "contestants": [
+        {
+          "contestantId": "543842245931603",
+          "name": "Polissya Zhytomyr",
+          "shortName": "Polissya Zhytomyr",
+          "players": [],
+          "formResults": [
+            2,
+            3,
+            2,
+            1,
+            1
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543842245931603.png",
+          "ranking": "#3",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543842245931603.png"
+          }
+        },
+        {
+          "contestantId": "543844252607328",
+          "name": "Zorya Ługańsk",
+          "shortName": "Zorya Ługańsk",
+          "players": [],
+          "formResults": [
+            2,
+            3,
+            2,
+            1,
+            2
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543844252607328.png",
+          "ranking": "#8",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543844252607328.png"
+          }
+        }
+      ],
+      "competition": {
+        "id": "530",
+        "name": "Ukraina 1. liga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "UA"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 3",
+        "matchLegType": 0,
+        "competitionRoundName": "D3",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1198523146055680",
+    "name": "Qarabağ - Shamakhi FK",
+    "matchDateUtc": "2026-08-17T15:30:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": true,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841480471210",
+        "name": "Qarabağ",
+        "shortName": "Qarabağ",
+        "players": [],
+        "formResults": [
+          1,
+          3,
+          2,
+          2,
+          1
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471210.png",
+        "ranking": "#8",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471210.png"
+        }
+      },
+      {
+        "contestantId": "543841916678302",
+        "name": "Shamakhi FK",
+        "shortName": "Shamakhi FK",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          2,
+          1,
+          2
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841916678302.png",
+        "ranking": "#7",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841916678302.png"
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73608634",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73608634",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73608634",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73608634",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 147,
+    "competition": {
+      "id": "8405",
+      "name": "Azerbejdżan 1. liga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "AZ"
+    },
+    "market": {
+      "id": "1198523150241794",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1198523150254085",
+          "isLive": false,
+          "keys": [
+            "contestant:543841480471210",
+            "contestant:543841916678302"
+          ],
+          "name": "Qarabağ",
+          "betslipName": "Qarabağ",
+          "odds": 1.43,
+          "status": 1,
+          "betslipMarketId": "1198523150241794",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 99,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1198523150254086",
+          "isLive": false,
+          "keys": [
+            "contestant:543841480471210",
+            "contestant:543841916678302"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 4.55,
+          "status": 1,
+          "betslipMarketId": "1198523150241794",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 1,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1198523150254087",
+          "isLive": false,
+          "keys": [
+            "contestant:543841480471210",
+            "contestant:543841916678302"
+          ],
+          "name": "Shamakhi FK",
+          "betslipName": "Shamakhi FK",
+          "odds": 6.1,
+          "status": 1,
+          "betslipMarketId": "1198523150241794",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 0,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1198523150241794"
+      ],
+      "groupLayout": 0,
+      "matchId": "1198523146055680",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 1",
+      "matchLegType": 0,
+      "competitionRoundName": "D1",
+      "groupName": ""
+    },
+    "streamingProviderType": 3,
+    "matchInfo": {
+      "matchId": "1198523146055680",
+      "name": "Qarabağ - Shamakhi FK",
+      "matchDateUtc": "2026-08-17T15:30:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": true,
+      "openMarketCount": 147,
+      "contestants": [
+        {
+          "contestantId": "543841480471210",
+          "name": "Qarabağ",
+          "shortName": "Qarabağ",
+          "players": [],
+          "formResults": [
+            1,
+            3,
+            2,
+            2,
+            1
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471210.png",
+          "ranking": "#8",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471210.png"
+          }
+        },
+        {
+          "contestantId": "543841916678302",
+          "name": "Shamakhi FK",
+          "shortName": "Shamakhi FK",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841916678302.png",
+          "ranking": "#7",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841916678302.png"
+          }
+        }
+      ],
+      "competition": {
+        "id": "8405",
+        "name": "Azerbejdżan 1. liga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "AZ"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 1",
+        "matchLegType": 0,
+        "competitionRoundName": "D1",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1197371201421312",
+    "name": "HJK Helsinki K. - KuPS K.",
+    "matchDateUtc": "2026-08-17T15:30:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "573973045309440",
+        "name": "HJK Helsinki K.",
+        "shortName": "HJK Helsinki K.",
+        "players": [],
+        "formResults": [
+          1,
+          1,
+          1,
+          2,
+          1
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      },
+      {
+        "contestantId": "543842859049236",
+        "name": "KuPS K.",
+        "shortName": "KuPS K.",
+        "players": [],
+        "formResults": [
+          2,
+          2,
+          2,
+          1,
+          2
+        ],
+        "displayImage": false,
+        "contestantVisual": {
+          "hasFallbackAssets": false
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "73297302",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "73297302",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "73297302",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "73297302",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 60,
+    "competition": {
+      "id": "20340",
+      "name": "Finlandia Kansallinen Liiga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "FI"
+    },
+    "market": {
+      "id": "1197932400361474",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1197932400365573",
+          "isLive": false,
+          "keys": [
+            "contestant:573973045309440",
+            "contestant:543842859049236"
+          ],
+          "name": "HJK Helsinki K.",
+          "betslipName": "HJK Helsinki K.",
+          "odds": 1.42,
+          "status": 1,
+          "betslipMarketId": "1197932400361474",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 99,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1197932400365574",
+          "isLive": false,
+          "keys": [
+            "contestant:573973045309440",
+            "contestant:543842859049236"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 4.35,
+          "status": 1,
+          "betslipMarketId": "1197932400361474",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 0,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1197932400365575",
+          "isLive": false,
+          "keys": [
+            "contestant:573973045309440",
+            "contestant:543842859049236"
+          ],
+          "name": "KuPS K.",
+          "betslipName": "KuPS K.",
+          "odds": 5.4,
+          "status": 1,
+          "betslipMarketId": "1197932400361474",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 0,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1197932400361474"
+      ],
+      "groupLayout": 0,
+      "matchId": "1197371201421312",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Grupa Championship Round, Dzień 2",
+      "matchLegType": 0,
+      "competitionRoundName": "D2",
+      "groupName": "Gr.Championship Round"
+    },
+    "matchInfo": {
+      "matchId": "1197371201421312",
+      "name": "HJK Helsinki K. - KuPS K.",
+      "matchDateUtc": "2026-08-17T15:30:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 60,
+      "contestants": [
+        {
+          "contestantId": "573973045309440",
+          "name": "HJK Helsinki K.",
+          "shortName": "HJK Helsinki K.",
+          "players": [],
+          "formResults": [
+            1,
+            1,
+            1,
+            2,
+            1
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        },
+        {
+          "contestantId": "543842859049236",
+          "name": "KuPS K.",
+          "shortName": "KuPS K.",
+          "players": [],
+          "formResults": [
+            2,
+            2,
+            2,
+            1,
+            2
+          ],
+          "displayImage": false,
+          "contestantVisual": {
+            "hasFallbackAssets": false
+          }
+        }
+      ],
+      "competition": {
+        "id": "20340",
+        "name": "Finlandia Kansallinen Liiga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "FI"
+      },
+      "competitionInfo": {
+        "roundName": "Grupa Championship Round, Dzień 2",
+        "matchLegType": 0,
+        "competitionRoundName": "D2",
+        "groupName": "Gr.Championship Round"
+      }
+    }
+  },
+  {
+    "matchId": "1187098713427968",
+    "name": "Universitatea Cluj - UTA Arad",
+    "matchDateUtc": "2026-08-17T15:30:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": true,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841566154895",
+        "name": "Universitatea Cluj",
+        "shortName": "Universitatea Cluj",
+        "players": [],
+        "formResults": [
+          1,
+          3,
+          2,
+          2,
+          1
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841566154895.png",
+        "ranking": "#9",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841566154895.png"
+        }
+      },
+      {
+        "contestantId": "543841537094152",
+        "name": "UTA Arad",
+        "shortName": "UTA Arad",
+        "players": [],
+        "formResults": [
+          1,
+          2,
+          3,
+          2,
+          3
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537094152.png",
+        "ranking": "#15",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537094152.png"
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "72387924",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "72387924",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "72387924",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "72387924",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 284,
+    "competition": {
+      "id": "552",
+      "name": "Rumunia 1. liga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "RO"
+    },
+    "market": {
+      "id": "1187098717609986",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1187098717622277",
+          "isLive": false,
+          "keys": [
+            "contestant:543841566154895",
+            "contestant:543841537094152"
+          ],
+          "name": "Universitatea Cluj",
+          "betslipName": "Universitatea Cluj",
+          "odds": 1.92,
+          "status": 1,
+          "betslipMarketId": "1187098717609986",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 89,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1187098717622278",
+          "isLive": false,
+          "keys": [
+            "contestant:543841566154895",
+            "contestant:543841537094152"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.42,
+          "status": 1,
+          "betslipMarketId": "1187098717609986",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 9,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1187098717622279",
+          "isLive": false,
+          "keys": [
+            "contestant:543841566154895",
+            "contestant:543841537094152"
+          ],
+          "name": "UTA Arad",
+          "betslipName": "UTA Arad",
+          "odds": 3.78,
+          "status": 1,
+          "betslipMarketId": "1187098717609986",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 1,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1187098717609986"
+      ],
+      "groupLayout": 0,
+      "matchId": "1187098713427968",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Grupa Superliga, Dzień 5",
+      "matchLegType": 0,
+      "competitionRoundName": "D5",
+      "groupName": "Gr.Superliga"
+    },
+    "streamingProviderType": 2,
+    "matchInfo": {
+      "matchId": "1187098713427968",
+      "name": "Universitatea Cluj - UTA Arad",
+      "matchDateUtc": "2026-08-17T15:30:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": true,
+      "openMarketCount": 284,
+      "contestants": [
+        {
+          "contestantId": "543841566154895",
+          "name": "Universitatea Cluj",
+          "shortName": "Universitatea Cluj",
+          "players": [],
+          "formResults": [
+            1,
+            3,
+            2,
+            2,
+            1
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841566154895.png",
+          "ranking": "#9",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841566154895.png"
+          }
+        },
+        {
+          "contestantId": "543841537094152",
+          "name": "UTA Arad",
+          "shortName": "UTA Arad",
+          "players": [],
+          "formResults": [
+            1,
+            2,
+            3,
+            2,
+            3
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537094152.png",
+          "ranking": "#15",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537094152.png"
+          }
+        }
+      ],
+      "competition": {
+        "id": "552",
+        "name": "Rumunia 1. liga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "RO"
+      },
+      "competitionInfo": {
+        "roundName": "Grupa Superliga, Dzień 5",
+        "matchLegType": 0,
+        "competitionRoundName": "D5",
+        "groupName": "Gr.Superliga"
+      }
+    }
+  },
+  {
+    "matchId": "1194452072796160",
+    "name": "Zalaegerszegi - Ferencvárosi TC",
+    "matchDateUtc": "2026-08-17T15:30:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": false,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841537093652",
+        "name": "Zalaegerszegi",
+        "shortName": "Zalaegerszegi",
+        "players": [],
+        "formResults": [
+          1,
+          1,
+          2,
+          1,
+          2
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537093652.png",
+        "ranking": "#10",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537093652.png"
+        }
+      },
+      {
+        "contestantId": "543841480470987",
+        "name": "Ferencvárosi TC",
+        "shortName": "Ferencvárosi",
+        "players": [],
+        "formResults": [
+          3,
+          3,
+          1,
+          2,
+          3
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480470987.png",
+        "ranking": "#12",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480470987.png"
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "72302574",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "72302574",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "72302574",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "72302574",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 147,
+    "competition": {
+      "id": "553",
+      "name": "Węgry 1. liga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "HU"
+    },
+    "market": {
+      "id": "1194452080148482",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1194452080132106",
+          "isLive": false,
+          "keys": [
+            "contestant:543841537093652",
+            "contestant:543841480470987"
+          ],
+          "name": "Zalaegerszegi",
+          "betslipName": "Zalaegerszegi",
+          "odds": 5.75,
+          "status": 1,
+          "betslipMarketId": "1194452080148482",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 4,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1194452080132107",
+          "isLive": false,
+          "keys": [
+            "contestant:543841537093652",
+            "contestant:543841480470987"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 4.35,
+          "status": 1,
+          "betslipMarketId": "1194452080148482",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 3,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1194452080132108",
+          "isLive": false,
+          "keys": [
+            "contestant:543841537093652",
+            "contestant:543841480470987"
+          ],
+          "name": "Ferencvárosi TC",
+          "betslipName": "Ferencvárosi TC",
+          "odds": 1.48,
+          "status": 1,
+          "betslipMarketId": "1194452080148482",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 93,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1194452080148482"
+      ],
+      "groupLayout": 0,
+      "matchId": "1194452072796160",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 4",
+      "matchLegType": 0,
+      "competitionRoundName": "D4",
+      "groupName": ""
+    },
+    "matchInfo": {
+      "matchId": "1194452072796160",
+      "name": "Zalaegerszegi - Ferencvárosi TC",
+      "matchDateUtc": "2026-08-17T15:30:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": false,
+      "openMarketCount": 147,
+      "contestants": [
+        {
+          "contestantId": "543841537093652",
+          "name": "Zalaegerszegi",
+          "shortName": "Zalaegerszegi",
+          "players": [],
+          "formResults": [
+            1,
+            1,
+            2,
+            1,
+            2
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537093652.png",
+          "ranking": "#10",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841537093652.png"
+          }
+        },
+        {
+          "contestantId": "543841480470987",
+          "name": "Ferencvárosi TC",
+          "shortName": "Ferencvárosi",
+          "players": [],
+          "formResults": [
+            3,
+            3,
+            1,
+            2,
+            3
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480470987.png",
+          "ranking": "#12",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480470987.png"
+          }
+        }
+      ],
+      "competition": {
+        "id": "553",
+        "name": "Węgry 1. liga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "HU"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 4",
+        "matchLegType": 0,
+        "competitionRoundName": "D4",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1195371562815488",
+    "name": "Dziugas - Suduva Marijampole",
+    "matchDateUtc": "2026-08-17T15:45:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": true,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841781113688",
+        "name": "Dziugas",
+        "shortName": "Dziugas",
+        "players": [],
+        "formResults": [
+          3,
+          1,
+          2,
+          3,
+          1
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841781113688.png",
+        "ranking": "#2",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841781113688.png"
+        }
+      },
+      {
+        "contestantId": "543844318666857",
+        "name": "Suduva Marijampole",
+        "shortName": "Suduva Marijampole",
+        "players": [],
+        "formResults": [
+          1,
+          1,
+          3,
+          1,
+          1
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543844318666857.png",
+        "ranking": "#3",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543844318666857.png"
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "71901846",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "71901846",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "71901846",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "71901846",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 80,
+    "competition": {
+      "id": "7846",
+      "name": "Litwa A Lyga",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "LT"
+    },
+    "market": {
+      "id": "1195371570139136",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1195371570151424",
+          "isLive": false,
+          "keys": [
+            "contestant:543841781113688",
+            "contestant:543844318666857"
+          ],
+          "name": "Dziugas",
+          "betslipName": "Dziugas",
+          "odds": 3.85,
+          "status": 1,
+          "betslipMarketId": "1195371570139136",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 8,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1195371570151425",
+          "isLive": false,
+          "keys": [
+            "contestant:543841781113688",
+            "contestant:543844318666857"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.27,
+          "status": 1,
+          "betslipMarketId": "1195371570139136",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 67,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1195371570151426",
+          "isLive": false,
+          "keys": [
+            "contestant:543841781113688",
+            "contestant:543844318666857"
+          ],
+          "name": "Suduva Marijampole",
+          "betslipName": "Suduva Marijampole",
+          "odds": 1.8,
+          "status": 1,
+          "betslipMarketId": "1195371570139136",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 26,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1195371570139136"
+      ],
+      "groupLayout": 0,
+      "matchId": "1195371562815488",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "Kolejka 27",
+      "matchLegType": 0,
+      "competitionRoundName": "D27",
+      "groupName": ""
+    },
+    "streamingProviderType": 0,
+    "matchInfo": {
+      "matchId": "1195371562815488",
+      "name": "Dziugas - Suduva Marijampole",
+      "matchDateUtc": "2026-08-17T15:45:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": true,
+      "openMarketCount": 80,
+      "contestants": [
+        {
+          "contestantId": "543841781113688",
+          "name": "Dziugas",
+          "shortName": "Dziugas",
+          "players": [],
+          "formResults": [
+            3,
+            1,
+            2,
+            3,
+            1
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841781113688.png",
+          "ranking": "#2",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841781113688.png"
+          }
+        },
+        {
+          "contestantId": "543844318666857",
+          "name": "Suduva Marijampole",
+          "shortName": "Suduva Marijampole",
+          "players": [],
+          "formResults": [
+            1,
+            1,
+            3,
+            1,
+            1
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543844318666857.png",
+          "ranking": "#3",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543844318666857.png"
+          }
+        }
+      ],
+      "competition": {
+        "id": "7846",
+        "name": "Litwa A Lyga",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "LT"
+      },
+      "competitionInfo": {
+        "roundName": "Kolejka 27",
+        "matchLegType": 0,
+        "competitionRoundName": "D27",
+        "groupName": ""
+      }
+    }
+  },
+  {
+    "matchId": "1195341111111680",
+    "name": "Pisa - Empoli",
+    "matchDateUtc": "2026-08-17T16:00:00.0000000Z",
+    "isLive": false,
+    "hasLiveStream": true,
+    "categories": [],
+    "subCategories": [],
+    "contestants": [
+      {
+        "contestantId": "543841480471484",
+        "name": "Pisa",
+        "shortName": "Pisa",
+        "players": [],
+        "formResults": [
+          2,
+          2,
+          1,
+          2,
+          1
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471484.png",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471484.png"
+        }
+      },
+      {
+        "contestantId": "543841480471077",
+        "name": "Empoli",
+        "shortName": "Empoli",
+        "players": [],
+        "formResults": [
+          2,
+          1,
+          3,
+          1,
+          3
+        ],
+        "displayImage": false,
+        "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471077.png",
+        "contestantVisual": {
+          "hasFallbackAssets": false,
+          "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471077.png"
+        }
+      }
+    ],
+    "isBetbuilderEligible": false,
+    "widgets": [
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 3,
+            "eventType": 1,
+            "externalMatchRef": "72336424",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 5,
+            "eventType": 1,
+            "externalMatchRef": "72336424",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 4,
+            "eventType": 1,
+            "externalMatchRef": "72336424",
+            "externalSportRef": "1"
+          }
+        }
+      },
+      {
+        "widget": {
+          "oneofKind": "sportradarWidget",
+          "sportradarWidget": {
+            "widgetType": 1,
+            "eventType": 1,
+            "externalMatchRef": "72336424",
+            "externalSportRef": "1"
+          }
+        }
+      }
+    ],
+    "boostedOdds": [],
+    "isMatchOfTheDay": false,
+    "hasMatchCenter": true,
+    "hasLineup": false,
+    "markets": [],
+    "openMarketCount": 155,
+    "competition": {
+      "id": "50",
+      "name": "Włochy Puchar",
+      "sport": {
+        "code": "football",
+        "name": "Piłka nożna",
+        "type": 1
+      },
+      "countryCode": "IT"
+    },
+    "market": {
+      "id": "1195341118439432",
+      "name": "Wynik meczu (z wyłączeniem dogrywki)",
+      "betslipName": "Wynik meczu (z wyłączeniem dogrywki)",
+      "hasBoostedOdds": false,
+      "isCashoutable": true,
+      "isEligibleBoost": true,
+      "isBetbuilderEligible": false,
+      "layout": 8,
+      "selectionMatrix": [],
+      "splitCardGroups": [],
+      "groupMarkets": [],
+      "tabs": [],
+      "sliders": [],
+      "mainSelections": [
+        {
+          "id": "1195341118439433",
+          "isLive": false,
+          "keys": [
+            "contestant:543841480471484",
+            "contestant:543841480471077"
+          ],
+          "name": "Pisa",
+          "betslipName": "Pisa",
+          "odds": 1.84,
+          "status": 1,
+          "betslipMarketId": "1195341118439432",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 86,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1195341118439434",
+          "isLive": false,
+          "keys": [
+            "contestant:543841480471484",
+            "contestant:543841480471077"
+          ],
+          "name": "Remis ",
+          "betslipName": "Remis ",
+          "odds": 3.43,
+          "status": 1,
+          "betslipMarketId": "1195341118439432",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 3,
+          "isBetbuilderCompatible": false
+        },
+        {
+          "id": "1195341118439435",
+          "isLive": false,
+          "keys": [
+            "contestant:543841480471484",
+            "contestant:543841480471077"
+          ],
+          "name": "Empoli",
+          "betslipName": "Empoli",
+          "odds": 4.25,
+          "status": 1,
+          "betslipMarketId": "1195341118439432",
+          "playerIds": [],
+          "isSingleOnly": false,
+          "betTrend": 10,
+          "isBetbuilderCompatible": false
+        }
+      ],
+      "position": 1,
+      "nbScorersInSelection": 0,
+      "isNotExpandable": false,
+      "isTooltipHidden": false,
+      "tooltipIds": [
+        "1195341118439432"
+      ],
+      "groupLayout": 0,
+      "matchId": "1195341111111680",
+      "isOutright": false,
+      "isGoodDeal": false,
+      "isEarlyWin": false,
+      "isExtraWin": false,
+      "hasLineupStatusGroups": false
+    },
+    "competitionInfo": {
+      "roundName": "1/32 finału",
+      "matchLegType": 0,
+      "competitionRoundName": "",
+      "groupName": ""
+    },
+    "streamingProviderType": 3,
+    "matchInfo": {
+      "matchId": "1195341111111680",
+      "name": "Pisa - Empoli",
+      "matchDateUtc": "2026-08-17T16:00:00.0000000Z",
+      "isLive": false,
+      "hasLiveStream": true,
+      "openMarketCount": 155,
+      "contestants": [
+        {
+          "contestantId": "543841480471484",
+          "name": "Pisa",
+          "shortName": "Pisa",
+          "players": [],
+          "formResults": [
+            2,
+            2,
+            1,
+            2,
+            1
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471484.png",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471484.png"
+          }
+        },
+        {
+          "contestantId": "543841480471077",
+          "name": "Empoli",
+          "shortName": "Empoli",
+          "players": [],
+          "formResults": [
+            2,
+            1,
+            3,
+            1,
+            3
+          ],
+          "displayImage": false,
+          "contestantLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471077.png",
+          "contestantVisual": {
+            "hasFallbackAssets": false,
+            "unofficialLogoUrl": "https://dam.begmedia.com/offering/images/contestants/543841480471077.png"
+          }
+        }
+      ],
+      "competition": {
+        "id": "50",
+        "name": "Włochy Puchar",
+        "sport": {
+          "code": "football",
+          "name": "Piłka nożna",
+          "type": 1
+        },
+        "countryCode": "IT"
+      },
+      "competitionInfo": {
+        "roundName": "1/32 finału",
+        "matchLegType": 0,
+        "competitionRoundName": "",
+        "groupName": ""
+      }
+    }
+  }
+]

@@ -1,0 +1,429 @@
+# 06_PROVIDER_ARCHITECTURE.md
+
+# Provider Architecture
+
+Version: 1.0
+
+Status: Authoritative
+
+This document defines the architecture of all data providers.
+
+Every bookmaker integration MUST follow this architecture.
+
+No provider may implement its own custom workflow.
+
+Every provider is interchangeable.
+
+Only provider-specific implementation details may differ.
+
+---
+
+# Purpose
+
+Providers are responsible ONLY for collecting raw bookmaker data.
+
+A provider does not contain business logic.
+
+A provider does not normalize data.
+
+A provider does not detect opportunities.
+
+A provider does not communicate with other providers.
+
+A provider is only responsible for acquiring data.
+
+---
+
+# High-Level Provider Pipeline
+
+Initialization
+
+↓
+
+Discovery
+
+↓
+
+Fetch
+
+↓
+
+Parse
+
+↓
+
+Validation
+
+↓
+
+Health Report
+
+↓
+
+Return Provider Result
+
+Every provider follows this lifecycle.
+
+No stage may be skipped.
+
+---
+
+# Provider Responsibilities
+
+Every provider MUST:
+
+- initialize its resources
+- establish communication with the bookmaker
+- discover available events
+- fetch raw market data
+- parse provider responses
+- validate parsing success
+- expose provider metadata
+- expose health information
+- report errors
+- return deterministic results
+
+---
+
+# Provider MUST NOT
+
+A provider must never:
+
+- calculate surebets
+- calculate value bets
+- normalize data to the global model
+- communicate with another provider
+- write directly to the database
+- send notifications
+- perform analytics
+- contain business rules
+
+---
+
+# Provider Lifecycle
+
+Stage 1
+
+Initialization
+
+Responsibilities
+
+- load configuration
+- create HTTP session
+- initialize browser if required
+- initialize cookies if required
+
+Output
+
+Initialized provider
+
+---
+
+Stage 2
+
+Discovery
+
+Responsibilities
+
+- discover competitions
+- discover events
+- discover available markets
+
+Output
+
+Provider-specific event references
+
+---
+
+Stage 3
+
+Fetch
+
+Responsibilities
+
+- download provider data
+- retry temporary failures
+- respect provider limits
+- detect unavailable resources
+
+Output
+
+Raw provider responses
+
+No parsing occurs here.
+
+---
+
+Stage 4
+
+Parse
+
+Responsibilities
+
+- parse provider responses
+- extract available information
+- preserve provider identifiers
+- preserve raw values
+
+Output
+
+Parsed provider objects
+
+No normalization occurs here.
+
+---
+
+Stage 5
+
+Validation
+
+Responsibilities
+
+- verify parsed objects
+- detect malformed responses
+- detect missing mandatory fields
+- produce validation results
+
+Output
+
+Validated provider objects
+
+---
+
+Stage 6
+
+Health Report
+
+Responsibilities
+
+- execution duration
+- request count
+- success rate
+- failure count
+- parsing statistics
+- warnings
+- errors
+
+Output
+
+Provider health report
+
+---
+
+Stage 7
+
+Return Result
+
+Provider returns a ProviderResult object.
+
+The ProviderResult contains:
+
+- provider metadata
+- execution statistics
+- parsed objects
+- validation report
+- warnings
+- errors
+
+No normalization.
+
+No persistence.
+
+No analytics.
+
+---
+
+# Provider Independence
+
+Providers must never know about:
+
+other providers
+
+scanner
+
+database
+
+frontend
+
+API
+
+notifications
+
+analytics
+
+Each provider operates independently.
+
+---
+
+# Error Handling
+
+Failures must be isolated.
+
+Possible provider states:
+
+READY
+
+RUNNING
+
+WARNING
+
+FAILED
+
+DISABLED
+
+One provider failure must never stop another provider.
+
+---
+
+# Retry Policy
+
+Retry only temporary failures.
+
+Never retry:
+
+authentication failures
+
+invalid requests
+
+unsupported resources
+
+Retries must use exponential backoff.
+
+---
+
+# Configuration
+
+Every provider configuration must be external.
+
+Examples:
+
+timeouts
+
+headers
+
+proxy
+
+browser settings
+
+rate limits
+
+feature flags
+
+No hardcoded configuration.
+
+---
+
+# Logging
+
+Providers must produce structured logs.
+
+Every major operation should be logged.
+
+Examples:
+
+provider started
+
+discovery completed
+
+fetch completed
+
+parse completed
+
+validation completed
+
+provider finished
+
+Never log credentials.
+
+---
+
+# Metrics
+
+Every provider should expose:
+
+execution time
+
+request count
+
+response size
+
+success count
+
+failure count
+
+warning count
+
+parsed objects
+
+validation failures
+
+These metrics are used for monitoring.
+
+---
+
+# Testing
+
+Every provider must support isolated testing.
+
+Testing should be possible without executing the full system.
+
+Whenever possible providers should support replay using previously captured responses.
+
+---
+
+# Extensibility
+
+Adding a new bookmaker should require only:
+
+1. Implement Provider Interface
+
+2. Register Provider
+
+No other module should require modification.
+
+---
+
+# Architectural Goals
+
+The provider architecture should maximize:
+
+maintainability
+
+predictability
+
+observability
+
+testability
+
+fault isolation
+
+deterministic behaviour
+
+simplicity
+
+---
+
+# Definition of Done
+
+A provider implementation is complete only if:
+
+- lifecycle is fully implemented
+- logging is complete
+- validation is implemented
+- retries are implemented
+- metrics are exposed
+- health reporting is available
+- no business logic exists
+- provider follows the common interface
+- integration with the Scraper Framework (see 10_SCRAPER_FRAMEWORK.md) is verified
+
+---
+
+# Scraper Framework Integration
+
+Every provider executes within the Scraper Framework (`providers/base/`).
+The framework handles browser/HTTP session management, retry orchestration, rate limiting, interceptors, priority extraction, diagnostics, and quality reporting.
+
+See `10_SCRAPER_FRAMEWORK.md` for full implementation architecture.
+
+End of document.

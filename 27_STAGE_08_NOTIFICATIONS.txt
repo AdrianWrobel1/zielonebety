@@ -1,0 +1,343 @@
+# 27_STAGE_08_NOTIFICATIONS
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: Medium
+
+Dependencies
+
+- Stage 07 — Scanner Engine
+
+---
+
+# Objective
+
+Implement a production-grade notification system responsible for delivering high-value betting opportunities to users in real time.
+
+The Notification System is responsible only for delivery.
+
+It never scans odds.
+
+It never performs calculations.
+
+It never communicates with providers.
+
+---
+
+# Scope
+
+Included
+
+- Notification Engine
+- Telegram Integration
+- Notification Queue
+- Delivery Rules
+- Deduplication
+- Rate Limiting
+- User Preferences
+- Retry Policy
+- Delivery Metrics
+- Notification History
+
+Not Included
+
+- Scanner
+- Provider Logic
+- API
+- Frontend
+
+---
+
+# Architecture
+
+```
+Scanner Result
+
+↓
+
+Notification Engine
+
+↓
+
+Rule Engine
+
+↓
+
+Notification Queue
+
+↓
+
+Telegram Provider
+
+↓
+
+Delivery Report
+```
+
+Notification delivery is completely independent from the Scanner.
+
+---
+
+# Notification Pipeline
+
+```
+Scanner Opportunity
+
+↓
+
+Validation
+
+↓
+
+Deduplication
+
+↓
+
+User Rules
+
+↓
+
+Priority Assignment
+
+↓
+
+Queue
+
+↓
+
+Delivery
+
+↓
+
+Confirmation
+
+↓
+
+History
+```
+
+---
+
+# Notification Types
+
+Support
+
+- Surebet Alert
+- Valuebet Alert
+- High EV Alert
+- System Warning
+- Provider Failure
+- Health Alert
+
+Future notification types must require no architectural changes.
+
+---
+
+# Rule Engine
+
+The Notification Engine decides whether an opportunity should be delivered.
+
+Rules may include
+
+- minimum ROI
+- minimum EV
+- minimum odds
+- supported sports
+- supported bookmakers
+- market types
+- confidence threshold
+- freshness threshold
+
+Rules are configurable.
+
+---
+
+# Deduplication
+
+Never send duplicate alerts.
+
+Duplicates are determined using
+
+- event
+- market
+- outcome
+- provider combination
+- opportunity fingerprint
+
+Repeated alerts should only be sent after meaningful changes.
+
+---
+
+# Priority Levels
+
+Support
+
+Critical
+
+High
+
+Normal
+
+Low
+
+Priority determines queue order.
+
+---
+
+# Delivery Queue
+
+Responsibilities
+
+- asynchronous processing
+- retry scheduling
+- ordering
+- failure isolation
+- rate limiting
+
+Queue must survive application restarts.
+
+---
+
+# Telegram Integration
+
+Responsibilities
+
+- message formatting
+- message delivery
+- retry
+- delivery confirmation
+- error reporting
+
+Telegram implementation must remain replaceable.
+
+Future providers
+
+- Discord
+- Email
+- Push
+- SMS
+
+should require only a new Notification Provider.
+
+---
+
+# Retry Policy
+
+Retry only
+
+- timeout
+- temporary API errors
+- network failures
+
+Never retry
+
+- invalid configuration
+- invalid recipient
+- malformed message
+
+Exponential backoff required.
+
+---
+
+# Notification History
+
+Store
+
+- notification id
+- opportunity id
+- recipient
+- provider
+- delivery time
+- delivery status
+- retry count
+- failure reason
+
+History supports debugging and analytics.
+
+---
+
+# Metrics
+
+Collect
+
+- notifications sent
+- notifications failed
+- retries
+- queue size
+- delivery latency
+- duplicate alerts prevented
+- average delivery time
+
+---
+
+# Logging
+
+Log
+
+Notification Created
+
+Queued
+
+Sent
+
+Delivered
+
+Failed
+
+Retried
+
+Discarded
+
+Deduplicated
+
+---
+
+# Performance
+
+Target
+
+- delivery latency < 2 seconds
+- asynchronous processing
+- scalable queue
+- minimal blocking
+
+---
+
+# Testing
+
+Required
+
+- queue tests
+- retry tests
+- deduplication tests
+- Telegram integration tests
+- performance tests
+- failure recovery tests
+- load tests
+
+---
+
+# Acceptance Criteria
+
+- Notification Engine implemented
+- Queue implemented
+- Telegram integration completed
+- Rule Engine implemented
+- Deduplication implemented
+- Retry policy implemented
+- Notification history implemented
+- Metrics integrated
+- Logging integrated
+- Tests passing
+
+---
+
+# Definition of Done
+
+The system reliably delivers betting opportunities with low latency, prevents duplicate alerts and provides complete delivery diagnostics.
+
+The project is ready for Stage 09 — API.
+
+End of Stage 08.

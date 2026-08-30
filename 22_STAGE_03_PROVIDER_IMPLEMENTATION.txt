@@ -1,0 +1,1626 @@
+# 22_STAGE_03_BETCLIC_PROVIDER
+
+# PART 1 — Foundation
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Stage 01 — Core Infrastructure
+- Stage 02 — Provider Framework
+
+---
+
+# Objective
+
+Implement the first production provider for the Zielone Bety platform.
+
+This provider serves as the reference implementation for every future bookmaker integration.
+
+The objective is not only to support Betclic.
+
+The objective is to establish the implementation standard for all future providers.
+
+Every architectural decision made here should be reusable by every future provider.
+
+---
+
+# Scope
+
+Included
+
+- BetclicProvider
+- Provider configuration
+- Project structure
+- Dependency registration
+- Shared models
+- Provider-specific exceptions
+- Provider health
+- Provider metrics
+
+Not Included
+
+- Discovery implementation
+- Network requests
+- Parsing
+- Normalization
+- Scanner integration
+- Database persistence
+
+---
+
+# Architecture
+
+```
+BaseProvider
+
+↓
+
+BetclicProvider
+
+↓
+
+Discovery
+
+↓
+
+Fetch
+
+↓
+
+Parser
+
+↓
+
+Validation
+
+↓
+
+ProviderResult
+```
+
+BetclicProvider inherits all common behaviour from BaseProvider.
+
+Only Betclic-specific behaviour is implemented.
+
+---
+
+# Folder Structure
+
+```
+providers/
+
+betclic/
+
+README.md
+
+provider.py
+
+config.py
+
+models.py
+
+exceptions.py
+
+constants.py
+
+health.py
+
+metrics.py
+
+discovery/
+
+fetch/
+
+parser/
+
+validation/
+
+tests/
+```
+
+Every future provider follows exactly this structure.
+
+---
+
+# Responsibilities
+
+BetclicProvider owns
+
+- Betclic configuration
+- Betclic lifecycle hooks
+- Betclic specific implementation
+- Betclic models
+- Betclic validation
+
+Framework owns
+
+- lifecycle
+- retries
+- logging
+- metrics
+- execution
+- timing
+
+Responsibilities must never overlap.
+
+---
+
+# Provider Configuration
+
+Configuration includes
+
+Base URL
+
+Headers
+
+User Agent
+
+Timeouts
+
+Retry Limits
+
+Concurrency Limits
+
+Feature Flags
+
+Browser Configuration (future)
+
+No configuration is hardcoded.
+
+---
+
+# Provider Registration
+
+BetclicProvider must register itself using the Provider Registry.
+
+Manual instantiation is forbidden.
+
+Correct
+
+```
+Registry
+
+↓
+
+Factory
+
+↓
+
+BetclicProvider
+```
+
+Incorrect
+
+```
+new BetclicProvider()
+```
+
+---
+
+# Models
+
+Provider-specific models remain isolated.
+
+Examples
+
+BetclicEvent
+
+BetclicMarket
+
+BetclicSelection
+
+BetclicOdds
+
+These models never leave the provider layer.
+
+Only the Normalizer may consume them.
+
+---
+
+# Exceptions
+
+Provider-specific exceptions include
+
+BetclicConfigurationError
+
+BetclicDiscoveryError
+
+BetclicFetchError
+
+BetclicParsingError
+
+BetclicValidationError
+
+All inherit from BaseApplicationError.
+
+---
+
+# Metrics
+
+Provider automatically exposes
+
+Execution Time
+
+Discovery Time
+
+Fetch Time
+
+Parse Time
+
+Validation Time
+
+Request Count
+
+Retry Count
+
+Error Count
+
+Warning Count
+
+Metrics are collected automatically by the framework.
+
+---
+
+# Health
+
+Provider reports
+
+READY
+
+RUNNING
+
+WARNING
+
+FAILED
+
+STOPPED
+
+Health implementation follows the common framework.
+
+---
+
+# Logging
+
+Provider logs only Betclic-specific operations.
+
+Examples
+
+Competition discovered
+
+Match discovered
+
+Request executed
+
+Parser warning
+
+Unexpected response
+
+Lifecycle logging remains inside the framework.
+
+---
+
+# Testing
+
+Foundation tests verify
+
+- provider registration
+- dependency injection
+- configuration loading
+- lifecycle compatibility
+- provider construction
+- health reporting
+
+No network communication.
+
+---
+
+# Acceptance Criteria
+
+- BetclicProvider created
+- Configuration implemented
+- Models created
+- Exceptions created
+- Provider registered
+- Health implemented
+- Metrics implemented
+- Framework integration complete
+- Project compiles
+
+---
+
+# Definition of Done
+
+BetclicProvider exists as a fully integrated provider.
+
+No scraping has been implemented.
+
+The provider is ready for Discovery implementation.
+
+---
+
+# Deliverables
+
+✓ BetclicProvider
+
+✓ Configuration
+
+✓ Models
+
+✓ Exceptions
+
+✓ Metrics
+
+✓ Health
+
+✓ Registry Integration
+
+✓ Unit Tests
+
+---
+
+# Exit Criteria
+
+The provider starts successfully.
+
+The provider registers successfully.
+
+The provider executes the framework lifecycle.
+
+No bookmaker-specific functionality has been implemented yet.
+
+The project is ready for Part 2 — Discovery.
+
+End of Part 1.
+
+# 22_STAGE_03_BETCLIC_PROVIDER
+
+# PART 2 — Discovery
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Part 1 — Foundation
+
+---
+
+# Objective
+
+Implement the Discovery layer responsible for finding every available football event exposed by Betclic.
+
+Discovery only discovers.
+
+It never downloads complete event data.
+
+It never parses markets.
+
+It never normalizes data.
+
+Its only responsibility is building a reliable execution queue.
+
+---
+
+# Scope
+
+Included
+
+- Competition discovery
+- Event discovery
+- URL generation
+- Event deduplication
+- Discovery validation
+- Discovery metrics
+- Discovery health
+- Replay snapshots
+
+Not Included
+
+- Fetch
+- Parser
+- Normalization
+- Scanner
+- Database
+
+---
+
+# Responsibilities
+
+Discovery is responsible for finding:
+
+- Sports
+- Competitions
+- Events
+- Event identifiers
+- Event URLs
+- Event metadata
+
+Discovery is NOT responsible for:
+
+- Odds
+- Markets
+- Selections
+- Parsing
+- Business logic
+
+---
+
+# Discovery Pipeline
+
+```
+Provider Start
+
+↓
+
+Football Entry Point
+
+↓
+
+Competition Discovery
+
+↓
+
+Competition Validation
+
+↓
+
+Event Discovery
+
+↓
+
+Event Validation
+
+↓
+
+Deduplication
+
+↓
+
+DiscoveryResult
+```
+
+---
+
+# Discovery Output
+
+Every discovered event must contain at least:
+
+- provider_event_id
+- event_name
+- competition
+- sport
+- event_url
+- event_start_time
+- discovery_timestamp
+- provider_metadata
+
+No incomplete events may continue.
+
+---
+
+# Validation
+
+Discovery validates:
+
+- unique event IDs
+- valid URLs
+- required fields
+- supported sport
+- duplicate events
+- malformed responses
+
+Invalid events are rejected with diagnostics.
+
+---
+
+# Deduplication
+
+Events are considered duplicates when they share the same provider identifier.
+
+Duplicate events must never enter the execution queue.
+
+Deduplication occurs before Fetch.
+
+---
+
+# Retry Policy
+
+Retry only for:
+
+- timeout
+- temporary network failure
+- HTTP 5xx
+- connection reset
+
+Never retry:
+
+- invalid response
+- malformed data
+- missing required fields
+- programming errors
+
+---
+
+# Metrics
+
+Discovery automatically reports:
+
+- competitions found
+- events found
+- duplicates removed
+- invalid events
+- discovery duration
+- retries
+- failures
+
+---
+
+# Logging
+
+Log:
+
+- discovery started
+- competition discovered
+- event discovered
+- duplicate removed
+- validation failure
+- discovery completed
+
+Never log raw responses.
+
+---
+
+# Snapshots
+
+Discovery stores replay snapshots.
+
+Snapshot contains:
+
+- discovered event list
+- execution metadata
+- timestamps
+- provider version
+
+Replay must reproduce the same DiscoveryResult.
+
+---
+
+# Error Handling
+
+Discovery failures produce:
+
+DiscoveryError
+
+with
+
+- reason
+- execution_id
+- provider
+- failed stage
+- diagnostics
+
+Failures never crash the framework.
+
+---
+
+# Acceptance Criteria
+
+- Competition discovery implemented
+- Event discovery implemented
+- Validation implemented
+- Deduplication implemented
+- Retry integrated
+- Metrics integrated
+- Logging integrated
+- Replay snapshots implemented
+- Unit tests passing
+
+---
+
+# Definition of Done
+
+Discovery produces a deterministic, validated and deduplicated list of Betclic events ready for Fetch.
+
+No market data is downloaded.
+
+The project is ready for Part 3 — Fetch.
+
+End of Part 2.
+# 22_STAGE_03_BETCLIC_PROVIDER
+
+# PART 3 — Fetch
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: Very High
+
+Dependencies
+
+- Part 1 — Foundation
+- Part 2 — Discovery
+
+---
+
+# Objective
+
+Implement the Fetch layer responsible for downloading raw Betclic event data.
+
+Fetch downloads data only.
+
+It does not interpret it.
+
+It does not parse it.
+
+It does not normalize it.
+
+Its only responsibility is obtaining complete and reproducible raw responses.
+
+---
+
+# Scope
+
+Included
+
+- HTTP / Browser communication
+- Request execution
+- Session management
+- Authentication (if required)
+- Retry policy
+- Rate limiting
+- Request queue
+- Response validation
+- Raw response snapshots
+- Fetch metrics
+
+Not Included
+
+- Parsing
+- Validation of parsed models
+- Normalization
+- Scanner
+- Database
+
+---
+
+# Fetch Pipeline
+
+```
+DiscoveryResult
+
+↓
+
+Execution Queue
+
+↓
+
+Request Preparation
+
+↓
+
+Request Execution
+
+↓
+
+Response Validation
+
+↓
+
+Snapshot Creation
+
+↓
+
+FetchResult
+```
+
+---
+
+# Responsibilities
+
+Fetch is responsible for:
+
+- executing requests
+- maintaining sessions
+- respecting rate limits
+- collecting raw responses
+- recording metadata
+- handling retries
+- preserving original payloads
+
+Fetch never modifies downloaded data.
+
+---
+
+# Request Management
+
+Every request contains:
+
+- provider identifier
+- event identifier
+- request timestamp
+- execution ID
+- timeout configuration
+- retry policy
+
+Every request is traceable.
+
+---
+
+# Session Management
+
+The framework owns session lifecycle.
+
+Responsibilities
+
+- initialize session
+- reuse session
+- refresh session if required
+- terminate session cleanly
+
+Provider code must never manage sessions directly.
+
+---
+
+# Rate Limiting
+
+The framework enforces configurable limits.
+
+Examples
+
+- requests per second
+- concurrent requests
+- cooldown intervals
+- burst limits
+
+No hardcoded values.
+
+---
+
+# Retry Policy
+
+Retry only on transient failures.
+
+Examples
+
+- timeout
+- HTTP 429
+- HTTP 5xx
+- connection reset
+
+Do not retry
+
+- HTTP 400
+- invalid payload
+- parser failures
+- configuration errors
+
+Retries use exponential backoff.
+
+---
+
+# Response Validation
+
+Immediately verify:
+
+- successful response
+- expected content type
+- non-empty payload
+- supported format
+- response size
+
+Invalid responses are rejected before parsing.
+
+---
+
+# Snapshot System
+
+Every successful fetch stores:
+
+- raw response
+- request metadata
+- response metadata
+- timestamps
+- execution ID
+- provider version
+
+Snapshots enable deterministic replay.
+
+Raw payloads remain unchanged.
+
+---
+
+# Metrics
+
+Automatically collect:
+
+- requests executed
+- successful requests
+- failed requests
+- retries
+- average latency
+- total download size
+- fetch duration
+- timeout count
+
+---
+
+# Logging
+
+Log only operational events.
+
+Examples
+
+- request started
+- request completed
+- retry scheduled
+- timeout occurred
+- response rejected
+- fetch completed
+
+Never log sensitive information.
+
+Never truncate diagnostics.
+
+---
+
+# Error Handling
+
+Possible failures
+
+- timeout
+- connection failure
+- invalid response
+- rate limit exceeded
+- unexpected status code
+- interrupted execution
+
+Every failure produces structured diagnostics.
+
+Failures remain isolated to the current event.
+
+---
+
+# Performance
+
+Fetch implementation must support future parallel execution.
+
+Requirements
+
+- isolated requests
+- independent retries
+- configurable concurrency
+- deterministic ordering where required
+
+No shared mutable request state.
+
+---
+
+# Acceptance Criteria
+
+- Request execution implemented
+- Session management implemented
+- Rate limiting implemented
+- Retry policy implemented
+- Response validation implemented
+- Snapshot system implemented
+- Metrics integrated
+- Logging integrated
+- Failure handling implemented
+- Unit tests passing
+
+---
+
+# Definition of Done
+
+The Fetch layer reliably downloads raw Betclic event data while preserving complete reproducibility.
+
+No parsing or business logic exists.
+
+The project is ready for Part 4 — Parser.
+
+End of Part 3.
+# 22_STAGE_03_BETCLIC_PROVIDER
+
+# PART 4 — Parser
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: Very High
+
+Dependencies
+
+- Part 1 — Foundation
+- Part 2 — Discovery
+- Part 3 — Fetch
+
+---
+
+# Objective
+
+Transform raw Betclic responses into deterministic provider models.
+
+The parser is responsible only for interpreting provider responses.
+
+It never performs business logic.
+
+It never calculates opportunities.
+
+It never normalizes provider objects.
+
+The parser converts transport data into strongly typed Betclic domain models.
+
+---
+
+# Scope
+
+Included
+
+- Response parsing
+- Provider models
+- Data extraction
+- Model validation
+- Parser diagnostics
+- Replay compatibility
+- Parser metrics
+
+Not Included
+
+- Normalization
+- Scanner
+- Database
+- Telegram
+- Valuebet calculations
+- Surebet calculations
+
+---
+
+# Parser Pipeline
+
+```
+Raw Response
+
+↓
+
+Response Validation
+
+↓
+
+Data Extraction
+
+↓
+
+Provider Models
+
+↓
+
+Model Validation
+
+↓
+
+ParserResult
+```
+
+---
+
+# Responsibilities
+
+The parser is responsible for extracting:
+
+- Events
+- Competitions
+- Markets
+- Selections
+- Odds
+- Match metadata
+- Provider identifiers
+
+The parser never:
+
+- changes values
+- filters business data
+- removes markets without reason
+- calculates probabilities
+- estimates missing values
+
+---
+
+# Provider Models
+
+Parser produces only provider-specific models.
+
+Examples
+
+BetclicEvent
+
+BetclicMarket
+
+BetclicSelection
+
+BetclicOutcome
+
+BetclicOdds
+
+BetclicCompetition
+
+Provider models never leave the provider layer.
+
+Normalization converts them later.
+
+---
+
+# Validation
+
+Every parsed object is validated.
+
+Verify
+
+- required fields
+- identifier presence
+- odds format
+- market integrity
+- selection integrity
+- timestamp validity
+- object completeness
+
+Invalid objects generate structured validation errors.
+
+---
+
+# Data Preservation
+
+Parser preserves every meaningful value received from Betclic.
+
+Never modify:
+
+- odds
+- names
+- identifiers
+- timestamps
+- market structure
+
+Transformation belongs to the Normalization stage.
+
+---
+
+# Unsupported Structures
+
+Unknown structures must not crash the parser.
+
+Behaviour
+
+- log warning
+- preserve raw snapshot
+- skip invalid fragment if safe
+- continue parsing remaining data
+
+Unexpected provider changes must be diagnosable.
+
+---
+
+# Parser Diagnostics
+
+Every parser execution reports:
+
+- events parsed
+- markets parsed
+- selections parsed
+- warnings
+- validation failures
+- unsupported structures
+- parsing duration
+
+---
+
+# Replay Compatibility
+
+The parser must be deterministic.
+
+Given the same raw response,
+
+the parser must always produce identical provider models.
+
+Replay tests are mandatory.
+
+---
+
+# Error Handling
+
+Possible failures
+
+- malformed response
+- unsupported schema
+- missing fields
+- invalid values
+- unexpected structure
+
+Failures must include:
+
+- execution ID
+- provider
+- parser stage
+- object location
+- diagnostic message
+
+---
+
+# Logging
+
+Log:
+
+- parsing started
+- response parsed
+- validation failure
+- unsupported structure
+- parsing completed
+
+Never log full payloads in production.
+
+---
+
+# Performance
+
+Parser should:
+
+- avoid duplicate parsing
+- avoid unnecessary allocations
+- process large responses efficiently
+- remain deterministic
+
+Correctness is always preferred over speed.
+
+---
+
+# Testing
+
+Required tests
+
+- unit tests
+- replay tests
+- malformed response tests
+- missing field tests
+- unsupported schema tests
+- large response tests
+
+Every parser bug becomes a permanent regression test.
+
+---
+
+# Acceptance Criteria
+
+- Provider models implemented
+- Parser implemented
+- Validation implemented
+- Diagnostics implemented
+- Replay tests passing
+- Deterministic output verified
+- Metrics integrated
+- Logging integrated
+- No business logic inside parser
+
+---
+
+# Definition of Done
+
+The parser reliably converts raw Betclic responses into validated provider models.
+
+No normalization exists.
+
+No scanner logic exists.
+
+The output is ready for Stage 04 — Normalization.
+
+End of Part 4.
+# 22_STAGE_03_BETCLIC_PROVIDER
+
+# PART 5 — Production Hardening
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Part 1 — Foundation
+- Part 2 — Discovery
+- Part 3 — Fetch
+- Part 4 — Parser
+
+---
+
+# Objective
+
+Prepare the Betclic Provider for production deployment.
+
+This stage focuses on reliability, diagnostics, testing, monitoring and long-term maintainability.
+
+No new scraping functionality should be introduced.
+
+The goal is to make the provider production-ready.
+
+---
+
+# Scope
+
+Included
+
+- Health Monitoring
+- Metrics
+- Replay System
+- Snapshot Validation
+- Performance Optimization
+- Error Diagnostics
+- Integration Tests
+- Benchmarking
+- Documentation
+
+Not Included
+
+- Scanner
+- Normalization
+- Telegram
+- Database
+- New provider features
+
+---
+
+# Production Requirements
+
+The provider must be:
+
+- deterministic
+- observable
+- testable
+- reproducible
+- fault tolerant
+- maintainable
+
+Every execution should be diagnosable without reproducing the issue.
+
+---
+
+# Health Monitoring
+
+Provider Health includes
+
+Configuration
+
+Discovery
+
+Fetch
+
+Parser
+
+Replay
+
+Performance
+
+Each component reports independently.
+
+Overall provider health is automatically aggregated.
+
+---
+
+# Metrics
+
+Expose at minimum
+
+Provider Runs
+
+Successful Runs
+
+Failed Runs
+
+Average Runtime
+
+Average Discovery Time
+
+Average Fetch Time
+
+Average Parse Time
+
+Requests Executed
+
+Retries
+
+Timeouts
+
+Parser Errors
+
+Validation Errors
+
+Unsupported Structures
+
+Health Status
+
+Metrics must integrate with the framework.
+
+---
+
+# Replay Validation
+
+Replay is mandatory.
+
+Replay verifies
+
+- parser determinism
+- response compatibility
+- regression detection
+- provider stability
+
+Running identical snapshots must produce identical ProviderResults.
+
+---
+
+# Snapshot Validation
+
+Stored snapshots must contain
+
+- raw response
+- request metadata
+- execution metadata
+- provider version
+- timestamps
+
+Snapshots become permanent regression assets.
+
+---
+
+# Performance
+
+Benchmark
+
+- startup time
+- discovery speed
+- fetch throughput
+- parser throughput
+- memory usage
+- CPU usage
+
+Performance regressions require investigation before merge.
+
+---
+
+# Diagnostics
+
+Provider diagnostics should answer
+
+- What failed?
+- Where?
+- Why?
+- Which event?
+- Which request?
+- Which parser?
+- Which execution?
+- Can it be replayed?
+
+Every production issue should be explainable.
+
+---
+
+# Logging
+
+Verify structured logs exist for
+
+Initialization
+
+Discovery
+
+Fetch
+
+Parser
+
+Validation
+
+Completion
+
+Failure
+
+Shutdown
+
+Every log contains
+
+- execution_id
+- correlation_id
+- provider
+- stage
+- duration
+
+---
+
+# Integration Tests
+
+Required
+
+Framework Integration
+
+Lifecycle Test
+
+Discovery Test
+
+Fetch Test
+
+Parser Test
+
+Failure Recovery Test
+
+Replay Test
+
+Shutdown Test
+
+Provider Registration Test
+
+---
+
+# Failure Scenarios
+
+Verify
+
+Network Timeout
+
+HTTP Error
+
+Invalid Response
+
+Unexpected Structure
+
+Partial Response
+
+Cancelled Execution
+
+Framework Restart
+
+No scenario should crash the framework.
+
+---
+
+# Documentation
+
+Provider documentation must include
+
+Architecture
+
+Execution Flow
+
+Configuration
+
+Known Limitations
+
+Supported Features
+
+Replay Instructions
+
+Debugging Guide
+
+Extension Rules
+
+---
+
+# Production Checklist
+
+Architecture
+
+- [ ] Provider follows BaseProvider
+- [ ] No framework modifications
+- [ ] No architectural violations
+
+Reliability
+
+- [ ] Retry verified
+- [ ] Timeouts verified
+- [ ] Failure isolation verified
+- [ ] Graceful shutdown verified
+
+Observability
+
+- [ ] Logging complete
+- [ ] Metrics complete
+- [ ] Health reporting complete
+- [ ] Replay complete
+
+Quality
+
+- [ ] Unit tests passing
+- [ ] Integration tests passing
+- [ ] Replay tests passing
+- [ ] Benchmarks completed
+
+Documentation
+
+- [ ] README updated
+- [ ] Configuration documented
+- [ ] Limitations documented
+
+---
+
+# Acceptance Criteria
+
+The provider is considered production-ready when
+
+- All lifecycle stages pass.
+- Replay tests are deterministic.
+- Performance is acceptable.
+- Health reporting is complete.
+- Metrics are complete.
+- No architectural violations exist.
+- No provider-specific hacks exist outside the provider directory.
+- All tests pass.
+
+---
+
+# Definition of Done
+
+Stage 03 is complete when the Betclic Provider can independently:
+
+1. Discover events.
+2. Fetch raw data.
+3. Parse provider models.
+4. Handle failures gracefully.
+5. Produce deterministic replay results.
+6. Integrate with the Provider Framework without requiring framework changes.
+
+The provider is ready to feed Stage 04 — Normalization.
+
+---
+
+# Deliverables
+
+✓ BetclicProvider
+
+✓ Discovery
+
+✓ Fetch
+
+✓ Parser
+
+✓ Validation
+
+✓ Replay Support
+
+✓ Metrics
+
+✓ Health Monitoring
+
+✓ Structured Logging
+
+✓ Integration Tests
+
+✓ Performance Benchmarks
+
+✓ Production Documentation
+
+---
+
+# Exit Criteria
+
+Before Stage 04 begins:
+
+- Provider executes successfully end-to-end.
+- Replay produces deterministic results.
+- Framework remains unchanged.
+- All quality gates pass.
+- Provider is considered production-ready.
+
+---
+
+# Next Stage
+
+23_STAGE_04_NORMALIZATION
+
+Goal
+
+Transform provider-specific models into a unified canonical domain model used by the Scanner and every downstream component.
+
+End of Stage 03.

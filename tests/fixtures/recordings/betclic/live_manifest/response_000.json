@@ -1,0 +1,33 @@
+[
+  {
+    "id": "event_betclic_9901",
+    "name": "Barcelona vs Real Madrid",
+    "competition": "La Liga",
+    "start_date": "2026-08-25T20:00:00Z",
+    "home_team": "Barcelona",
+    "away_team": "Real Madrid",
+    "markets": [
+      {
+        "id": "m_betclic_1X2",
+        "name": "Match Result",
+        "code": "1X2",
+        "is_open": true,
+        "selections": [
+          {"id": "sel_1", "name": "Barcelona", "code": "1", "odds": 2.25},
+          {"id": "sel_X", "name": "Draw", "code": "X", "odds": 3.50},
+          {"id": "sel_2", "name": "Real Madrid", "code": "2", "odds": 3.10}
+        ]
+      },
+      {
+        "id": "m_betclic_OU25",
+        "name": "Total Goals 2.5",
+        "code": "OVER_UNDER",
+        "is_open": true,
+        "selections": [
+          {"id": "sel_O25", "name": "Over 2.5", "code": "OVER", "odds": 1.65, "handicap": 2.5},
+          {"id": "sel_U25", "name": "Under 2.5", "code": "UNDER", "odds": 2.20, "handicap": 2.5}
+        ]
+      }
+    ]
+  }
+]

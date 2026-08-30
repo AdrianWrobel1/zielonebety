@@ -1,0 +1,302 @@
+# 28_STAGE_09_API
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Stage 06 — Database
+- Stage 07 — Scanner Engine
+- Stage 08 — Notifications
+
+---
+
+# Objective
+
+Build a production-grade REST API serving as the single interface between the backend and all external clients.
+
+The API exposes platform data.
+
+It never contains business logic.
+
+It orchestrates existing services only.
+
+---
+
+# Scope
+
+Included
+
+- REST API
+- Authentication
+- Authorization
+- API Versioning
+- Request Validation
+- Response Models
+- Pagination
+- Filtering
+- Sorting
+- Rate Limiting
+- API Metrics
+- API Documentation
+
+Not Included
+
+- Scanner Logic
+- Provider Logic
+- Database Logic
+- Frontend
+
+---
+
+# Architecture
+
+```
+Frontend
+
+↓
+
+REST API
+
+↓
+
+Application Services
+
+↓
+
+Repositories
+
+↓
+
+Database
+```
+
+Endpoints never communicate directly with the database.
+
+---
+
+# API Modules
+
+Core
+
+Providers
+
+Events
+
+Markets
+
+Odds
+
+Scanner
+
+Surebets
+
+Valuebets
+
+Notifications
+
+Statistics
+
+Health
+
+Admin
+
+---
+
+# Endpoint Rules
+
+Every endpoint must
+
+- validate input
+- validate permissions
+- call one application service
+- return typed response
+- never contain business logic
+
+Controllers remain lightweight.
+
+---
+
+# Authentication
+
+Support
+
+- JWT
+- Refresh Tokens
+- API Keys (future)
+
+Authentication is centralized.
+
+---
+
+# Authorization
+
+Roles
+
+Guest
+
+User
+
+Premium
+
+Admin
+
+Permissions are role-based.
+
+---
+
+# Validation
+
+Validate
+
+- request body
+- query parameters
+- path parameters
+- pagination
+- filters
+
+Invalid requests return structured errors.
+
+---
+
+# Pagination
+
+Support
+
+Limit
+
+Offset
+
+Cursor (future)
+
+Large datasets must never be returned in one response.
+
+---
+
+# Filtering
+
+Examples
+
+Sport
+
+Competition
+
+Bookmaker
+
+Market
+
+Minimum EV
+
+Minimum ROI
+
+Kickoff
+
+Status
+
+---
+
+# Response Format
+
+Every response contains
+
+- data
+- metadata
+- pagination (if applicable)
+- execution time
+
+Errors follow one common schema.
+
+---
+
+# Rate Limiting
+
+Support
+
+- per IP
+- per user
+- per API key
+
+Limits are configurable.
+
+---
+
+# Documentation
+
+Generate OpenAPI automatically.
+
+Every endpoint documented.
+
+Examples included.
+
+---
+
+# Metrics
+
+Collect
+
+- requests
+- latency
+- errors
+- endpoint usage
+- response size
+- rate-limit hits
+
+---
+
+# Logging
+
+Log
+
+Request Started
+
+Request Finished
+
+Validation Failed
+
+Authentication Failed
+
+Server Error
+
+Slow Request
+
+---
+
+# Testing
+
+Required
+
+- endpoint tests
+- authentication tests
+- authorization tests
+- validation tests
+- performance tests
+- load tests
+- integration tests
+
+---
+
+# Acceptance Criteria
+
+- REST API implemented
+- Authentication completed
+- Authorization completed
+- Validation implemented
+- Documentation generated
+- Metrics integrated
+- Logging integrated
+- Tests passing
+
+---
+
+# Definition of Done
+
+The API exposes all platform functionality through stable, versioned and documented endpoints.
+
+Business logic remains entirely outside the API layer.
+
+The project is ready for Stage 10 — Frontend.
+
+End of Stage 09.

@@ -1,0 +1,287 @@
+"""
+Normalization Package
+"""
+
+from normalization.base_normalizer import BaseNormalizer, NormalizedGraph
+from normalization.betclic_normalizer import BetclicNormalizer
+from normalization.superbet_normalizer import SuperbetNormalizer
+from normalization.odds_api_normalizer import OddsApiNormalizer
+from normalization.engine import NormalizationEngine, NormalizationResult
+from normalization.exceptions import (
+    NormalizationError,
+    MarketMappingError,
+    SelectionMappingError,
+)
+from normalization.identity import (
+    TeamReference,
+    CompetitionReference,
+    TeamComparison,
+    normalize_team_name,
+    normalize_competition_name,
+    parse_kickoff_to_utc,
+    compare_teams,
+    AliasResolver,
+)
+from normalization.candidate_generator import (
+    EventCandidate,
+    CandidateGenerationResult,
+    EventCandidateGenerator,
+)
+from normalization.matcher import (
+    MatchDecisionType,
+    OrientationType,
+    SuffixCompatibility,
+    MatcherConfig,
+    SignalScore,
+    MatchDecision,
+    MatchResult,
+    EventMatcher,
+)
+from normalization.aggregator import (
+    CanonicalEventAggregator,
+    CanonicalAggregationResult,
+    AggregationConflict,
+)
+from normalization.market_identity import (
+    CanonicalMarketType,
+    MarketPeriod,
+    MarketScope,
+    MarketMetric,
+    ParticipantRole,
+    CanonicalMarketKey,
+    normalize_line,
+    extract_canonical_market_key,
+    CANONICAL_MARKET_TYPE_LOOKUP,
+    LINE_DEPENDENT_MARKET_TYPES,
+)
+from normalization.market_matcher import (
+    MarketMatchDecisionType,
+    MarketMatchDecision,
+    MarketMatchBatchResult,
+    MarketMatcher,
+)
+from normalization.selection_identity import (
+    CanonicalSelectionType,
+    CanonicalSelectionKey,
+    extract_canonical_selection_key,
+    normalize_score_outcome,
+)
+from normalization.selection_matcher import (
+    SelectionMatchDecisionType,
+    SelectionMatchDecision,
+    SelectionMatchBatchResult,
+    SelectionMatcher,
+)
+from normalization.validation_pipeline import (
+    ComparableSelectionPair,
+    MatchedMarketLineage,
+    CanonicalEventValidationRecord,
+    PipelineMetrics,
+    CrossBookmakerValidationResult,
+    CrossBookmakerValidationPipeline,
+)
+from normalization.odds_comparison import (
+    OddsComparisonStatus,
+    OddsComparison,
+    OddsComparisonMetrics,
+    OddsComparisonResult,
+    OddsComparisonEngine,
+)
+from normalization.surebet import (
+    SurebetStatus,
+    MarketCompletenessStatus,
+    SurebetLeg,
+    SurebetOpportunity,
+    MarketSurebetEvaluation,
+    SurebetDetectionMetrics,
+    SurebetDetectionResult,
+    SurebetDetectorEngine,
+    SUPPORTED_MARKET_REQUIRED_SELECTIONS,
+)
+from normalization.dispatcher import (
+    DeliveryStatus,
+    DispatchStatus,
+    DispatchableOpportunity,
+    ConsumerDeliveryResult,
+    DispatchResult,
+    DispatchMetrics,
+    BatchDispatchResult,
+    OpportunityConsumer,
+    InMemoryOpportunityConsumer,
+    ConsoleOpportunityConsumer,
+    OpportunityDispatcher,
+    validate_dispatchable_opportunity,
+)
+from normalization.alert_policy import (
+    ChangeClassification,
+    OpportunityAlertConfig,
+    OpportunityChangeEvaluation,
+    OpportunityAlertPolicy,
+    DefaultOpportunityAlertPolicy,
+)
+from normalization.lifecycle import (
+    OpportunityStatus,
+    LifecycleAction,
+    generate_opportunity_fingerprint,
+    OpportunityEvaluationResult,
+    LifecycleEvaluationBatch,
+    LifecycleDispatchSummary,
+    OpportunityLifecycleManager,
+)
+from normalization.delivery_reliability import (
+    DeliveryState,
+    FailureCategory,
+    DeliveryRetryConfig,
+    generate_delivery_idempotency_key,
+    classify_delivery_failure,
+    calculate_next_retry_time,
+    deserialize_opportunity_snapshot,
+    ReconciliationSummary,
+    DeliveryReconciliationService,
+)
+from normalization.quality_policy import (
+    QualityRejectionReason,
+    OpportunityQualityConfig,
+    OpportunityQualityEvaluation,
+    OpportunityQualityPolicy,
+    DefaultOpportunityQualityPolicy,
+    OpportunityRankingEngine,
+)
+from domain.models import (
+    CanonicalEvent,
+    EventSource,
+    MatchEvidence,
+    CanonicalCompetition,
+    generate_deterministic_canonical_event_id,
+)
+
+
+
+__all__ = [
+    "BaseNormalizer",
+    "NormalizedGraph",
+    "BetclicNormalizer",
+    "SuperbetNormalizer",
+    "OddsApiNormalizer",
+    "NormalizationEngine",
+    "NormalizationResult",
+    "NormalizationError",
+    "MarketMappingError",
+    "SelectionMappingError",
+    "TeamReference",
+    "CompetitionReference",
+    "TeamComparison",
+    "normalize_team_name",
+    "normalize_competition_name",
+    "parse_kickoff_to_utc",
+    "compare_teams",
+    "AliasResolver",
+    "EventCandidate",
+    "CandidateGenerationResult",
+    "EventCandidateGenerator",
+    "MatchDecisionType",
+    "OrientationType",
+    "SuffixCompatibility",
+    "MatcherConfig",
+    "SignalScore",
+    "MatchDecision",
+    "MatchResult",
+    "EventMatcher",
+    "CanonicalEventAggregator",
+    "CanonicalAggregationResult",
+    "AggregationConflict",
+    "CanonicalMarketType",
+    "MarketPeriod",
+    "MarketScope",
+    "MarketMetric",
+    "ParticipantRole",
+    "CanonicalMarketKey",
+    "normalize_line",
+    "extract_canonical_market_key",
+    "CANONICAL_MARKET_TYPE_LOOKUP",
+    "LINE_DEPENDENT_MARKET_TYPES",
+    "MarketMatchDecisionType",
+    "MarketMatchDecision",
+    "MarketMatchBatchResult",
+    "MarketMatcher",
+    "CanonicalSelectionType",
+    "CanonicalSelectionKey",
+    "extract_canonical_selection_key",
+    "normalize_score_outcome",
+    "SelectionMatchDecisionType",
+    "SelectionMatchDecision",
+    "SelectionMatchBatchResult",
+    "SelectionMatcher",
+    "ComparableSelectionPair",
+    "MatchedMarketLineage",
+    "CanonicalEventValidationRecord",
+    "PipelineMetrics",
+    "CrossBookmakerValidationResult",
+    "CrossBookmakerValidationPipeline",
+    "OddsComparisonStatus",
+    "OddsComparison",
+    "OddsComparisonMetrics",
+    "OddsComparisonResult",
+    "OddsComparisonEngine",
+    "SurebetStatus",
+    "MarketCompletenessStatus",
+    "SurebetLeg",
+    "SurebetOpportunity",
+    "MarketSurebetEvaluation",
+    "SurebetDetectionMetrics",
+    "SurebetDetectionResult",
+    "SurebetDetectorEngine",
+    "SUPPORTED_MARKET_REQUIRED_SELECTIONS",
+    "DeliveryStatus",
+    "DispatchStatus",
+    "DispatchableOpportunity",
+    "ConsumerDeliveryResult",
+    "DispatchResult",
+    "DispatchMetrics",
+    "BatchDispatchResult",
+    "OpportunityConsumer",
+    "InMemoryOpportunityConsumer",
+    "ConsoleOpportunityConsumer",
+    "OpportunityDispatcher",
+    "validate_dispatchable_opportunity",
+    "OpportunityStatus",
+    "LifecycleAction",
+    "generate_opportunity_fingerprint",
+    "OpportunityEvaluationResult",
+    "LifecycleEvaluationBatch",
+    "LifecycleDispatchSummary",
+    "OpportunityLifecycleManager",
+    "ChangeClassification",
+    "OpportunityAlertConfig",
+    "OpportunityChangeEvaluation",
+    "OpportunityAlertPolicy",
+    "DefaultOpportunityAlertPolicy",
+    "DeliveryState",
+    "FailureCategory",
+    "DeliveryRetryConfig",
+    "generate_delivery_idempotency_key",
+    "classify_delivery_failure",
+    "calculate_next_retry_time",
+    "deserialize_opportunity_snapshot",
+    "ReconciliationSummary",
+    "DeliveryReconciliationService",
+    "QualityRejectionReason",
+    "OpportunityQualityConfig",
+    "OpportunityQualityEvaluation",
+    "OpportunityQualityPolicy",
+    "DefaultOpportunityQualityPolicy",
+    "OpportunityRankingEngine",
+    "CanonicalEvent",
+    "EventSource",
+    "MatchEvidence",
+    "CanonicalCompetition",
+    "generate_deterministic_canonical_event_id",
+]
+
+
+
+
+
+
+
+

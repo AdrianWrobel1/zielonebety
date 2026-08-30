@@ -1,0 +1,457 @@
+# 31_STAGE_12_TESTING_AND_QA
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Stage 01–11
+
+---
+
+# Objective
+
+Verify that the entire Zielone Bety platform is production-ready.
+
+Testing is not intended to prove that the software works.
+
+Testing is intended to discover defects before users do.
+
+Every critical workflow must be verified automatically.
+
+---
+
+# Scope
+
+Included
+
+- Unit Testing
+- Integration Testing
+- End-to-End Testing
+- Replay Testing
+- Regression Testing
+- Performance Testing
+- Load Testing
+- Security Testing
+- Acceptance Testing
+- Production Validation
+
+Not Included
+
+- New Features
+- Refactoring
+- Architecture Changes
+
+---
+
+# Testing Pyramid
+
+```
+                End-to-End
+
+           Integration Tests
+
+            Unit Tests
+
+Static Analysis & Validation
+```
+
+Lower layers should contain the majority of tests.
+
+End-to-End tests validate complete workflows.
+
+---
+
+# Unit Tests
+
+Every critical component must have unit tests.
+
+Examples
+
+- Provider Framework
+- Discovery
+- Parser
+- Normalization
+- Scanner
+- Notification Rules
+- Repository Layer
+
+Requirements
+
+- deterministic
+- isolated
+- repeatable
+- fast
+
+---
+
+# Integration Tests
+
+Verify communication between modules.
+
+Examples
+
+Provider
+
+↓
+
+Normalization
+
+↓
+
+Database
+
+↓
+
+Scanner
+
+↓
+
+Notifications
+
+↓
+
+API
+
+Every integration path must be tested.
+
+---
+
+# End-to-End Tests
+
+Verify complete production workflows.
+
+Examples
+
+Provider Execution
+
+↓
+
+Normalization
+
+↓
+
+Persistence
+
+↓
+
+Scanner
+
+↓
+
+Notification
+
+↓
+
+API
+
+↓
+
+Frontend
+
+Every critical user journey must pass.
+
+---
+
+# Replay Testing
+
+Replay is mandatory.
+
+Replay verifies
+
+- parser stability
+- normalization stability
+- scanner stability
+- regression detection
+
+Every replay should produce identical results.
+
+---
+
+# Regression Testing
+
+Every discovered bug must produce
+
+- regression test
+- replay snapshot
+- expected output
+
+Resolved defects must never silently return.
+
+---
+
+# Performance Testing
+
+Measure
+
+- provider execution
+- parser speed
+- normalization throughput
+- scanner throughput
+- database latency
+- API latency
+- frontend loading
+
+Performance regressions require investigation.
+
+---
+
+# Load Testing
+
+Simulate
+
+- many providers
+- thousands of events
+- millions of odds
+- concurrent users
+- notification bursts
+
+The platform should degrade gracefully.
+
+Never fail catastrophically.
+
+---
+
+# Security Testing
+
+Verify
+
+- authentication
+- authorization
+- input validation
+- secret handling
+- dependency vulnerabilities
+- rate limiting
+
+Security tests are mandatory before production.
+
+---
+
+# Acceptance Testing
+
+Verify all platform requirements.
+
+Examples
+
+- providers execute successfully
+- normalization produces canonical objects
+- scanner detects opportunities correctly
+- notifications are delivered
+- API responds correctly
+- frontend displays data correctly
+
+Acceptance tests validate business functionality.
+
+---
+
+# Code Coverage
+
+Coverage targets
+
+Core Infrastructure
+
+≥95%
+
+Provider Framework
+
+≥95%
+
+Normalization
+
+≥95%
+
+Scanner
+
+≥95%
+
+Database
+
+≥90%
+
+API
+
+≥90%
+
+Frontend
+
+≥85%
+
+Coverage is a metric.
+
+Not a goal.
+
+Quality always takes priority.
+
+---
+
+# Continuous Quality
+
+Every Pull Request must execute
+
+- static analysis
+- linting
+- type checking
+- unit tests
+- integration tests
+- replay tests
+
+Merge is blocked on failure.
+
+---
+
+# Test Data
+
+Test data must be
+
+- deterministic
+- versioned
+- reproducible
+- isolated
+
+Production data must never be required.
+
+---
+
+# Quality Gates
+
+Every release must satisfy
+
+✓ Compilation
+
+✓ Static Analysis
+
+✓ Unit Tests
+
+✓ Integration Tests
+
+✓ Replay Tests
+
+✓ Performance Tests
+
+✓ Security Tests
+
+✓ Acceptance Tests
+
+✓ Documentation Updated
+
+Failure of any gate blocks release.
+
+---
+
+# Production Validation
+
+Before every production deployment verify
+
+- providers healthy
+- scanner healthy
+- database healthy
+- notifications healthy
+- API healthy
+- frontend healthy
+
+Deployment proceeds only after successful validation.
+
+---
+
+# Metrics
+
+Track
+
+- test duration
+- pass rate
+- failure rate
+- flaky tests
+- code coverage
+- replay success
+- performance trends
+
+Quality should improve continuously.
+
+---
+
+# Documentation
+
+Maintain
+
+- test strategy
+- testing guide
+- replay guide
+- QA checklist
+- release checklist
+- known limitations
+
+Documentation is part of quality assurance.
+
+---
+
+# Acceptance Criteria
+
+- Unit Tests complete
+- Integration Tests complete
+- End-to-End Tests complete
+- Replay Tests complete
+- Performance Tests complete
+- Security Tests complete
+- Acceptance Tests complete
+- Quality Gates passing
+- Coverage targets achieved
+- Production Validation successful
+
+---
+
+# Definition of Done
+
+The Zielone Bety platform is considered production-ready when
+
+- all stages are implemented,
+- all Quality Gates pass,
+- all critical workflows are verified,
+- no critical known defects remain,
+- the system can be deployed with confidence.
+
+---
+
+# Final Deliverables
+
+✓ Production Backend
+
+✓ Provider Framework
+
+✓ Betclic Provider
+
+✓ Superbet Provider
+
+✓ Canonical Normalization
+
+✓ PostgreSQL Database
+
+✓ Scanner Engine
+
+✓ Notification System
+
+✓ REST API
+
+✓ Frontend
+
+✓ Deployment Pipeline
+
+✓ Complete QA Suite
+
+✓ Production Documentation
+
+---
+
+# Project Completion
+
+The implementation roadmap is complete.
+
+Future development should follow the established architecture, engineering standards and Quality Gates.
+
+All new features must integrate without violating existing architectural principles.
+
+End of Stage 12.
+
+End of Zielone Bety Implementation Roadmap.

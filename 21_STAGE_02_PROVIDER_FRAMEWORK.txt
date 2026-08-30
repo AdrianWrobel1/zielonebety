@@ -1,0 +1,1488 @@
+# 21_STAGE_02_PROVIDER_FRAMEWORK
+
+# PART 1 — Foundation
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: Medium
+
+Dependencies:
+
+- Stage 01 – Core Infrastructure
+
+---
+
+# Objective
+
+Build the reusable Provider Framework used by every bookmaker integration.
+
+This stage does **NOT** implement Betclic, Superbet or any bookmaker.
+
+It builds the common framework that every provider will inherit.
+
+After this stage, adding a new bookmaker should require only implementing provider-specific logic.
+
+---
+
+# Scope
+
+Included
+
+- BaseProvider
+- Provider Interface
+- ProviderContext
+- ProviderResult
+- ProviderState
+- Provider Registry
+- Shared provider models
+- Shared provider exceptions
+
+Not Included
+
+- HTTP implementation
+- Browser automation
+- Parsing
+- Discovery
+- Scanner
+- Database
+- Telegram
+- Normalization
+
+---
+
+# Architecture
+
+Every provider follows exactly the same execution model.
+
+```
+Provider
+
+↓
+
+BaseProvider
+
+↓
+
+Provider Interface
+
+↓
+
+ProviderResult
+```
+
+Every bookmaker becomes an implementation.
+
+Never a special case.
+
+---
+
+# Folder Structure
+
+```text
+providers/
+
+base/
+    base_provider.py
+    provider_interface.py
+    provider_context.py
+    provider_result.py
+    provider_state.py
+    provider_registry.py
+    exceptions.py
+    models.py
+
+betclic/
+
+superbet/
+```
+
+No provider may modify files inside another provider.
+
+---
+
+# BaseProvider Responsibilities
+
+BaseProvider owns only common behaviour.
+
+Examples
+
+- lifecycle
+- logging
+- metrics
+- retries
+- execution timing
+- health reporting
+- configuration access
+
+BaseProvider never contains bookmaker logic.
+
+---
+
+# Provider Interface
+
+Every provider implements the same public API.
+
+Mandatory methods
+
+```python
+initialize()
+
+discover()
+
+fetch()
+
+parse()
+
+validate()
+
+run()
+
+shutdown()
+
+health()
+```
+
+Public API must remain identical across providers.
+
+---
+
+# ProviderContext
+
+ProviderContext contains execution-scoped information.
+
+Examples
+
+- configuration
+- logger
+- metrics
+- execution context
+- retry policy
+- clock
+
+Context is injected.
+
+Never created manually.
+
+---
+
+# ProviderResult
+
+Every provider returns one object.
+
+Minimum contents
+
+- provider name
+- execution status
+- execution duration
+- discovered objects
+- warnings
+- errors
+- metrics
+
+No provider returns arbitrary objects.
+
+---
+
+# ProviderState
+
+Supported states
+
+```text
+INITIALIZING
+
+READY
+
+RUNNING
+
+WARNING
+
+FAILED
+
+STOPPED
+```
+
+Transitions must be deterministic.
+
+---
+
+# Provider Registry
+
+Registry owns provider discovery.
+
+Responsibilities
+
+- register provider
+- unregister provider
+- list providers
+- resolve provider
+- validate uniqueness
+
+No provider knows another provider exists.
+
+---
+
+# Acceptance Criteria
+
+- BaseProvider exists
+- Provider Interface exists
+- ProviderContext exists
+- ProviderResult exists
+- ProviderState exists
+- Provider Registry exists
+- No bookmaker-specific code
+- Project compiles
+
+---
+
+# Definition of Done
+
+Stage Part 1 is complete when the framework is capable of hosting future providers without modification.
+
+No production bookmaker has been implemented.
+
+The architecture is ready for Betclic and Superbet.
+
+# 21_STAGE_02_PROVIDER_FRAMEWORK
+
+# PART 2 — Provider Lifecycle
+
+Version: 1.0
+
+Status: Planned
+
+Dependencies
+
+- Part 1 — Foundation
+
+---
+
+# Objective
+
+Implement the complete provider lifecycle.
+
+Every bookmaker must execute exactly the same sequence of operations.
+
+No provider may introduce its own execution flow.
+
+The lifecycle is part of the framework, not the provider.
+
+---
+
+# Lifecycle
+
+Every provider executes:
+
+```
+
+Initialize
+
+↓
+
+Health Check
+
+↓
+
+Discovery
+
+↓
+
+Fetch
+
+↓
+
+Parse
+
+↓
+
+Validate
+
+↓
+
+Complete
+
+↓
+
+Shutdown
+
+```
+
+No stages may be skipped.
+
+No stages may be reordered.
+
+---
+
+# Initialize
+
+Responsibilities
+
+- load configuration
+- create execution context
+- initialize logger
+- initialize metrics
+- initialize HTTP/browser resources
+- verify dependencies
+
+Output
+
+READY
+
+Initialization must fail fast.
+
+---
+
+# Health Check
+
+Executed before provider work begins.
+
+Verify
+
+- configuration
+- required services
+- network availability (if applicable)
+- dependencies
+- runtime state
+
+Failure prevents execution.
+
+---
+
+# Discovery
+
+Responsibilities
+
+- discover competitions
+- discover events
+- discover markets
+
+Discovery identifies resources only.
+
+No parsing.
+
+No normalization.
+
+---
+
+# Fetch
+
+Responsibilities
+
+- execute requests
+- apply retry policy
+- respect rate limits
+- collect raw responses
+- store execution metadata
+
+Output
+
+Raw provider responses.
+
+---
+
+# Parse
+
+Responsibilities
+
+Transform raw responses into provider models.
+
+Parser must
+
+- preserve provider identifiers
+- preserve timestamps
+- preserve original values
+
+No business logic.
+
+---
+
+# Validate
+
+Responsibilities
+
+Verify
+
+- required fields
+- object consistency
+- parsing completeness
+- provider model integrity
+
+Invalid objects produce validation errors.
+
+Never silent failures.
+
+---
+
+# Complete
+
+Responsibilities
+
+- finalize metrics
+- finalize execution report
+- build ProviderResult
+- update provider state
+
+ProviderResult becomes immutable.
+
+---
+
+# Shutdown
+
+Responsibilities
+
+- close resources
+- dispose browser
+- flush logs
+- flush metrics
+- release memory
+
+Shutdown should execute even after failures.
+
+---
+
+# Lifecycle Events
+
+Framework exposes lifecycle events.
+
+Examples
+
+```
+
+ProviderStarting
+
+ProviderReady
+
+DiscoveryStarted
+
+DiscoveryFinished
+
+FetchStarted
+
+FetchFinished
+
+ParseStarted
+
+ParseFinished
+
+ValidationStarted
+
+ValidationFinished
+
+ProviderCompleted
+
+ProviderFailed
+
+ProviderStopped
+
+```
+
+Events exist for logging, metrics and diagnostics.
+
+Never for business logic.
+
+---
+
+# Failure Behaviour
+
+Failures are isolated.
+
+Examples
+
+Discovery fails
+
+↓
+
+Provider stops
+
+↓
+
+Framework reports failure
+
+↓
+
+Other providers continue.
+
+Framework never crashes because one provider failed.
+
+---
+
+# Retry Rules
+
+Retry only
+
+- network timeout
+- temporary server failure
+- connection reset
+
+Never retry
+
+- invalid configuration
+- parser bugs
+- validation failures
+- programming errors
+
+Retry strategy belongs to the framework.
+
+Not individual providers.
+
+---
+
+# State Machine
+
+```
+
+INITIALIZING
+
+↓
+
+READY
+
+↓
+
+DISCOVERY
+
+↓
+
+FETCH
+
+↓
+
+PARSE
+
+↓
+
+VALIDATE
+
+↓
+
+COMPLETED
+
+or
+
+FAILED
+
+↓
+
+STOPPED
+
+```
+
+Every transition must be valid.
+
+Invalid transitions raise framework exceptions.
+
+---
+
+# Acceptance Criteria
+
+- Common lifecycle implemented
+- Deterministic execution order
+- State machine implemented
+- Lifecycle events implemented
+- Retry handled centrally
+- Failures isolated
+- Shutdown always executed
+
+---
+
+# Definition of Done
+
+Every future provider automatically inherits the lifecycle.
+
+Provider implementations define only provider-specific behaviour.
+
+The framework owns execution.
+
+Providers own bookmaker logic.
+
+# 21_STAGE_02_PROVIDER_FRAMEWORK
+
+# PART 3 — Execution Engine
+
+Version: 1.0
+
+Status: Planned
+
+Dependencies
+
+- Part 1 — Foundation
+- Part 2 — Lifecycle
+
+---
+
+# Objective
+
+Build the execution engine responsible for running providers.
+
+The execution engine coordinates provider execution.
+
+Providers never execute themselves.
+
+Every provider is executed by the framework.
+
+---
+
+# Responsibilities
+
+The Execution Engine owns:
+
+- provider startup
+- lifecycle execution
+- timeout handling
+- metrics collection
+- execution timing
+- health updates
+- error isolation
+- ProviderResult creation
+
+No bookmaker logic.
+
+---
+
+# Execution Flow
+
+```
+
+Provider Selected
+
+↓
+
+Create ProviderContext
+
+↓
+
+Initialize Provider
+
+↓
+
+Execute Lifecycle
+
+↓
+
+Collect Metrics
+
+↓
+
+Build ProviderResult
+
+↓
+
+Cleanup Resources
+
+↓
+
+Return Result
+
+```
+
+---
+
+# Execution Rules
+
+The engine executes exactly one provider instance.
+
+Execution is deterministic.
+
+Execution order is predictable.
+
+Execution state is tracked continuously.
+
+---
+
+# Parallel Execution
+
+The framework must support future parallel execution.
+
+Requirements
+
+- providers isolated
+- independent execution contexts
+- isolated metrics
+- isolated logs
+- isolated failures
+
+Shared mutable state is forbidden.
+
+---
+
+# Timeouts
+
+Every provider execution has configurable limits.
+
+Examples
+
+Initialize Timeout
+
+Discovery Timeout
+
+Fetch Timeout
+
+Parse Timeout
+
+Validation Timeout
+
+Overall Execution Timeout
+
+Timeouts terminate only the current provider.
+
+---
+
+# Cancellation
+
+Execution may be cancelled.
+
+Cancellation must:
+
+- stop gracefully
+- release resources
+- update provider state
+- create ProviderResult
+- preserve diagnostics
+
+Forced termination is the last resort.
+
+---
+
+# Metrics Collection
+
+The engine automatically measures:
+
+- execution duration
+- requests executed
+- retries
+- warnings
+- errors
+- parsed objects
+- validation failures
+
+Providers must never calculate these manually.
+
+---
+
+# Error Isolation
+
+Failures remain local.
+
+Example
+
+Betclic fails
+
+↓
+
+Execution ends
+
+↓
+
+Result stored
+
+↓
+
+Superbet continues
+
+Framework stability is always preserved.
+
+---
+
+# ProviderResult Generation
+
+Execution Engine always returns a ProviderResult.
+
+Even failed executions return results.
+
+ProviderResult must contain enough diagnostics to understand the failure.
+
+Never return null.
+
+Never return partial objects.
+
+---
+
+# Logging
+
+Execution Engine automatically logs:
+
+Execution Started
+
+Provider Initialized
+
+Discovery Started
+
+Discovery Finished
+
+Fetch Started
+
+Fetch Finished
+
+Parse Started
+
+Validation Started
+
+Execution Finished
+
+Execution Failed
+
+Execution Duration
+
+Providers should only log provider-specific information.
+
+---
+
+# Resource Management
+
+Execution Engine owns:
+
+- HTTP session lifecycle
+- browser lifecycle
+- execution timers
+- cancellation tokens
+- cleanup
+
+Resources are always released.
+
+Even after failures.
+
+---
+
+# Acceptance Criteria
+
+- Execution Engine implemented
+- ProviderContext automatically created
+- ProviderResult automatically created
+- Metrics collected automatically
+- Logs generated automatically
+- Timeouts supported
+- Cancellation supported
+- Failures isolated
+
+---
+
+# Definition of Done
+
+Framework fully controls provider execution.
+
+Providers contain only bookmaker-specific behaviour.
+
+All execution infrastructure belongs to the framework.
+# 21_STAGE_02_PROVIDER_FRAMEWORK
+
+# PART 4 — Provider Management
+
+Version: 1.0
+
+Status: Planned
+
+Dependencies
+
+- Part 1 — Foundation
+- Part 2 — Lifecycle
+- Part 3 — Execution Engine
+
+---
+
+# Objective
+
+Implement the management layer responsible for discovering, registering, selecting and monitoring providers.
+
+The management layer owns providers.
+
+The rest of the system never manages providers directly.
+
+---
+
+# Components
+
+The Provider Framework consists of:
+
+Provider Registry
+
+↓
+
+Provider Factory
+
+↓
+
+Provider Manager
+
+↓
+
+Execution Engine
+
+↓
+
+ProviderResult
+
+Each component owns one responsibility.
+
+---
+
+# Provider Registry
+
+Responsibilities
+
+- register providers
+- unregister providers
+- resolve providers
+- list providers
+- validate uniqueness
+
+Rules
+
+Every provider has a unique identifier.
+
+Duplicate registration is forbidden.
+
+Providers cannot overwrite existing registrations.
+
+---
+
+# Provider Factory
+
+Purpose
+
+Instantiate providers.
+
+Responsibilities
+
+- dependency injection
+- provider construction
+- configuration injection
+- lifecycle preparation
+
+Providers are never instantiated manually.
+
+Construction always occurs through the factory.
+
+---
+
+# Provider Manager
+
+Purpose
+
+Coordinate all provider operations.
+
+Responsibilities
+
+- select providers
+- execute providers
+- execute multiple providers
+- aggregate results
+- collect execution summaries
+
+The manager owns orchestration.
+
+It never contains bookmaker logic.
+
+---
+
+# Provider Discovery
+
+Framework must automatically discover available providers.
+
+Discovery is based on registration.
+
+Never filesystem scanning.
+
+Never reflection.
+
+Never naming conventions.
+
+Registration is always explicit.
+
+---
+
+# Provider Selection
+
+Framework supports:
+
+Single Provider
+
+Multiple Providers
+
+All Providers
+
+Disabled providers are ignored automatically.
+
+Unknown providers produce framework errors.
+
+---
+
+# Provider Configuration
+
+Each provider owns its own configuration.
+
+Shared configuration remains inside Core.
+
+Provider Manager injects configuration during construction.
+
+Providers never load configuration directly.
+
+---
+
+# Provider Availability
+
+Each provider reports:
+
+Enabled
+
+Disabled
+
+Healthy
+
+Degraded
+
+Unavailable
+
+Selection logic respects provider availability.
+
+Unavailable providers are skipped.
+
+---
+
+# Health Aggregation
+
+Provider Manager builds overall framework health.
+
+Example
+
+Betclic
+
+Healthy
+
+↓
+
+Superbet
+
+Warning
+
+↓
+
+STS
+
+Healthy
+
+↓
+
+Overall
+
+Warning
+
+Framework health reflects provider health.
+
+---
+
+# Result Aggregation
+
+Executing multiple providers returns one aggregated result.
+
+Contains
+
+- provider results
+- execution summary
+- total duration
+- success count
+- failure count
+- warnings
+- aggregated metrics
+
+Aggregation never modifies individual ProviderResults.
+
+---
+
+# Provider Isolation
+
+Each provider executes independently.
+
+No provider may:
+
+read another provider
+
+modify another provider
+
+reuse another provider state
+
+share mutable resources
+
+Isolation is mandatory.
+
+---
+
+# Extensibility
+
+Adding a provider requires:
+
+Implement Interface
+
+↓
+
+Register Provider
+
+↓
+
+Done
+
+No framework modification required.
+
+---
+
+# Acceptance Criteria
+
+- Provider Registry implemented
+- Provider Factory implemented
+- Provider Manager implemented
+- Multi-provider execution supported
+- Health aggregation implemented
+- Result aggregation implemented
+- Explicit provider registration
+- Complete provider isolation
+
+---
+
+# Definition of Done
+
+The framework fully manages provider lifecycle, registration and orchestration.
+
+Adding a new bookmaker requires only provider implementation and registration.
+
+No framework code changes are necessary.
+# 21_STAGE_02_PROVIDER_FRAMEWORK
+
+# PART 5 — Production Readiness
+
+Version: 1.0
+
+Status: Planned
+
+Dependencies
+
+- Part 1 — Foundation
+- Part 2 — Lifecycle
+- Part 3 — Execution Engine
+- Part 4 — Provider Management
+
+---
+
+# Objective
+
+Finalize the Provider Framework so it is production-ready.
+
+After this stage the framework should never require modification when adding a new bookmaker.
+
+Future work should happen only inside provider implementations.
+
+---
+
+# Production Requirements
+
+The framework must provide:
+
+- deterministic behaviour
+- reproducible execution
+- complete observability
+- graceful failure handling
+- independent testing
+- future scalability
+
+No provider-specific assumptions may exist.
+
+---
+
+# Testing Requirements
+
+Every framework component must have:
+
+Unit Tests
+
+Integration Tests
+
+Replay Tests (where applicable)
+
+Startup Tests
+
+Failure Scenario Tests
+
+The framework must be testable without implementing a bookmaker.
+
+---
+
+# Performance Requirements
+
+Framework overhead should remain minimal.
+
+Responsibilities
+
+- avoid unnecessary allocations
+- avoid duplicated work
+- avoid blocking operations
+- avoid global locks
+
+Framework performance must remain independent of bookmaker implementation.
+
+---
+
+# Reliability Requirements
+
+Framework must survive:
+
+Provider crash
+
+Network failure
+
+Timeout
+
+Cancellation
+
+Partial execution
+
+Unexpected exception
+
+One provider failure must never terminate the application.
+
+---
+
+# Observability
+
+Framework automatically exposes:
+
+Health
+
+Metrics
+
+Logs
+
+Execution Duration
+
+Provider Statistics
+
+Failure Statistics
+
+Retry Statistics
+
+Execution History
+
+Every execution must be diagnosable.
+
+---
+
+# Framework Guarantees
+
+Every provider receives:
+
+Identical lifecycle
+
+Identical logging
+
+Identical metrics
+
+Identical retry behaviour
+
+Identical health reporting
+
+Identical execution context
+
+Bookmakers differ only in implementation.
+
+Never in behaviour.
+
+---
+
+# Future Compatibility
+
+The framework must support future providers without modification.
+
+Examples
+
+Betclic
+
+Superbet
+
+STS
+
+Fortuna
+
+LV BET
+
+Pinnacle
+
+Exchange Providers
+
+API Providers
+
+Browser Providers
+
+Every provider follows the same framework.
+
+---
+
+# Extension Rules
+
+Future providers may implement only:
+
+Discovery
+
+Fetch
+
+Parser
+
+Validation
+
+Provider-specific Models
+
+Nothing else.
+
+Everything else already exists inside the framework.
+
+---
+
+# Forbidden
+
+Provider Framework must never contain:
+
+Bookmaker URLs
+
+CSS Selectors
+
+XPath
+
+GraphQL Queries
+
+REST Endpoints
+
+gRPC Logic
+
+HTML Parsing
+
+Odds Calculation
+
+Scanner Logic
+
+Telegram Logic
+
+Database Logic
+
+These belong to later stages.
+
+---
+
+# Acceptance Checklist
+
+Architecture
+
+- [ ] BaseProvider implemented
+- [ ] Provider Interface implemented
+- [ ] ProviderContext implemented
+- [ ] ProviderResult implemented
+- [ ] Provider Registry implemented
+- [ ] Provider Manager implemented
+- [ ] Provider Factory implemented
+- [ ] Execution Engine implemented
+
+Lifecycle
+
+- [ ] Common lifecycle implemented
+- [ ] State machine implemented
+- [ ] Graceful shutdown implemented
+- [ ] Failure isolation implemented
+
+Infrastructure
+
+- [ ] Logging integrated
+- [ ] Metrics integrated
+- [ ] Health reporting integrated
+- [ ] Retry integrated
+- [ ] Execution Context integrated
+
+Quality
+
+- [ ] Unit tests passing
+- [ ] Integration tests passing
+- [ ] No circular dependencies
+- [ ] No provider-specific code
+- [ ] Documentation updated
+
+---
+
+# Definition of Done
+
+Stage 02 is complete when:
+
+The Provider Framework is fully functional.
+
+Adding a new bookmaker requires:
+
+1. Create provider directory.
+
+2. Inherit BaseProvider.
+
+3. Implement required methods.
+
+4. Register provider.
+
+Nothing else.
+
+No framework modification.
+
+No architecture modification.
+
+No shared infrastructure modification.
+
+---
+
+# Deliverables
+
+Completed framework should contain:
+
+✓ BaseProvider
+
+✓ Provider Interface
+
+✓ ProviderContext
+
+✓ ProviderResult
+
+✓ ProviderState
+
+✓ Provider Registry
+
+✓ Provider Factory
+
+✓ Provider Manager
+
+✓ Execution Engine
+
+✓ Shared Exceptions
+
+✓ Shared Models
+
+✓ Unit Tests
+
+✓ Integration Tests
+
+✓ Documentation
+
+---
+
+# Exit Criteria
+
+Before starting Stage 03:
+
+- Framework compiles successfully.
+- All framework tests pass.
+- No bookmaker-specific logic exists.
+- Public interfaces are stable.
+- Framework is ready to host Betclic without structural changes.
+
+Only after these conditions are met may Stage 03 begin.
+
+---
+
+# Next Stage
+
+22_STAGE_03_BETCLIC_PROVIDER
+
+Goal:
+
+Implement the first production bookmaker provider using the Provider Framework without modifying the framework itself.
+
+End of Stage 02.
+

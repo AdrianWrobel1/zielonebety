@@ -1,0 +1,215 @@
+# 00_PROJECT_FOUNDATION.md
+
+# Zielone Bety
+## Project Foundation
+
+Document Version: 1.0
+
+Status: Authoritative
+
+This is the highest-level document in the project.
+
+If any other document conflicts with this one, this document takes precedence.
+
+---
+
+# Project Mission
+
+The goal of this project is to build a production-grade betting market intelligence platform.
+
+The system continuously collects betting market data, validates it, normalizes it, analyzes it, and detects opportunities such as arbitrage, value bets and other market anomalies.
+
+The project is designed as a long-term maintainable software system.
+
+The objective is reliability, correctness and maintainability rather than fast feature development.
+
+---
+
+# Primary Objectives
+
+The system MUST:
+
+- collect data reliably
+- produce deterministic results
+- detect data quality issues
+- be modular
+- be easy to extend
+- be easy to debug
+- be observable
+- be production-ready
+
+---
+
+# Non Objectives
+
+The project is NOT intended to:
+
+- automate bet placement
+- predict match outcomes
+- bypass authentication
+- bypass security mechanisms
+- depend on unstable hacks
+- contain quick temporary fixes
+
+---
+
+# Engineering Philosophy
+
+Long-term maintainability is more important than short-term development speed.
+
+Correct architecture is more important than writing code quickly.
+
+Simple architecture is preferred over clever architecture.
+
+Explicit code is preferred over implicit behaviour.
+
+Every design decision should reduce future maintenance costs.
+
+---
+
+# Core Principles
+
+Single Responsibility
+
+Every module has exactly one responsibility.
+
+Separation of Concerns
+
+Data collection, normalization, analysis, persistence and presentation are independent layers.
+
+No Hidden Logic
+
+Business logic must never be hidden inside providers, parsers or UI.
+
+Deterministic Behaviour
+
+The same input must always produce the same output.
+
+Observability
+
+Every important action must be observable through structured logging and metrics.
+
+Testability
+
+Every module must be testable independently.
+
+Scalability
+
+Adding a new bookmaker should require implementing a new provider only.
+
+---
+
+# Architecture Principles
+
+The project follows a layered architecture.
+
+Each layer communicates only through well-defined interfaces.
+
+Layers must never access internal implementation details of other layers.
+
+Providers never know about scanners.
+
+Scanners never know about providers.
+
+Frontend never knows provider implementation.
+
+Database never contains business logic.
+
+---
+
+# AI Working Rules
+
+Before implementing any feature:
+
+1. Understand the problem.
+2. Read the relevant documentation.
+3. Identify affected modules.
+4. Explain architecture impact.
+5. Explain alternative approaches.
+6. Recommend the best approach.
+7. Only then begin implementation.
+
+Never implement features based on assumptions.
+
+If information is missing:
+
+STOP
+
+Ask for clarification.
+
+Never guess.
+
+---
+
+# Quality Requirements
+
+Every implementation must include:
+
+- strong typing
+- error handling
+- logging
+- validation
+- tests where appropriate
+- clear naming
+- deterministic behaviour
+
+---
+
+# Forbidden Practices
+
+Never duplicate business logic.
+
+Never introduce temporary fixes.
+
+Never leave partially implemented features.
+
+Never comment out dead code.
+
+Never silently ignore errors.
+
+Never skip validation.
+
+Never tightly couple independent modules.
+
+---
+
+# Definition of Done
+
+A task is complete only if:
+
+- implementation is complete
+- architecture remains consistent
+- tests pass
+- logging is correct
+- validation is complete
+- no known regressions exist
+- documentation is updated
+- code is production ready
+
+Feature completeness alone does not mean the task is complete.
+
+---
+
+# Reporting Requirements
+
+Every completed task must include:
+
+Summary
+
+Architecture Impact
+
+Files Changed
+
+Tests Performed
+
+Known Limitations
+
+Technical Debt Introduced
+
+Next Recommended Step
+
+No task may be marked as completed without this report.
+
+---
+
+End of Document.

@@ -1,0 +1,213 @@
+# 05_SYSTEM_INVARIANTS.md
+
+# System Invariants
+
+Version: 1.0
+
+Status: Authoritative
+
+This document defines system invariants.
+
+An invariant is a rule that must always remain true.
+
+No implementation may violate an invariant.
+
+If a requested feature would violate an invariant,
+the implementation must stop and explain the conflict.
+
+Never silently break an invariant.
+
+---
+
+# Core Principle
+
+Correctness is more important than feature completeness.
+
+A feature that violates an invariant is considered incorrect,
+even if it appears to work.
+
+---
+
+# Data Invariants
+
+Every object stored by the system must have exactly one canonical internal representation.
+
+The same external object must never exist as multiple independent entities.
+
+Normalization must always produce deterministic results.
+
+The same input must always generate the same normalized output.
+
+No component may modify historical records.
+
+Historical snapshots are immutable.
+
+---
+
+# Provider Invariants
+
+Providers only collect data.
+
+Providers never contain business logic.
+
+Providers never calculate opportunities.
+
+Providers never normalize data.
+
+Providers never write directly to the database.
+
+Providers never communicate with other providers.
+
+Providers must be isolated from one another.
+
+A failure in one provider must never stop another provider.
+
+---
+
+# Validation Invariants
+
+No unvalidated data may enter the database.
+
+Every validation failure must produce a reason.
+
+Rejected data must never silently disappear.
+
+---
+
+# Persistence Invariants
+
+The database is the only persistent source of truth.
+
+Runtime memory is never treated as persistent state.
+
+Historical records must remain reproducible.
+
+Deleting historical data is forbidden unless explicitly requested.
+
+---
+
+# Scanner Invariants
+
+The scanner only analyzes validated data.
+
+The scanner never communicates directly with providers.
+
+The scanner never modifies source data.
+
+Scanner results must be reproducible.
+
+Running the scanner twice on identical data must produce identical results.
+
+---
+
+# Notification Invariants
+
+Notifications are effects.
+
+Notifications are never the source of truth.
+
+Losing a notification must never corrupt system state.
+
+Notification retries must never duplicate opportunities.
+
+---
+
+# API Invariants
+
+The API exposes data.
+
+The API does not create business logic.
+
+The API never performs provider operations directly.
+
+---
+
+# Frontend Invariants
+
+The frontend displays information.
+
+The frontend never calculates betting opportunities.
+
+The frontend never normalizes data.
+
+The frontend never contains business rules.
+
+---
+
+# Logging Invariants
+
+Every critical operation must be observable.
+
+Critical failures must always be logged.
+
+Secrets must never be logged.
+
+---
+
+# Error Handling Invariants
+
+Errors are explicit.
+
+Errors are never silently ignored.
+
+Recoverable errors must not terminate the system.
+
+Unrecoverable errors must terminate safely.
+
+---
+
+# Dependency Invariants
+
+Dependencies always point downward.
+
+No circular dependencies.
+
+No hidden dependencies.
+
+No runtime module discovery unless explicitly designed.
+
+---
+
+# AI Invariants
+
+AI must never:
+
+invent architecture
+
+invent APIs
+
+invent provider behavior
+
+invent database schema
+
+invent business rules
+
+If information is missing:
+
+STOP.
+
+State what is unknown.
+
+Request clarification.
+
+---
+
+# Change Invariants
+
+Every architectural change must preserve all invariants.
+
+If an invariant must change:
+
+The invariant document must be updated first.
+
+Implementation comes second.
+
+---
+
+# Final Rule
+
+Breaking an invariant is considered an architectural defect.
+
+Architectural defects always have higher priority than new features.
+
+End of document.

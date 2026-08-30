@@ -1,0 +1,3 @@
+"""
+Zielone Bety Core Module
+"""

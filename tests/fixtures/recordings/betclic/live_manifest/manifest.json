@@ -1,0 +1,16 @@
+{
+  "execution_id": "live_manifest",
+  "provider_name": "betclic",
+  "count": 1,
+  "recordings": [
+    {
+      "index": 0,
+      "url": "https://api.betclic.pl/v2/sportsbook/football/events",
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "payload_file": "response_000.json"
+    }
+  ]
+}

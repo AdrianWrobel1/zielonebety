@@ -1,0 +1,490 @@
+# 09_PROVIDER_INTERFACE.md
+
+# Provider Interface
+
+Version: 1.0
+
+Status: Authoritative
+
+This document defines the mandatory public interface of every bookmaker provider.
+
+Every provider MUST implement this interface.
+
+No provider may expose additional public methods unless explicitly approved.
+
+Internal implementation may differ.
+
+Public behaviour must remain identical.
+
+---
+
+# Philosophy
+
+Every bookmaker is different.
+
+Every provider is identical.
+
+The rest of the system must never know which bookmaker produced the data.
+
+The only communication between the system and a provider occurs through this interface.
+
+---
+
+# Provider Lifecycle
+
+Every provider follows the same lifecycle.
+
+Initialize
+
+↓
+
+Health Check
+
+↓
+
+Discovery
+
+↓
+
+Fetch
+
+↓
+
+Parse
+
+↓
+
+Validate
+
+↓
+
+Return Result
+
+↓
+
+Shutdown
+
+No lifecycle stage may be skipped.
+
+---
+
+# Required Public Methods
+
+Every provider MUST implement:
+
+initialize()
+
+shutdown()
+
+health()
+
+discover()
+
+fetch()
+
+parse()
+
+validate()
+
+run()
+
+---
+
+# initialize()
+
+Purpose
+
+Prepare provider resources.
+
+Responsibilities
+
+- load configuration
+- initialize HTTP client
+- initialize browser if required
+- initialize cookies if required
+- verify configuration
+
+Output
+
+ProviderReady
+
+---
+
+# shutdown()
+
+Purpose
+
+Release every allocated resource.
+
+Responsibilities
+
+- close browser
+- close sessions
+- release memory
+- flush logs
+
+Shutdown must always succeed.
+
+---
+
+# health()
+
+Purpose
+
+Return current provider health.
+
+Possible states
+
+READY
+
+RUNNING
+
+WARNING
+
+FAILED
+
+DISABLED
+
+Health checks must never modify provider state.
+
+---
+
+# discover()
+
+Purpose
+
+Discover available bookmaker resources.
+
+Examples
+
+sports
+
+competitions
+
+events
+
+markets
+
+Discovery never downloads complete market data.
+
+Discovery only identifies available resources.
+
+---
+
+# fetch()
+
+Purpose
+
+Download provider responses.
+
+Responsibilities
+
+- execute requests
+- retry temporary failures
+- collect metadata
+- return raw responses
+
+No parsing occurs here.
+
+---
+
+# parse()
+
+Purpose
+
+Transform raw provider responses into structured provider objects.
+
+Responsibilities
+
+- extract events
+- extract markets
+- extract selections
+- preserve provider identifiers
+
+No normalization occurs here.
+
+---
+
+# validate()
+
+Purpose
+
+Validate parsed provider objects.
+
+Responsibilities
+
+- verify required fields
+- detect malformed objects
+- reject invalid responses
+
+Validation produces a validation report.
+
+---
+
+# run()
+
+Purpose
+
+Execute the complete provider pipeline.
+
+Equivalent to:
+
+initialize()
+
+↓
+
+discover()
+
+↓
+
+fetch()
+
+↓
+
+parse()
+
+↓
+
+validate()
+
+↓
+
+return ProviderResult
+
+run() never performs normalization.
+
+run() never stores data.
+
+---
+
+# Provider Result
+
+Every provider returns exactly one object.
+
+ProviderResult contains:
+
+provider metadata
+
+execution metadata
+
+parsed objects
+
+validation report
+
+warnings
+
+errors
+
+statistics
+
+No canonical objects.
+
+No normalized objects.
+
+---
+
+# Provider State Machine
+
+INITIALIZING
+
+↓
+
+READY
+
+↓
+
+RUNNING
+
+↓
+
+COMPLETED
+
+or
+
+WARNING
+
+or
+
+FAILED
+
+↓
+
+SHUTDOWN
+
+State transitions must be deterministic.
+
+---
+
+# Error Behaviour
+
+Recoverable failures
+
+↓
+
+warning
+
+↓
+
+continue
+
+Unrecoverable failures
+
+↓
+
+failed
+
+↓
+
+stop provider
+
+↓
+
+report failure
+
+Errors are never ignored.
+
+---
+
+# Retry Behaviour
+
+Retry only temporary failures.
+
+Maximum retry count must be configurable.
+
+Retry delay must use exponential backoff.
+
+Authentication failures are never retried.
+
+---
+
+# Logging
+
+Providers must log:
+
+initialization
+
+discovery
+
+fetch
+
+parse
+
+validation
+
+completion
+
+failure
+
+Every log entry must contain provider name.
+
+---
+
+# Metrics
+
+Providers expose:
+
+execution time
+
+requests executed
+
+responses received
+
+bytes downloaded
+
+events discovered
+
+markets discovered
+
+objects parsed
+
+objects rejected
+
+warnings
+
+errors
+
+---
+
+# Determinism
+
+Running the same provider twice using identical input must produce identical output.
+
+No randomness is allowed.
+
+---
+
+# Thread Safety
+
+Providers must not share mutable state.
+
+Parallel providers must never interfere with one another.
+
+---
+
+# Configuration
+
+Every configurable value must be external.
+
+Examples
+
+timeouts
+
+headers
+
+proxy
+
+browser
+
+rate limits
+
+feature flags
+
+No hardcoded runtime configuration.
+
+---
+
+# Forbidden
+
+Providers must never:
+
+write to database
+
+normalize data
+
+calculate opportunities
+
+send notifications
+
+modify historical data
+
+communicate with other providers
+
+contain scanner logic
+
+contain frontend logic
+
+contain API logic
+
+---
+
+# Definition of Done
+
+A provider implementation is complete only if:
+
+all required methods exist
+
+lifecycle is respected
+
+validation passes
+
+logging exists
+
+metrics exist
+
+health reporting exists
+
+deterministic behaviour is verified
+
+provider follows this interface without exceptions.
+
+End of document.

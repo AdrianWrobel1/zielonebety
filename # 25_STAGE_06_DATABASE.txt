@@ -1,0 +1,2250 @@
+# 25_STAGE_06_DATABASE
+
+# PART 1 — Database Foundation
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Stage 01 — Core Infrastructure
+- Stage 02 — Provider Framework
+- Stage 03 — Provider Template
+- Stage 04 — Betclic Provider
+- Stage 05 — Superbet Provider
+- Stage 06 — Normalization
+
+---
+
+# Objective
+
+Build the production database infrastructure for the Zielone Bety platform.
+
+The database is the single source of truth.
+
+Every module stores and retrieves data through the persistence layer.
+
+No module communicates directly with SQL.
+
+---
+
+# Scope
+
+Included
+
+- PostgreSQL
+- SQLAlchemy
+- Alembic
+- Database configuration
+- Connection Pool
+- Session management
+- Transactions
+- Repository interfaces
+- Health checks
+- Startup validation
+
+Not Included
+
+- Database schema
+- Tables
+- Scanner data
+- Statistics
+- Analytics
+
+---
+
+# Architecture
+
+```
+Application
+
+↓
+
+Repository
+
+↓
+
+SQLAlchemy
+
+↓
+
+PostgreSQL
+```
+
+Business modules never access SQL directly.
+
+---
+
+# Database Engine
+
+Requirements
+
+- PostgreSQL
+- SQLAlchemy 2.x
+- Alembic
+- Async-ready architecture
+- Connection pooling
+
+No ORM replacement without ADR.
+
+---
+
+# Connection Management
+
+Responsibilities
+
+- create connections
+- reuse connections
+- pool connections
+- reconnect
+- graceful shutdown
+
+Connections must never leak.
+
+---
+
+# Session Management
+
+One execution
+
+↓
+
+One session
+
+↓
+
+One transaction
+
+↓
+
+Commit / Rollback
+
+↓
+
+Dispose
+
+Sessions must never be global.
+
+---
+
+# Transactions
+
+Every write operation executes inside transactions.
+
+Rules
+
+Atomic
+
+Consistent
+
+Isolated
+
+Durable
+
+Rollback on failure.
+
+Never partially persist state.
+
+---
+
+# Repository Layer
+
+Only repositories communicate with the database.
+
+Responsibilities
+
+- CRUD
+- Bulk Insert
+- Bulk Update
+- Upsert
+- Queries
+
+Business modules never execute SQL.
+
+---
+
+# Dependency Injection
+
+Repositories are injected.
+
+Never manually created.
+
+Correct
+
+Scanner
+
+↓
+
+EventRepository
+
+Incorrect
+
+Scanner
+
+↓
+
+engine.execute()
+
+---
+
+# Health Checks
+
+Verify
+
+- database reachable
+- migrations applied
+- connection available
+- transaction working
+
+Startup fails if database is unavailable.
+
+---
+
+# Configuration
+
+Configuration includes
+
+Host
+
+Port
+
+Username
+
+Password
+
+Database Name
+
+Pool Size
+
+Timeout
+
+SSL Mode
+
+Everything configurable.
+
+Nothing hardcoded.
+
+---
+
+# Logging
+
+Log
+
+Database Connected
+
+Migration Started
+
+Migration Finished
+
+Transaction Started
+
+Transaction Failed
+
+Rollback
+
+Shutdown
+
+Never log credentials.
+
+---
+
+# Metrics
+
+Collect
+
+Connection Count
+
+Pool Usage
+
+Query Count
+
+Transaction Count
+
+Commit Count
+
+Rollback Count
+
+Average Query Time
+
+Failed Queries
+
+---
+
+# Error Handling
+
+Possible failures
+
+Connection Error
+
+Timeout
+
+Migration Failure
+
+Constraint Violation
+
+Transaction Failure
+
+Pool Exhausted
+
+Every failure produces structured diagnostics.
+
+---
+
+# Testing
+
+Required
+
+Connection Test
+
+Migration Test
+
+Transaction Test
+
+Rollback Test
+
+Repository Test
+
+Health Test
+
+Configuration Test
+
+---
+
+# Acceptance Criteria
+
+- PostgreSQL integrated
+- SQLAlchemy configured
+- Alembic configured
+- Connection Pool working
+- Session lifecycle implemented
+- Transactions implemented
+- Repository abstraction implemented
+- Health checks implemented
+- Metrics integrated
+- Logging integrated
+- Tests passing
+
+---
+
+# Definition of Done
+
+The database infrastructure is production-ready.
+
+The application can safely connect, execute transactions and expose repositories.
+
+No schema has been implemented yet.
+
+The project is ready for Part 2 — Canonical Schema.
+
+End of Part 1.
+
+
+# 25_STAGE_06_DATABASE
+
+# PART 2 — Canonical Schema
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: Very High
+
+Dependencies
+
+- Part 1 — Database Foundation
+
+---
+
+# Objective
+
+Design the canonical database schema for the entire Zielone Bety platform.
+
+The schema must support:
+
+- multiple bookmakers
+- multiple sports
+- historical odds
+- replay
+- analytics
+- scanner
+- notifications
+- future machine learning
+
+The schema should remain stable as new providers are added.
+
+---
+
+# Design Principles
+
+The database is the Single Source of Truth.
+
+Every real-world entity exists exactly once.
+
+Relationships are explicit.
+
+Historical data is immutable.
+
+Provider-specific data is isolated.
+
+Canonical data is shared.
+
+---
+
+# Entity Flow
+
+```
+Provider
+
+↓
+
+Competition
+
+↓
+
+Event
+
+↓
+
+Market
+
+↓
+
+Outcome
+
+↓
+
+Odds History
+
+↓
+
+Scanner
+
+↓
+
+Notification
+```
+
+Every layer references the previous one.
+
+No duplicated entities.
+
+---
+
+# Core Tables
+
+Canonical entities
+
+```
+providers
+
+sports
+
+competitions
+
+teams
+
+events
+
+markets
+
+outcomes
+
+odds
+
+provider_runs
+
+snapshots
+```
+
+Future tables
+
+```
+surebets
+
+valuebets
+
+notifications
+
+scanner_runs
+
+analytics
+```
+
+---
+
+# Providers
+
+Stores every supported bookmaker.
+
+Examples
+
+Betclic
+
+Superbet
+
+STS
+
+Fortuna
+
+Pinnacle
+
+Fields
+
+- id
+- name
+- code
+- enabled
+- created_at
+
+---
+
+# Sports
+
+Stores supported sports.
+
+Examples
+
+Football
+
+Tennis
+
+Basketball
+
+Fields
+
+- id
+- name
+- slug
+
+---
+
+# Competitions
+
+Examples
+
+Premier League
+
+Ekstraklasa
+
+Champions League
+
+Fields
+
+- id
+- sport_id
+- name
+- country
+- season
+
+---
+
+# Teams
+
+One canonical team.
+
+Never duplicated.
+
+Examples
+
+Real Madrid
+
+Manchester City
+
+Barcelona
+
+Fields
+
+- id
+- name
+- country
+
+Provider names are stored separately.
+
+---
+
+# Events
+
+One row = one match.
+
+Fields
+
+- id
+- competition_id
+- home_team_id
+- away_team_id
+- kickoff
+- status
+
+No provider information.
+
+This is the canonical event.
+
+---
+
+# Markets
+
+Examples
+
+Match Winner
+
+Over/Under
+
+BTTS
+
+Asian Handicap
+
+Fields
+
+- id
+- event_id
+- market_type
+- line
+
+---
+
+# Outcomes
+
+Examples
+
+Home
+
+Away
+
+Draw
+
+Over
+
+Under
+
+Fields
+
+- id
+- market_id
+- outcome_type
+- label
+
+---
+
+# Odds
+
+Every odds update creates a new record.
+
+Fields
+
+- id
+- provider_id
+- outcome_id
+- odds
+- collected_at
+
+Odds are append-only.
+
+Never update history.
+
+---
+
+# Provider Runs
+
+Stores execution history.
+
+Fields
+
+- id
+- provider_id
+- started_at
+- finished_at
+- duration
+- status
+- events
+- markets
+- errors
+
+Useful for monitoring.
+
+---
+
+# Snapshots
+
+Stores replay data.
+
+Fields
+
+- id
+- provider_id
+- execution_id
+- snapshot_type
+- file_path
+- created_at
+
+Snapshots are immutable.
+
+---
+
+# Relationships
+
+```
+Sport
+
+↓
+
+Competition
+
+↓
+
+Event
+
+↓
+
+Market
+
+↓
+
+Outcome
+
+↓
+
+Odds
+```
+
+Provider links only at the Odds layer.
+
+Canonical entities remain provider-independent.
+
+---
+
+# Indexes
+
+Required indexes
+
+- kickoff
+- provider_id
+- competition_id
+- event_id
+- market_id
+- outcome_id
+- collected_at
+
+Composite indexes
+
+(provider_id, outcome_id)
+
+(event_id, market_type)
+
+(provider_id, collected_at)
+
+Indexes optimized for scanner queries.
+
+---
+
+# Constraints
+
+Required
+
+Primary Keys
+
+Foreign Keys
+
+Unique Constraints
+
+Check Constraints
+
+Not Null
+
+Invalid data must never enter the database.
+
+---
+
+# History Strategy
+
+Historical tables are append-only.
+
+Never overwrite:
+
+- odds
+- snapshots
+- provider runs
+
+History enables:
+
+- analytics
+- replay
+- debugging
+- trend analysis
+
+---
+
+# Query Goals
+
+The schema should efficiently answer:
+
+- Best odds for an event
+- Latest odds
+- Odds history
+- Valuebet candidates
+- Surebet candidates
+- Market history
+- Provider comparison
+- Price movement
+
+---
+
+# Performance Goals
+
+Support
+
+- millions of odds
+- thousands of events
+- many providers
+- historical storage
+
+Schema should prioritize read performance.
+
+---
+
+# Acceptance Criteria
+
+- Canonical schema designed
+- Relationships defined
+- Constraints defined
+- Indexes defined
+- History strategy defined
+- Replay support included
+- Provider-independent entities established
+
+---
+
+# Definition of Done
+
+The complete production database schema exists.
+
+Every future module can persist data without requiring schema redesign.
+
+The project is ready for Part 3 — Persistence Layer.
+
+End of Part 2.
+# 25_STAGE_06_DATABASE
+
+# PART 3 — Persistence Layer
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Part 1 — Database Foundation
+- Part 2 — Canonical Schema
+
+---
+
+# Objective
+
+Implement the Persistence Layer responsible for all communication between the application and the database.
+
+The Persistence Layer is the only component allowed to access the ORM.
+
+Business modules must never know SQL, SQLAlchemy or database internals.
+
+Persistence abstracts storage.
+
+Nothing else.
+
+---
+
+# Scope
+
+Included
+
+- Repository Pattern
+- Unit of Work
+- CRUD Operations
+- Bulk Operations
+- Upsert
+- Pagination
+- Filtering
+- Query Specifications
+- Transaction Management
+
+Not Included
+
+- Scanner Logic
+- Provider Logic
+- Normalization Logic
+- Analytics
+
+---
+
+# Architecture
+
+```
+Application
+
+↓
+
+Repository Interface
+
+↓
+
+Repository Implementation
+
+↓
+
+SQLAlchemy
+
+↓
+
+PostgreSQL
+```
+
+Business modules communicate only with repository interfaces.
+
+---
+
+# Repository Rules
+
+Every aggregate owns exactly one repository.
+
+Examples
+
+ProviderRepository
+
+CompetitionRepository
+
+TeamRepository
+
+EventRepository
+
+MarketRepository
+
+OutcomeRepository
+
+OddsRepository
+
+SnapshotRepository
+
+ProviderRunRepository
+
+Repositories never call each other directly.
+
+---
+
+# Responsibilities
+
+Repositories own
+
+- create
+- update
+- delete
+- query
+- batch operations
+- transaction participation
+
+Repositories never contain business logic.
+
+---
+
+# Query Rules
+
+Repositories expose business-oriented queries.
+
+Correct
+
+```
+find_event()
+
+latest_odds()
+
+provider_runs()
+
+events_by_competition()
+```
+
+Incorrect
+
+```
+execute_sql()
+
+raw_query()
+
+select_star()
+```
+
+---
+
+# Unit of Work
+
+Every execution owns one Unit of Work.
+
+Responsibilities
+
+- transaction lifecycle
+- repository access
+- commit
+- rollback
+
+Commit occurs only after successful execution.
+
+Failures trigger rollback.
+
+---
+
+# Bulk Operations
+
+Framework must support
+
+Bulk Insert
+
+Bulk Update
+
+Bulk Delete
+
+Bulk Upsert
+
+Designed for provider imports.
+
+---
+
+# Upsert Strategy
+
+Canonical entities
+
+Update existing.
+
+Insert missing.
+
+Historical entities
+
+Never update.
+
+Always append.
+
+Examples
+
+Competition
+
+→ Upsert
+
+Odds
+
+→ Insert Only
+
+Snapshots
+
+→ Insert Only
+
+Provider Runs
+
+→ Insert Only
+
+---
+
+# Read Optimization
+
+Repositories should expose optimized queries.
+
+Examples
+
+Latest Odds
+
+Event History
+
+Provider Statistics
+
+Competition Events
+
+Market Odds
+
+Scanner Candidates
+
+No business module builds SQL manually.
+
+---
+
+# Pagination
+
+Large queries must support
+
+Limit
+
+Offset
+
+Cursor (future)
+
+Streaming (future)
+
+Repositories should never return millions of rows at once.
+
+---
+
+# Transactions
+
+Atomic operations only.
+
+Example
+
+Insert Event
+
+↓
+
+Insert Markets
+
+↓
+
+Insert Outcomes
+
+↓
+
+Insert Odds
+
+↓
+
+Commit
+
+Failure
+
+↓
+
+Rollback Everything
+
+---
+
+# Caching
+
+Persistence Layer may support future caching.
+
+Business modules remain unaware.
+
+Caching must never change repository contracts.
+
+---
+
+# Metrics
+
+Automatically collect
+
+Query Count
+
+Query Duration
+
+Insert Count
+
+Update Count
+
+Delete Count
+
+Bulk Operations
+
+Commit Count
+
+Rollback Count
+
+Repository Errors
+
+---
+
+# Logging
+
+Log
+
+Transaction Started
+
+Transaction Committed
+
+Rollback
+
+Bulk Insert
+
+Slow Query
+
+Constraint Violation
+
+Repository Failure
+
+---
+
+# Error Handling
+
+Repository failures produce
+
+PersistenceError
+
+Examples
+
+Constraint Violation
+
+Missing Entity
+
+Connection Failure
+
+Transaction Failure
+
+Serialization Failure
+
+Every error preserves diagnostics.
+
+---
+
+# Testing
+
+Required
+
+CRUD Tests
+
+Bulk Tests
+
+Transaction Tests
+
+Rollback Tests
+
+Repository Tests
+
+Concurrency Tests
+
+Performance Tests
+
+Migration Compatibility Tests
+
+---
+
+# Acceptance Criteria
+
+- Repository Pattern implemented
+- Unit of Work implemented
+- CRUD implemented
+- Bulk Operations implemented
+- Upsert implemented
+- Transaction handling implemented
+- Repository interfaces completed
+- Tests passing
+
+---
+
+# Definition of Done
+
+Every module persists data exclusively through repositories.
+
+Business logic remains completely independent from SQLAlchemy and PostgreSQL.
+
+The project is ready for Part 4 — History & Replay.
+
+End of Part 3.
+# 25_STAGE_06_DATABASE
+
+# PART 4 — History & Replay
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: Very High
+
+Dependencies
+
+- Part 1 — Database Foundation
+- Part 2 — Canonical Schema
+- Part 3 — Persistence Layer
+
+---
+
+# Objective
+
+Implement a complete historical storage and replay system.
+
+Every provider execution must become reproducible.
+
+Every odds change must become traceable.
+
+Historical data is a core feature of the platform.
+
+History is never discarded immediately.
+
+---
+
+# Scope
+
+Included
+
+- Odds History
+- Provider Runs
+- Snapshots
+- Replay Engine
+- Data Retention
+- Replay Validation
+- Historical Queries
+
+Not Included
+
+- Analytics
+- Scanner
+- Machine Learning
+
+---
+
+# Philosophy
+
+The platform should answer questions like:
+
+- What did Betclic return yesterday at 15:42?
+- When did this odd change?
+- Which provider changed first?
+- Why did the scanner trigger?
+- Can this bug be reproduced?
+
+If the answer cannot be reproduced,
+
+history is insufficient.
+
+---
+
+# Historical Storage
+
+The following data is immutable.
+
+- Provider Runs
+- Raw Snapshots
+- Parsed Snapshots
+- Canonical Snapshots
+- Odds History
+- Scanner Results (future)
+
+Historical records are append-only.
+
+Never update.
+
+Never overwrite.
+
+---
+
+# Replay Pipeline
+
+```
+Historical Snapshot
+
+↓
+
+Load Snapshot
+
+↓
+
+Replay Provider
+
+↓
+
+Replay Parser
+
+↓
+
+Replay Normalization
+
+↓
+
+Compare Results
+
+↓
+
+Replay Report
+```
+
+Replay never contacts external providers.
+
+Replay uses only stored data.
+
+---
+
+# Provider Runs
+
+Every execution stores
+
+- execution_id
+- provider
+- version
+- started_at
+- finished_at
+- duration
+- status
+- discovered_events
+- parsed_events
+- warnings
+- errors
+
+Provider Runs enable diagnostics.
+
+---
+
+# Snapshot Types
+
+Supported
+
+Raw Response
+
+↓
+
+Parsed Provider Objects
+
+↓
+
+Canonical Objects
+
+↓
+
+Future Scanner Snapshot
+
+Each stage is independently replayable.
+
+---
+
+# Odds History
+
+Every odds change creates a new record.
+
+Never update existing odds.
+
+History enables
+
+- trend analysis
+- charts
+- scanner verification
+- replay
+- statistics
+
+---
+
+# Replay Validation
+
+Replay verifies
+
+- parser determinism
+- normalization determinism
+- schema compatibility
+- regression detection
+
+Unexpected differences produce ReplayReport.
+
+---
+
+# Retention Policy
+
+History retention must be configurable.
+
+Examples
+
+Raw Snapshots
+
+180 days
+
+Replay Snapshots
+
+365 days
+
+Odds History
+
+Unlimited
+
+Retention policies must never delete required production data accidentally.
+
+---
+
+# Historical Queries
+
+Examples
+
+Latest Odds
+
+Odds At Time
+
+Provider Timeline
+
+Event Timeline
+
+Market Timeline
+
+Replay Execution
+
+Provider History
+
+History queries should be optimized.
+
+---
+
+# Storage Strategy
+
+Separate
+
+Current Data
+
+↓
+
+Historical Data
+
+Current data optimized for reads.
+
+History optimized for analytics and replay.
+
+---
+
+# Metrics
+
+Collect
+
+Replay Count
+
+Replay Success
+
+Replay Failure
+
+Stored Snapshots
+
+Odds Stored
+
+History Size
+
+Retention Cleanup
+
+Replay Duration
+
+---
+
+# Logging
+
+Log
+
+Replay Started
+
+Replay Finished
+
+Snapshot Loaded
+
+Snapshot Missing
+
+History Cleanup
+
+Replay Failed
+
+Validation Difference
+
+---
+
+# Error Handling
+
+Possible failures
+
+Snapshot Missing
+
+Snapshot Corrupted
+
+Replay Failed
+
+Version Mismatch
+
+Schema Mismatch
+
+Retention Failure
+
+Every failure produces structured diagnostics.
+
+---
+
+# Testing
+
+Required
+
+Replay Tests
+
+Historical Query Tests
+
+Snapshot Tests
+
+Retention Tests
+
+Version Compatibility Tests
+
+Regression Tests
+
+Performance Tests
+
+---
+
+# Acceptance Criteria
+
+- Odds History implemented
+- Provider Runs implemented
+- Snapshot storage implemented
+- Replay Engine implemented
+- Replay Validation implemented
+- Retention Policy implemented
+- Historical Queries implemented
+- Tests passing
+
+---
+
+# Definition of Done
+
+The platform can reproduce historical executions without contacting external providers.
+
+Historical data becomes a permanent engineering asset.
+
+The project is ready for Part 5 — Production Hardening.
+
+End of Part 4.
+# 25_STAGE_06_DATABASE
+
+# PART 5 — Production Hardening
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: High
+
+Dependencies
+
+- Part 1 — Database Foundation
+- Part 2 — Canonical Schema
+- Part 3 — Persistence Layer
+- Part 4 — History & Replay
+
+---
+
+# Objective
+
+Prepare the database for long-term production use.
+
+The database must support years of continuous operation with increasing data volume while maintaining performance, reliability and integrity.
+
+No functional features are introduced in this stage.
+
+The focus is operational excellence.
+
+---
+
+# Scope
+
+Included
+
+- Performance Optimization
+- Index Optimization
+- Monitoring
+- Connection Pool Tuning
+- Backup Strategy
+- Disaster Recovery
+- Data Integrity
+- Migration Strategy
+- Production Validation
+
+Not Included
+
+- Analytics
+- Scanner Logic
+- Business Features
+
+---
+
+# Performance
+
+The database must remain performant under continuous load.
+
+Requirements
+
+- optimized indexes
+- optimized joins
+- optimized query plans
+- efficient pagination
+- bulk persistence
+- minimal locking
+
+Performance must be measured.
+
+Never assumed.
+
+---
+
+# Index Optimization
+
+Review every index.
+
+Verify
+
+- lookup performance
+- write overhead
+- duplicate indexes
+- unused indexes
+- composite indexes
+
+Indexes must exist because they solve a measured problem.
+
+---
+
+# Monitoring
+
+Monitor
+
+- query latency
+- slow queries
+- connection pool usage
+- transaction duration
+- deadlocks
+- lock waits
+- storage growth
+- table size
+- index usage
+
+Monitoring must operate continuously.
+
+---
+
+# Connection Pool
+
+Verify
+
+- pool size
+- idle timeout
+- connection lifetime
+- connection reuse
+- failed connections
+
+Pool exhaustion should never terminate the application.
+
+---
+
+# Backup Strategy
+
+Support
+
+Full Backup
+
+Incremental Backup
+
+Point-in-Time Recovery
+
+Backup Verification
+
+Backups must be tested regularly.
+
+Untested backups are considered invalid.
+
+---
+
+# Disaster Recovery
+
+Recovery plan must define
+
+- recovery procedure
+- recovery priority
+- maximum acceptable data loss
+- maximum recovery time
+
+Recovery must be documented and repeatable.
+
+---
+
+# Data Integrity
+
+Verify
+
+Foreign Keys
+
+Unique Constraints
+
+Check Constraints
+
+Cascade Rules
+
+Referential Integrity
+
+Database corruption must never remain unnoticed.
+
+---
+
+# Migration Strategy
+
+Every schema modification must use Alembic.
+
+Rules
+
+- reversible migrations
+- deterministic migrations
+- tested migrations
+- version controlled
+
+Manual production schema changes are forbidden.
+
+---
+
+# Maintenance
+
+Support
+
+VACUUM
+
+ANALYZE
+
+Index Rebuild
+
+Retention Cleanup
+
+Snapshot Cleanup
+
+Maintenance tasks should be automated.
+
+---
+
+# Security
+
+Verify
+
+- encrypted connections
+- least privilege database users
+- secret management
+- audit logging
+- no credentials in source code
+
+Production credentials must never appear in logs.
+
+---
+
+# Scalability
+
+Database should support future
+
+- additional providers
+- additional sports
+- millions of odds
+- billions of historical records
+- analytics workloads
+- horizontal application scaling
+
+Scalability decisions should minimize future schema redesign.
+
+---
+
+# Validation
+
+Before production deployment verify
+
+- migrations
+- indexes
+- constraints
+- backups
+- restore procedure
+- monitoring
+- performance benchmarks
+- retention jobs
+
+Deployment proceeds only after successful verification.
+
+---
+
+# Production Checklist
+
+Infrastructure
+
+- [ ] Connection Pool configured
+- [ ] Monitoring enabled
+- [ ] Health checks enabled
+- [ ] Metrics enabled
+
+Performance
+
+- [ ] Query benchmarks completed
+- [ ] Indexes reviewed
+- [ ] Slow queries eliminated
+
+Reliability
+
+- [ ] Backup configured
+- [ ] Restore tested
+- [ ] Retention verified
+- [ ] Migration tested
+
+Security
+
+- [ ] Credentials secured
+- [ ] TLS enabled
+- [ ] Least privilege configured
+
+Quality
+
+- [ ] Integration tests passing
+- [ ] Load tests passing
+- [ ] Replay tests passing
+
+---
+
+# Acceptance Criteria
+
+The database is production-ready when
+
+- Performance meets defined targets.
+- Monitoring is operational.
+- Backup and restore are verified.
+- Migrations are reliable.
+- Data integrity is enforced.
+- Replay remains deterministic.
+- All database quality gates pass.
+
+---
+
+# Definition of Done
+
+Stage 06 is complete when the persistence layer is capable of reliably storing, protecting and serving all platform data under production conditions.
+
+Future stages use the database without architectural modifications.
+
+---
+
+# Deliverables
+
+✓ PostgreSQL Infrastructure
+
+✓ SQLAlchemy Integration
+
+✓ Alembic Migrations
+
+✓ Canonical Schema
+
+✓ Repository Layer
+
+✓ Unit of Work
+
+✓ Transaction Management
+
+✓ History Storage
+
+✓ Replay Engine
+
+✓ Monitoring
+
+✓ Backup Strategy
+
+✓ Disaster Recovery Plan
+
+✓ Performance Optimization
+
+✓ Integration Tests
+
+✓ Production Documentation
+
+---
+
+# Exit Criteria
+
+Before Stage 07 begins
+
+- Database infrastructure is stable.
+- Canonical schema is finalized.
+- Repository layer is complete.
+- Replay system is operational.
+- Performance benchmarks pass.
+- Monitoring is active.
+- Backup and restore procedures are validated.
+- All database quality gates pass.
+
+Only then may Stage 07 — Scanner Engine begin.
+
+End of Stage 06.
+# 26_STAGE_07_SCANNER_ENGINE
+
+# PART 1 — Scanner Foundation
+
+Version: 1.0
+
+Status: Planned
+
+Estimated Complexity: Very High
+
+Dependencies
+
+- Stage 01 — Core Infrastructure
+- Stage 02 — Provider Framework
+- Stage 03 — Provider Template
+- Stage 04 — Betclic Provider
+- Stage 05 — Superbet Provider
+- Stage 06 — Normalization
+- Stage 07 — Database
+
+---
+
+# Objective
+
+Build the Scanner Engine responsible for analyzing normalized odds from multiple providers and identifying betting opportunities.
+
+The Scanner is the core business component of Zielone Bety.
+
+It performs analysis only.
+
+It never downloads data.
+
+It never parses provider responses.
+
+It never modifies stored odds.
+
+---
+
+# Scope
+
+Included
+
+- Scanner Engine
+- Scanner Runner
+- Scanner Context
+- Scanner Result
+- Opportunity Pipeline
+- Scanner Configuration
+- Scanner Metrics
+- Scanner Health
+
+Not Included
+
+- Surebet Algorithm
+- Valuebet Algorithm
+- Notifications
+- Frontend
+- API
+
+---
+
+# Architecture
+
+```
+Normalized Odds
+
+↓
+
+Scanner Engine
+
+↓
+
+Scanner Pipeline
+
+↓
+
+Scanner Result
+```
+
+The Scanner consumes only canonical data.
+
+It never accesses provider-specific models.
+
+---
+
+# Responsibilities
+
+Scanner owns
+
+- execution
+- orchestration
+- filtering
+- comparison pipeline
+- opportunity collection
+- execution reports
+
+Scanner does NOT own
+
+- provider communication
+- parsing
+- normalization
+- persistence
+- notifications
+
+---
+
+# Input
+
+Scanner consumes
+
+- Events
+- Markets
+- Outcomes
+- Odds
+- Providers
+
+Only normalized objects.
+
+---
+
+# Scanner Pipeline
+
+```
+Load Events
+
+↓
+
+Load Markets
+
+↓
+
+Load Odds
+
+↓
+
+Validate
+
+↓
+
+Group Markets
+
+↓
+
+Dispatch Analysis
+
+↓
+
+Collect Results
+
+↓
+
+ScannerResult
+```
+
+---
+
+# Scanner Context
+
+Execution Context contains
+
+- execution_id
+- timestamp
+- configuration
+- provider list
+- enabled algorithms
+- limits
+- diagnostics
+
+Context is immutable.
+
+---
+
+# Scanner Result
+
+Contains
+
+- opportunities found
+- execution duration
+- analyzed events
+- analyzed markets
+- warnings
+- failures
+- metrics
+
+Always returned.
+
+Never null.
+
+---
+
+# Execution Rules
+
+Every execution
+
+- deterministic
+- isolated
+- reproducible
+- measurable
+
+Multiple scanner executions may run simultaneously.
+
+---
+
+# Configuration
+
+Configurable
+
+- enabled providers
+- enabled sports
+- minimum odds
+- scan interval
+- batch size
+- concurrency
+- feature flags
+
+Nothing hardcoded.
+
+---
+
+# Metrics
+
+Collect
+
+- execution duration
+- events analyzed
+- markets analyzed
+- odds analyzed
+- algorithms executed
+- opportunities found
+- failures
+- warnings
+
+---
+
+# Logging
+
+Log
+
+Scanner Started
+
+Scanner Finished
+
+Events Loaded
+
+Markets Loaded
+
+Analysis Started
+
+Analysis Finished
+
+Execution Failed
+
+---
+
+# Health
+
+Health verifies
+
+- database available
+- normalized data available
+- providers synchronized
+- configuration valid
+
+---
+
+# Testing
+
+Required
+
+- startup tests
+- execution tests
+- concurrency tests
+- performance tests
+- failure recovery tests
+
+---
+
+# Acceptance Criteria
+
+- Scanner Engine implemented
+- Scanner Context implemented
+- Scanner Result implemented
+- Execution pipeline implemented
+- Metrics integrated
+- Health integrated
+- Logging integrated
+- Tests passing
+
+---
+
+# Definition of Done
+
+The Scanner Framework is complete.
+
+It can execute deterministic analysis over normalized data.
+
+No betting algorithms have been implemented yet.
+
+The project is ready for Part 2 — Surebet Engine.
+
+End of Part 1.

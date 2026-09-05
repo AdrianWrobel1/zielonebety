@@ -3,13 +3,13 @@
 
 [[redirects]]
   from = "/api/*"
-  to = "https://qualify-howard-economy-venue.trycloudflare.com/api/:splat"
+  to = "https://zielonebety.tailaa37bc.ts.net/api/:splat"
   status = 200
   force = true
 
 [[redirects]]
   from = "/health"
-  to = "https://qualify-howard-economy-venue.trycloudflare.com/health"
+  to = "https://zielonebety.tailaa37bc.ts.net/health"
   status = 200
   force = true
 

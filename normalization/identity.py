@@ -15,7 +15,8 @@ import re
 import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from datetime import tzinfo as _tzinfo_base
 from typing import Dict, Optional, Tuple, Set, Any
 
 
@@ -152,10 +153,37 @@ def parse_kickoff_to_utc(
     - If a naive timestamp is provided without an explicit default_tz ('UTC'),
       it returns None to prevent guessing local machine timezones.
 
+    Robustness (P1-NEW-001): non-string inputs never raise. Epoch int/float
+    (seconds, or milliseconds when >1e12) and datetime objects are accepted;
+    anything else yields None (unknown).
+
     Returns:
         timezone-aware datetime in UTC, or None if invalid/unparseable.
     """
-    if not timestamp_str or not timestamp_str.strip():
+    if timestamp_str is None:
+        return None
+    if isinstance(timestamp_str, datetime):
+        try:
+            if timestamp_str.tzinfo is None:
+                if default_tz == "UTC":
+                    return timestamp_str.replace(tzinfo=timezone.utc)
+                return None
+            return timestamp_str.astimezone(timezone.utc)
+        except (ValueError, TypeError, OverflowError):
+            return None
+    if isinstance(timestamp_str, bool):
+        return None
+    if isinstance(timestamp_str, (int, float)):
+        try:
+            epoch = float(timestamp_str)
+            if epoch > 1e12:
+                epoch /= 1000.0
+            return datetime.fromtimestamp(epoch, tz=timezone.utc)
+        except (ValueError, TypeError, OverflowError, OSError):
+            return None
+    if not isinstance(timestamp_str, str):
+        return None
+    if not timestamp_str.strip():
         return None
 
     clean_str = timestamp_str.strip()
@@ -192,7 +220,61 @@ def parse_kickoff_to_utc(
     except (ValueError, TypeError):
         pass
 
+    # 4. Handle StatsHub-emitted 'YYYY-MM-DD HH:MM UTC' format (explicit UTC
+    # suffix, e.g. '2026-09-01 18:00 UTC' from providers/statshub/parser.py).
+    # Additive only: previously unparseable -> None callers are unaffected
+    # except that genuinely-known kickoffs now compare correctly.
+    try:
+        if clean_str.endswith(" UTC"):
+            dt = datetime.strptime(clean_str[:-4].strip(), "%Y-%m-%d %H:%M")
+            return dt.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        pass
+
+    # 5. Handle 'YYYY-MM-DD HH:MM' naive format (UTC only when explicitly allowed)
+    try:
+        dt = datetime.strptime(clean_str, "%Y-%m-%d %H:%M")
+        if default_tz == "UTC":
+            return dt.replace(tzinfo=timezone.utc)
+        return None
+    except (ValueError, TypeError):
+        pass
+
     return None
+
+
+#: Maximum kickoff separation for two observations to be the same fixture.
+#: Mirrors the settlement layer's ±24h alignment window
+#: (scanner/player_shots_settler.py) so valuation and settlement share one
+#: time model instead of two.
+FIXTURE_KICKOFF_COMPATIBILITY_WINDOW_HOURS = 24.0
+
+
+def are_kickoffs_compatible(
+    kickoff_a: Optional[str],
+    kickoff_b: Optional[str],
+    max_diff_hours: float = FIXTURE_KICKOFF_COMPATIBILITY_WINDOW_HOURS,
+) -> Optional[bool]:
+    """Determines whether two kickoff strings can describe the same fixture.
+
+    Returns:
+        True when both parse and differ by at most ``max_diff_hours``;
+        False when both parse but differ by more;
+        None when either side is missing/unparseable (unknown — the caller
+        must fall back to names-only logic, never treat unknown as a match
+        nor as a mismatch).
+    """
+    try:
+        dt_a = parse_kickoff_to_utc(kickoff_a)
+        dt_b = parse_kickoff_to_utc(kickoff_b)
+    except Exception:
+        return None
+    if dt_a is None or dt_b is None:
+        return None
+    try:
+        return abs((dt_a - dt_b).total_seconds()) <= max_diff_hours * 3600.0
+    except Exception:
+        return None
 
 
 @dataclass(frozen=True)
@@ -385,3 +467,271 @@ class AliasResolver(ABC):
     def resolve_competition(self, comp_ref: CompetitionReference) -> Optional[str]:
         """Resolves competition reference to canonical competition ID if a verified alias exists."""
         pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Europe/Warsaw timezone (P1-NEW-009)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Single source of truth for Warsaw wall-clock conversions (scheduler daily
+# triggers, ultra-scan day boundaries, digest windows). Prefers IANA tzdata;
+# the fallback implements the EU daylight-saving rule explicitly so slim
+# containers without tzdata do NOT silently run winter schedules one hour
+# late (the previous fixed +02:00 fallback did exactly that).
+
+_WARSAW_TZ_CACHED: Optional[Any] = None
+_WARSAW_TZ_FROM_FALLBACK: bool = False
+
+
+class _EuropeWarsawFallbackTz(_tzinfo_base):
+    """DST-aware Europe/Warsaw fallback for environments without tzdata.
+
+    EU rule: CEST (+02:00) from the last Sunday of March 01:00 UTC until the
+    last Sunday of October 01:00 UTC, otherwise CET (+01:00).
+    """
+
+    @staticmethod
+    def _last_sunday(year: int, month: int) -> int:
+        import calendar
+
+        last_day = calendar.monthrange(year, month)[1]
+        for day in range(last_day, 0, -1):
+            if calendar.weekday(year, month, day) == 6:
+                return day
+        return last_day
+
+    @classmethod
+    def _is_dst_utc(cls, dt: datetime) -> bool:
+        ref = dt
+        try:
+            if ref.tzinfo is not None:
+                ref = (ref - ref.utcoffset()).replace(tzinfo=None)
+        except Exception:
+            return False
+        year = ref.year
+        try:
+            dst_start = datetime(year, 3, cls._last_sunday(year, 3), 1, 0, 0)
+            dst_end = datetime(year, 10, cls._last_sunday(year, 10), 1, 0, 0)
+        except Exception:
+            return False
+        return dst_start <= ref < dst_end
+
+    @classmethod
+    def _is_ambiguous_wall(cls, wall: datetime) -> bool:
+        """True for wall times occurring twice (autumn fallback hour)."""
+        try:
+            w = wall.replace(tzinfo=None)
+            return (
+                w.month == 10
+                and w.day == cls._last_sunday(w.year, 10)
+                and datetime(w.year, 10, w.day, 2, 0, 0) <= w < datetime(w.year, 10, w.day, 3, 0, 0)
+            )
+        except Exception:
+            return False
+
+    @classmethod
+    def _is_dst_wall(cls, wall: datetime) -> bool:
+        """DST decision from a naive wall time (fold-aware for ambiguous walls)."""
+        w = wall.replace(tzinfo=None)
+        if cls._is_ambiguous_wall(w):
+            return getattr(wall, "fold", 0) == 0
+        try:
+            spring = datetime(w.year, 3, cls._last_sunday(w.year, 3), 3, 0, 0)
+            autumn = datetime(w.year, 10, cls._last_sunday(w.year, 10), 3, 0, 0)
+        except Exception:
+            return False
+        return spring <= w < autumn
+
+    def utcoffset(self, dt: Optional[datetime]) -> Optional[timedelta]:
+        if dt is None:
+            return timedelta(hours=1)
+        try:
+            return timedelta(hours=2) if self._is_dst_wall(dt) else timedelta(hours=1)
+        except Exception:
+            return timedelta(hours=1)
+
+    def dst(self, dt: Optional[datetime]) -> Optional[timedelta]:
+        try:
+            off = self.utcoffset(dt)
+            return timedelta(hours=1) if off == timedelta(hours=2) else timedelta(0)
+        except Exception:
+            return timedelta(0)
+
+    def tzname(self, dt: Optional[datetime]) -> str:
+        try:
+            return "CEST" if self.utcoffset(dt) == timedelta(hours=2) else "CET"
+        except Exception:
+            return "CET"
+
+    def fromutc(self, dt: datetime) -> datetime:
+        # Decide the offset from the UTC instant itself (unambiguous), not
+        # from the wall time: the default tzinfo.fromutc re-evaluates the
+        # offset at the converted wall time, which shifts the instant by one
+        # hour inside the autumn ambiguous hour. fold marks which occurrence
+        # a wall time in that hour represents (0 = CEST, 1 = CET).
+        if dt.tzinfo is not self:
+            raise ValueError("fromutc: dt.tzinfo is not self")
+        try:
+            utc_dt = dt.replace(tzinfo=timezone.utc)
+            dst_now = self._is_dst_utc(utc_dt)
+            off = timedelta(hours=2) if dst_now else timedelta(hours=1)
+            wall = (utc_dt + off).replace(tzinfo=None)
+            fold = 0
+            if self._is_ambiguous_wall(wall):
+                fold = 0 if dst_now else 1
+            return wall.replace(tzinfo=self, fold=fold)
+        except Exception:
+            return dt.replace(tzinfo=self)
+
+
+def get_warsaw_tz() -> Any:
+    """Returns the Europe/Warsaw tzinfo (IANA when available, DST-aware fallback otherwise)."""
+    global _WARSAW_TZ_CACHED, _WARSAW_TZ_FROM_FALLBACK
+    if _WARSAW_TZ_CACHED is None:
+        try:
+            from zoneinfo import ZoneInfo
+
+            _WARSAW_TZ_CACHED = ZoneInfo("Europe/Warsaw")
+            _WARSAW_TZ_FROM_FALLBACK = False
+        except Exception:
+            _WARSAW_TZ_CACHED = _EuropeWarsawFallbackTz()
+            _WARSAW_TZ_FROM_FALLBACK = True
+    return _WARSAW_TZ_CACHED
+
+
+def is_warsaw_tz_fallback() -> bool:
+    """True when the Warsaw tzinfo currently in use is the DST fallback (no tzdata)."""
+    get_warsaw_tz()
+    return _WARSAW_TZ_FROM_FALLBACK
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Team Identity Resolver (canonical team registry with provider bindings)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Restored production-shadowing contract: the resolver NEVER force-matches.
+# Steps 1–2 consult trusted bindings; step 3 deterministically registers the
+# canonical form (auto-bind for future O(1) lookup), so every non-empty input
+# resolves while ambiguous/empty inputs stay explicit. Consumers that need
+# recall gating (e.g. market matching) must use their own conservative rules.
+
+
+@dataclass
+class TeamResolutionResult:
+    """Auditable outcome of a team identity resolution attempt."""
+    status: Any
+    canonical_team: Optional[Any] = None
+    canonical_team_id: Optional[str] = None
+    canonical_name: Optional[str] = None
+    confidence: float = 0.0
+    method: str = "UNRESOLVED"
+    reasons: Tuple[str, ...] = ()
+
+
+class TeamIdentityResolver:
+    """Deterministic registry-based team identity resolver with provider bindings."""
+
+    def __init__(self) -> None:
+        self._canonical_teams: Dict[str, Any] = {}
+        self._provider_bindings: Dict[Tuple[str, str], str] = {}
+        self._external_bindings: Dict[Tuple[str, str], str] = {}
+
+    # -- registry primitives -------------------------------------------------
+    def register_canonical_team(self, team: Any) -> Any:
+        self._canonical_teams[team.canonical_team_id] = team
+        return team
+
+    def bind_provider_team(self, canonical_team_id: str, provider: str, provider_team_id: str) -> None:
+        if provider and provider_team_id:
+            self._provider_bindings[(str(provider).lower(), str(provider_team_id))] = canonical_team_id
+
+    # -- resolution ----------------------------------------------------------
+    def resolve_team(self, team_ref: TeamReference) -> Optional[str]:
+        """Resolves a reference to a canonical team ID, or None when unknown."""
+        res = self.resolve_team_detailed(team_ref)
+        return res.canonical_team_id
+
+    def resolve_team_detailed(self, team_ref: TeamReference) -> TeamResolutionResult:
+        """Resolves with full audit trail. Non-empty inputs always RESOLVE."""
+        from normalization.player_identity import ResolutionStatus
+        from domain.models import CanonicalTeam
+        from domain.models import generate_deterministic_canonical_team_id
+
+        norm_name = (team_ref.normalized_name or "").strip()
+        provider = (team_ref.provider or "unknown").lower()
+        prov_id = str(team_ref.provider_team_id) if team_ref.provider_team_id else None
+
+        if not norm_name:
+            return TeamResolutionResult(
+                status=ResolutionStatus.UNRESOLVED,
+                confidence=0.0,
+                method="UNRESOLVED",
+                reasons=("empty_team_name",),
+            )
+
+        # 1. Trusted provider-ID binding.
+        if prov_id:
+            bound_id = self._provider_bindings.get((provider, prov_id))
+            if bound_id and bound_id in self._canonical_teams:
+                bound = self._canonical_teams[bound_id]
+                return TeamResolutionResult(
+                    status=ResolutionStatus.RESOLVED,
+                    canonical_team=bound,
+                    canonical_team_id=bound.canonical_team_id,
+                    canonical_name=bound.canonical_name,
+                    confidence=1.0,
+                    method="PROVIDER_BINDING",
+                    reasons=(f"provider_team_id_bound:{provider}:{prov_id}",),
+                )
+
+        # 2. External-ID binding (e.g. Betradar / Sportradar).
+        for ext_key, ext_val in (team_ref.external_ids or {}).items():
+            bound_id = self._external_bindings.get((str(ext_key).lower(), str(ext_val)))
+            if bound_id and bound_id in self._canonical_teams:
+                bound = self._canonical_teams[bound_id]
+                return TeamResolutionResult(
+                    status=ResolutionStatus.RESOLVED,
+                    canonical_team=bound,
+                    canonical_team_id=bound.canonical_team_id,
+                    canonical_name=bound.canonical_name,
+                    confidence=1.0,
+                    method="EXTERNAL_ID",
+                    reasons=(f"external_team_id_bound:{ext_key}:{ext_val}",),
+                )
+
+        # 3. Deterministic canonical registration (never ambiguous: one input
+        # name yields exactly one canonical form via alias resolution).
+        canon_norm, _ = resolve_canonical_team_name(norm_name, team_ref.tokens)
+        canon_id = generate_deterministic_canonical_team_id("football", canon_norm)
+        team = self._canonical_teams.get(canon_id)
+        if team is None:
+            team = CanonicalTeam(
+                canonical_team_id=canon_id,
+                canonical_name=" ".join(t.capitalize() for t in canon_norm.split()) or norm_name,
+                normalized_name=canon_norm,
+                sport="Football",
+            )
+            self.register_canonical_team(team)
+        if prov_id:
+            self.bind_provider_team(canon_id, provider, prov_id)
+        exact = canon_norm == norm_name
+        return TeamResolutionResult(
+            status=ResolutionStatus.RESOLVED,
+            canonical_team=team,
+            canonical_team_id=canon_id,
+            canonical_name=team.canonical_name,
+            confidence=0.98 if exact else 0.95,
+            method="EXACT_NORMALIZED_NAME" if exact else "CANONICAL_ALIAS",
+            reasons=("exact_normalized_name_match",) if exact else ("canonical_alias_registration",),
+        )
+
+
+_TEAM_RESOLVER_SINGLETON: Optional[TeamIdentityResolver] = None
+
+
+def get_team_resolver() -> TeamIdentityResolver:
+    """Returns the shared platform TeamIdentityResolver instance."""
+    global _TEAM_RESOLVER_SINGLETON
+    if _TEAM_RESOLVER_SINGLETON is None:
+        _TEAM_RESOLVER_SINGLETON = TeamIdentityResolver()
+    return _TEAM_RESOLVER_SINGLETON

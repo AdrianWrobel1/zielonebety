@@ -1,5 +1,14 @@
 """
 Notification Package
+
+Authoritative production path: normalization.dispatcher /
+normalization.lifecycle / telegram_consumer / HttpTelegramClient
+(via props_notification_manager).
+
+P1-005: the legacy stack (NotificationEngine, RuleEngine,
+NotificationQueue, TelegramNotificationProvider) is deprecated, is not
+imported by any production runtime path, and is therefore no longer
+re-exported here. Import it from its module (tests-only) if needed.
 """
 
 from notifications.models import (
@@ -8,10 +17,6 @@ from notifications.models import (
     NotificationRule,
     NotificationMessage,
 )
-from notifications.rule_engine import RuleEngine
-from notifications.queue import NotificationQueue
-from notifications.telegram_provider import TelegramNotificationProvider
-from notifications.notification_engine import NotificationEngine
 from notifications.exceptions import (
     NotificationError,
     NotificationDeliveryError,
@@ -34,10 +39,6 @@ __all__ = [
     "NotificationStatus",
     "NotificationRule",
     "NotificationMessage",
-    "RuleEngine",
-    "NotificationQueue",
-    "TelegramNotificationProvider",
-    "NotificationEngine",
     "NotificationError",
     "NotificationDeliveryError",
     "NotificationRuleError",

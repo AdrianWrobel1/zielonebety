@@ -67,3 +67,12 @@ class SuperbetEvent:
     category_id: Optional[str] = None
     markets: List[SuperbetMarket] = field(default_factory=list)
     raw_metadata: Optional[Dict[str, Any]] = None
+    # P1-003: explicit detail-acquisition failure state. False for every
+    # successful response (including legitimate zero-market responses).
+    fetch_failed: bool = False
+    fetch_error: Optional[str] = None
+    fetch_error_type: Optional[str] = None
+    # P1-NEW-010: Tier-1 overview placeholder that was never selected for
+    # detail acquisition. Market state unknown; distinct from both a
+    # legitimate zero-market detail response and a FETCH_FAILED event.
+    overview_only: bool = False

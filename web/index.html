@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Zielone Bety — Betting Opportunities & Provider Monitoring Platform</title>
+  <title>Zielone Bety — Betting Opportunities & Quantitative Analytics Platform</title>
   <meta name="description" content="Production-grade monitoring dashboard for sports betting surebets, valuebets, and provider framework status.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,13 +17,13 @@
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-logo">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
           </svg>
         </div>
         <div class="brand-text">
           <span class="brand-name">Zielone Bety</span>
-          <span class="brand-tag">v2.0 Production</span>
+          <span class="brand-tag">v2.1 Production</span>
         </div>
       </div>
 
@@ -32,44 +32,44 @@
         <span class="status-text">API REST Connected</span>
       </div>
 
-      <nav class="nav-menu">
+      <nav class="nav-menu" role="navigation" aria-label="Main Navigation">
         <a href="#dashboard" class="nav-item active" data-view="dashboard">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           <span>Dashboard</span>
         </a>
         <a href="#opportunities" class="nav-item" data-view="opportunities">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           <span>Opportunity Explorer</span>
           <span class="badge badge-accent" id="nav-opp-count">—</span>
         </a>
         <a href="#providers" class="nav-item" data-view="providers">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
           <span>Provider Monitor</span>
         </a>
         <a href="#events" class="nav-item" data-view="events">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span>Event Browser</span>
         </a>
         <a href="#playerprops" class="nav-item" data-view="playerprops">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/><circle cx="19" cy="4" r="2"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/><circle cx="19" cy="4" r="2"/></svg>
           <span>Player Props</span>
           <span class="badge badge-accent" id="nav-props-count">StatsHub</span>
         </a>
         <a href="#history" class="nav-item" data-view="history">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           <span>Historical Analytics</span>
         </a>
         <a href="#profiler" class="nav-item" data-view="profiler">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span>Scan Profiler</span>
           <span class="badge badge-accent">Stage 46</span>
         </a>
         <a href="#notifications" class="nav-item" data-view="notifications">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           <span>Notifications</span>
         </a>
         <a href="#settings" class="nav-item" data-view="settings">
-          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Settings</span>
         </a>
       </nav>
@@ -79,7 +79,7 @@
           <div class="user-avatar">A</div>
           <div class="user-info">
             <span class="user-name">Admin User</span>
-            <span class="user-role badge badge-success">Admin</span>
+            <span class="user-role badge badge-accent">Admin</span>
           </div>
         </div>
       </div>
@@ -90,205 +90,259 @@
       <!-- Top Header -->
       <header class="top-header">
         <div class="header-search">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="global-search" placeholder="Search events, bookmakers, markets...">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="global-search" placeholder="Search events, bookmakers, markets..." aria-label="Global Search">
         </div>
 
         <div class="header-actions">
           <div class="metrics-pill">
             <span class="metric-label">API Latency:</span>
-            <span class="metric-value" id="header-api-latency">—</span>
+            <span class="metric-value mono" id="header-api-latency">—</span>
           </div>
 
-          <button class="btn btn-icon" id="theme-toggle-btn" title="Toggle Theme">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <button class="btn btn-icon" id="theme-toggle-btn" title="Toggle Theme" aria-label="Toggle Theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           </button>
 
-          <button class="btn btn-outline" id="role-switch-btn">
+          <button class="btn btn-outline btn-sm" id="role-switch-btn">
             Role: <strong id="current-role-text">Admin</strong>
           </button>
         </div>
       </header>
 
       <!-- View Containers -->
-      <main class="content-container">
+      <main class="content-container" role="main">
 
         <!-- DASHBOARD VIEW -->
-        <section id="view-dashboard" class="view-section active">
-          <div class="section-header">
-            <div>
-              <h1 class="page-title">Production Scanner Dashboard</h1>
-              <p class="page-subtitle">Real-time multi-bookmaker pipeline control, live scan telemetry, and surebet monitoring.</p>
-            </div>
-            <div class="action-group">
-              <span class="meta-pill">
-                Status: <span class="badge badge-cycle-notrun" id="dash-scanner-status-badge">NOT_RUN</span>
-              </span>
-              <span class="meta-pill">
-                Last Scan: <strong id="dash-last-scan-time">Never</strong>
-              </span>
-              <span class="meta-pill">
-                Duration: <strong id="dash-scan-duration">—</strong>
-              </span>
-              <div class="scan-mode-selector-wrapper" style="display: inline-flex; align-items: center; gap: 0.35rem; margin: 0 0.25rem;">
-                <label for="dash-scan-mode-select" style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500;">Mode:</label>
-                <select id="dash-scan-mode-select" class="form-control form-control-sm" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; background: var(--bg-surface-alt); border: 1px solid var(--bg-card-border); color: var(--text-primary); border-radius: 6px; cursor: pointer;">
-                  <option value="NORMAL" selected>Normal Scan (15 details)</option>
-                  <option value="DEEP">Deep Scan (50 details)</option>
-                </select>
+        <!-- DASHBOARD VIEW — FLAGSHIP COMMAND CENTER -->
+        <section id="view-dashboard" class="view-section active dash-command-center" aria-labelledby="dash-heading">
+          <!-- Command Center Hero Header -->
+          <div class="dash-command-header">
+            <div class="dash-command-brand">
+              <div class="dash-badge-eyebrow">
+                <span class="dash-pulse-dot" id="dash-pulse-dot"></span>
+                <span>INTELLIGENCE WORKSTATION</span>
+                <span class="dash-version-tag">PRO V2.1</span>
               </div>
-              <button class="btn btn-outline" id="btn-refresh-dashboard" title="Refresh dashboard data">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                Refresh
-              </button>
-              <button class="btn btn-primary" id="btn-run-scan">
-                <svg class="run-scan-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                <span id="btn-run-scan-text">Run Scan</span>
-              </button>
+              <h1 class="page-title dash-main-title" id="dash-heading">Command Center</h1>
+              <p class="page-subtitle dash-subtitle">Autonomous multi-bookmaker pipeline control, live scan telemetry, and real-time betting intelligence.</p>
+            </div>
+            
+            <div class="dash-command-actions">
+              <!-- Telemetry Status Pills Cluster -->
+              <div class="dash-telemetry-cluster">
+                <div class="dash-tele-pill" title="Scanner Engine Status">
+                  <span class="dash-tele-label">SYSTEM</span>
+                  <span class="badge badge-cycle-notrun" id="dash-scanner-status-badge">NOT_RUN</span>
+                </div>
+                <div class="dash-tele-pill" title="Last Execution Timestamp">
+                  <span class="dash-tele-label">LAST SCAN</span>
+                  <strong id="dash-last-scan-time" class="dash-tele-val mono">Never</strong>
+                </div>
+                <div class="dash-tele-pill" title="Scan Duration">
+                  <span class="dash-tele-label">CYCLE TIME</span>
+                  <strong id="dash-scan-duration" class="dash-tele-val mono">—</strong>
+                </div>
+              </div>
+
+              <!-- Interactive Controls & Scan Launcher -->
+              <div class="dash-control-actions">
+                <div class="scan-mode-selector-wrapper">
+                  <label for="dash-scan-mode-select" class="scan-mode-label">Mode:</label>
+                  <select id="dash-scan-mode-select" class="form-control form-control-sm dash-mode-select">
+                    <option value="NORMAL" selected>Normal Scan (15 details)</option>
+                    <option value="DEEP">Deep Scan (50 details)</option>
+                    <option value="ULTRA">ULTRA Scan (Full Day)</option>
+                  </select>
+                </div>
+
+                <button class="btn btn-outline dash-btn-refresh" id="btn-refresh-dashboard" title="Refresh dashboard data">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  <span>Refresh</span>
+                </button>
+
+                <button class="btn btn-primary dash-btn-launch" id="btn-run-scan">
+                  <svg class="run-scan-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span id="btn-run-scan-text">Run Scan</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Alert / Diagnostic Banner Container (hidden by default) -->
+          <!-- Alert / Diagnostic Banner Container -->
           <div id="dash-alert-container"></div>
 
-          <!-- Scan Progress Phase Feedback Container (active during scans) -->
-          <div id="dash-scan-progress-container" style="display: none; margin-bottom: 1.25rem;">
-            <div class="card" style="padding: 1rem; border-left: 4px solid var(--accent-primary, #6366f1); background: var(--bg-surface-alt, #1e232d);">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <span class="spinner-icon" style="display: inline-block; animation: spin 1s linear infinite;">⟳</span>
-                  <strong id="dash-progress-title" style="font-size: 0.9rem; color: var(--text-primary);">Executing Scan Cycle...</strong>
+          <!-- Scan Progress Phase Feedback Container -->
+          <div id="dash-scan-progress-container" class="dash-scan-progress" style="display: none;">
+            <div class="card dash-progress-card">
+              <div class="dash-progress-meta">
+                <div class="dash-progress-title-group">
+                  <div class="dash-spinner-ring"></div>
+                  <strong id="dash-progress-title">Executing Scan Cycle...</strong>
                 </div>
-                <span class="badge badge-cycle-scanning" id="dash-progress-mode-badge">NORMAL MODE</span>
+                <span class="badge badge-accent mono" id="dash-progress-mode-badge">NORMAL MODE</span>
               </div>
-              <div style="background: rgba(255, 255, 255, 0.08); height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 0.6rem;">
-                <div id="dash-progress-bar-fill" style="width: 25%; height: 100%; background: var(--accent-primary, #6366f1); transition: width 0.4s ease;"></div>
+              <div class="dash-progress-track">
+                <div id="dash-progress-bar-fill" class="dash-progress-fill"></div>
               </div>
-              <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);" id="dash-progress-steps">
-                <span id="prog-step-1" style="color: var(--text-primary); font-weight: 600;">1. Discovering Fixtures</span>
-                <span id="prog-step-2">2. Matching Overlap</span>
-                <span id="prog-step-3">3. Acquiring Details</span>
-                <span id="prog-step-4">4. Evaluating Surebets</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Hero Metrics Cards -->
-          <div class="metrics-grid">
-            <div class="card metric-card border-accent">
-              <div class="metric-icon accent-glow">📡</div>
-              <div class="metric-details">
-                <span class="metric-title">Discovered Events</span>
-                <span class="metric-num" id="dash-events-discovered">—</span>
-                <span class="metric-foot" id="dash-events-discovered-foot">Superbet, Betclic, Bet365, Unibet</span>
-              </div>
-            </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">🎯</div>
-              <div class="metric-details">
-                <span class="metric-title">Selected Events</span>
-                <span class="metric-num" id="dash-events-selected">—</span>
-                <span class="metric-foot" id="dash-selection-policy">Popular competitions</span>
-              </div>
-            </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">🔗</div>
-              <div class="metric-details">
-                <span class="metric-title">Matched Events</span>
-                <span class="metric-num" id="dash-events-matched">—</span>
-                <span class="metric-foot">Cross-Bookmaker Pairs</span>
-              </div>
-            </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">📊</div>
-              <div class="metric-details">
-                <span class="metric-title">Markets Evaluated</span>
-                <span class="metric-num" id="dash-markets-evaluated">—</span>
-                <span class="metric-foot">1X2 / Over-Under / Lines</span>
-              </div>
-            </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">⚡</div>
-              <div class="metric-details">
-                <span class="metric-title">Surebets Found</span>
-                <span class="metric-num text-success" id="dash-surebets-count">—</span>
-                <span class="metric-foot">Max Margin: <strong class="text-success" id="dash-max-margin">—</strong></span>
-              </div>
-            </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">📈</div>
-              <div class="metric-details">
-                <span class="metric-title">Valuebets Found</span>
-                <span class="metric-num text-info" id="dash-valuebets-count">—</span>
-                <span class="metric-foot">Max EV: <strong class="text-info" id="dash-max-ev">—</strong></span>
+              <div class="dash-progress-steps-row" id="dash-progress-steps">
+                <span id="prog-step-1" class="dash-step-item active">1. Discovering Fixtures</span>
+                <span id="prog-step-2" class="dash-step-item">2. Matching Overlap</span>
+                <span id="prog-step-3" class="dash-step-item">3. Acquiring Details</span>
+                <span id="prog-step-4" class="dash-step-item">4. Evaluating Surebets</span>
               </div>
             </div>
           </div>
 
-          <!-- Grid layout for Dashboard Widgets -->
-          <div class="dashboard-grid">
-            <!-- Left Column: Last Scan Execution & Opportunities Summary -->
+          <!-- Primary Metric Matrix (Analytical KPI Deck) -->
+          <div class="dash-kpi-grid">
+            <div class="dash-kpi-card card-kpi-primary">
+              <div class="dash-kpi-top">
+                <span class="dash-kpi-label">Qualified Opportunities</span>
+                <span class="dash-kpi-icon-pill">ALPHA</span>
+              </div>
+              <div class="dash-kpi-body">
+                <span class="dash-kpi-val mono text-success" id="dash-qualified-total">—</span>
+                <div class="dash-kpi-sub">
+                  <span class="dash-kpi-sub-item"><strong id="dash-surebets-count" class="mono text-success">—</strong> SB (<span id="dash-max-margin" class="mono text-success">—</span>)</span>
+                  <span class="dash-kpi-sep">&bull;</span>
+                  <span class="dash-kpi-sub-item"><strong id="dash-valuebets-count" class="mono text-info">—</strong> VB (<span id="dash-max-ev" class="mono text-info">—</span>)</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="dash-kpi-card">
+              <div class="dash-kpi-top">
+                <span class="dash-kpi-label">1. Discovered Universe</span>
+                <span class="dash-kpi-icon-pill">UNIVERSE</span>
+              </div>
+              <div class="dash-kpi-body">
+                <span class="dash-kpi-val mono" id="dash-events-discovered">—</span>
+                <div class="dash-kpi-sub">
+                  <strong id="dash-events-selected" class="mono text-primary">—</strong>
+                  <span id="dash-events-selected-label">normalized / selected</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="dash-kpi-card">
+              <div class="dash-kpi-top">
+                <span class="dash-kpi-label">2. Cross-Bookmaker Overlap</span>
+                <span class="dash-kpi-icon-pill">MATCHED</span>
+              </div>
+              <div class="dash-kpi-body">
+                <span class="dash-kpi-val mono" id="dash-events-matched">—</span>
+                <div class="dash-kpi-sub" id="dash-events-matched-foot">
+                  Cross-Bookmaker Event Overlap
+                </div>
+              </div>
+            </div>
+
+            <div class="dash-kpi-card">
+              <div class="dash-kpi-top">
+                <span class="dash-kpi-label">3. Evaluated Markets</span>
+                <span class="dash-kpi-icon-pill">MARKETS</span>
+              </div>
+              <div class="dash-kpi-body">
+                <span class="dash-kpi-val mono" id="dash-markets-evaluated">—</span>
+                <div class="dash-kpi-sub" id="dash-markets-evaluated-foot">
+                  Comparable Canonical Markets
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Scan Pipeline Visual Flow Hero Container -->
+          <div id="dash-pipeline-flow-hero" class="dash-pipeline-hero-card card">
+            <div class="dash-pipeline-header">
+              <div class="dash-pipeline-title-group">
+                <div class="dash-header-icon-box">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <div>
+                  <h3 class="dash-card-title">Real-Time Scan Pipeline & Drop-Off Funnel</h3>
+                  <p class="dash-card-subtitle">End-to-end data progression from bookmaker discovery to qualified arbitrage & value signals.</p>
+                </div>
+              </div>
+              <div class="dash-pipeline-meta">
+                <span class="badge badge-cycle-notrun" id="dash-cycle-status-badge">NOT_RUN</span>
+                <span class="mono dash-scan-id-tag" id="dash-scan-id">scan_id: —</span>
+              </div>
+            </div>
+            
+            <!-- SVG Connected Flow Container (Rendered dynamically by app.js) -->
+            <div id="dash-pipeline-svg-container" class="dash-pipeline-svg-wrapper">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Command Grid: Primary Workspaces -->
+          <div class="dashboard-grid dash-command-grid">
+            <!-- Left Column: Opportunity Radar & Funnel Telemetry -->
             <div class="dash-column">
-              <!-- Last Scan Summary Card -->
-              <div class="card" id="card-last-scan-summary">
-                <div class="card-header">
+              <!-- Opportunity Radar / Signal Deck -->
+              <div class="card dash-card" id="card-opportunities-summary">
+                <div class="card-header dash-card-header">
                   <div class="card-title-group">
-                    <h3 class="card-title">Last Scan Execution</h3>
-                    <span class="badge badge-cycle-notrun" id="dash-cycle-status-badge">NOT_RUN</span>
-                  </div>
-                  <span class="mono text-muted" id="dash-scan-id">scan_id: —</span>
-                </div>
-                <div id="dash-last-scan-content">
-                  <div class="not-run-state">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    <p>No scan has been executed yet. Click <strong>Run Scan</strong> above to execute the production pipeline.</p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Opportunities / Zero-Surebet Interpretation Card -->
-              <div class="card" id="card-opportunities-summary">
-                <div class="card-header">
-                  <div class="card-title-group">
-                    <h3 class="card-title">Opportunities Summary</h3>
+                    <div class="dash-section-dot pulse-emerald"></div>
+                    <h3 class="card-title">Live Opportunity Radar</h3>
                     <span class="badge badge-accent" id="dash-opp-badge">0 Found</span>
                   </div>
-                  <a href="#opportunities" class="link-btn" data-view="opportunities">Explorer →</a>
+                  <a href="#opportunities" class="btn btn-outline btn-sm dash-btn-explorer" data-view="opportunities">
+                    <span>Explorer</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  </a>
                 </div>
-                <div id="dash-opps-container">
+                <div id="dash-opps-container" class="dash-opps-content">
                   <div class="not-run-state">
                     <p class="text-muted">Awaiting first scan execution...</p>
                   </div>
                 </div>
               </div>
+
+              <!-- Last Scan Detailed Execution & Coverage Matrix Card -->
+              <div class="card dash-card" id="card-last-scan-summary">
+                <div class="card-header dash-card-header">
+                  <div class="card-title-group">
+                    <h3 class="card-title">Coverage & Telemetry Intelligence</h3>
+                  </div>
+                  <span class="dash-tele-pill-mini mono" id="dash-coverage-overlap-badge">Coverage Engine</span>
+                </div>
+                <div id="dash-last-scan-content" class="dash-execution-content">
+                  <div class="not-run-state">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <p>No scan has been executed yet. Click <strong>Run Scan</strong> above to execute the production pipeline.</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- Right Column: Provider Health & Recent Scan History -->
+            <!-- Right Column: Subsystems, History & Scheduler -->
             <div class="dash-column">
-              <!-- Provider & Subsystem Health Card -->
-              <div class="card" id="card-provider-health">
-                <div class="card-header">
-                  <h3 class="card-title">Provider & Subsystem Health</h3>
+              <!-- Provider & Subsystem Pulse Card -->
+              <div class="card dash-card" id="card-provider-health">
+                <div class="card-header dash-card-header">
+                  <div class="card-title-group">
+                    <div class="dash-section-dot pulse-blue"></div>
+                    <h3 class="card-title">Subsystem & Provider Pulse</h3>
+                  </div>
                   <span class="badge badge-outline" id="dash-health-badge">Live Status</span>
                 </div>
-                <div id="dash-provider-health-list" class="provider-mini-grid">
+                <div id="dash-provider-health-list" class="provider-mini-grid dash-provider-pulse-grid">
                   <!-- Rendered dynamically -->
                 </div>
               </div>
 
               <!-- Recent Scan History Card -->
-              <div class="card" id="card-scan-history">
-                <div class="card-header">
-                  <h3 class="card-title">Recent Scan History</h3>
+              <div class="card dash-card" id="card-scan-history">
+                <div class="card-header dash-card-header">
+                  <div class="card-title-group">
+                    <h3 class="card-title">Recent Execution Logs</h3>
+                  </div>
                   <span class="badge badge-outline" id="dash-history-count">0 Scans</span>
                 </div>
-                <div class="table-responsive">
-                  <table class="data-table">
+                <div class="table-responsive dash-table-wrap">
+                  <table class="data-table dash-history-table">
                     <thead>
                       <tr>
                         <th>Time</th>
@@ -308,22 +362,22 @@
                 </div>
               </div>
 
-              <!-- Automated Scanner Control Card -->
-              <div class="card" id="card-scheduler-control">
-                <div class="card-header">
+              <!-- Automated Scheduler Control Card -->
+              <div class="card dash-card" id="card-scheduler-control">
+                <div class="card-header dash-card-header">
                   <div class="card-title-group">
-                    <h3 class="card-title">Automated Scanner</h3>
+                    <h3 class="card-title">Automated Scanner Daemon</h3>
                     <span class="badge badge-outline" id="sched-status-badge">DISABLED</span>
                   </div>
                   <label class="toggle-switch" title="Enable/Disable automated scanning">
-                    <input type="checkbox" id="sched-enabled-toggle">
+                    <input type="checkbox" id="sched-enabled-toggle" aria-label="Enable/Disable automated scanning">
                     <span class="toggle-slider"></span>
                   </label>
                 </div>
 
-                <div class="sched-config-grid">
-                  <div class="sched-row">
-                    <span class="sched-label">Interval</span>
+                <div class="sched-config-grid dash-sched-config-grid">
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label for="sched-interval-select" class="dash-control-label">Interval</label>
                     <select id="sched-interval-select" class="form-control form-control-sm">
                       <option value="5">5 min</option>
                       <option value="10">10 min</option>
@@ -331,23 +385,23 @@
                       <option value="30">30 min</option>
                     </select>
                   </div>
-                  <div class="sched-row">
-                    <span class="sched-label">Scope</span>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label for="sched-scope-select" class="dash-control-label">Scope</label>
                     <select id="sched-scope-select" class="form-control form-control-sm">
                       <option value="POPULAR" selected>Popular competitions</option>
                       <option value="ALL">All within limit</option>
                     </select>
                   </div>
-                  <div class="sched-row">
-                    <span class="sched-label">Time window</span>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label for="sched-window-select" class="dash-control-label">Time window</label>
                     <select id="sched-window-select" class="form-control form-control-sm">
                       <option value="6">6h</option>
                       <option value="12">12h</option>
                       <option value="24" selected>24h</option>
                     </select>
                   </div>
-                  <div class="sched-row">
-                    <span class="sched-label">Event limit</span>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label for="sched-limit-select" class="dash-control-label">Event limit</label>
                     <select id="sched-limit-select" class="form-control form-control-sm">
                       <option value="20">20</option>
                       <option value="50" selected>50</option>
@@ -356,22 +410,22 @@
                   </div>
                 </div>
 
-                <div class="sched-timing">
-                  <div class="sched-timing-row">
-                    <span class="text-muted">Last scan</span>
-                    <span id="sched-last-scan-rel" class="mono">—</span>
+                <div class="sched-timing dash-sched-timing">
+                  <div class="dash-sched-row">
+                    <span class="text-muted">Last Automated Cycle:</span>
+                    <span id="sched-last-scan-rel" class="mono text-secondary">—</span>
                   </div>
-                  <div class="sched-timing-row">
-                    <span class="text-muted">Next scan</span>
-                    <span id="sched-next-scan-rel" class="mono">Disabled</span>
+                  <div class="dash-sched-row">
+                    <span class="text-muted">Next Scheduled Trigger:</span>
+                    <span id="sched-next-scan-rel" class="mono text-primary">Disabled</span>
                   </div>
                 </div>
 
-                <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
-                  <button class="btn btn-outline" id="btn-sched-apply" style="flex:1;">Apply Config</button>
-                  <button class="btn btn-primary" id="btn-sched-run-now" style="flex:1;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    Run Now
+                <div class="dash-sched-actions">
+                  <button class="btn btn-outline btn-sm dash-btn-action" id="btn-sched-apply">Apply Config</button>
+                  <button class="btn btn-primary btn-sm dash-btn-action" id="btn-sched-run-now">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Run Now</span>
                   </button>
                 </div>
               </div>
@@ -379,395 +433,258 @@
           </div>
         </section>
 
-        <!-- OPPORTUNITY EXPLORER VIEW -->
-        <section id="view-opportunities" class="view-section">
-          <!-- Main Explorer List Sub-View -->
-          <div id="opp-explorer-list-view">
-            <div class="section-header">
+        <!-- OPPORTUNITY EXPLORER VIEW (OPPORTUNITY INTELLIGENCE WORKSPACE) -->
+        <section id="view-opportunities" class="view-section" aria-labelledby="opp-heading">
+          <div class="opp-workspace-wrapper">
+            <!-- Workspace Global Header -->
+            <div class="section-header opp-header">
               <div>
-                <h1 class="page-title">Opportunity Explorer</h1>
-                <p class="page-subtitle">Inspect genuine detected betting opportunities, live bookmaker odds, and surebet mathematics.</p>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                  <h1 class="page-title" id="opp-heading">Opportunity Explorer</h1>
+                  <span class="opp-radar-indicator" title="Continuous Pipeline Detection Active"></span>
+                </div>
+                <p class="page-subtitle">Real-time betting intelligence and edge detection across bookmakers and markets.</p>
               </div>
               <div class="action-group">
-                <span class="meta-pill">
+                <span class="meta-pill" title="Timestamp of most recent scanner completion">
                   Last Scan: <strong id="opp-last-scan-pill">—</strong>
                 </span>
-                <button class="btn btn-outline" id="btn-refresh-opps" title="Refresh opportunities">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <button class="btn btn-outline btn-sm" id="btn-toggle-workspace-layout" title="Toggle Split View / Full Feed Focus">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                  <span id="txt-workspace-layout">Split View</span>
+                </button>
+                <button class="btn btn-outline btn-sm" id="btn-refresh-opps" title="Refresh opportunities">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                   Refresh
                 </button>
               </div>
             </div>
 
-            <!-- Opportunity Category Navigation Tabs -->
-            <div class="card" style="margin-bottom: 1rem; padding: 0.5rem 1rem;">
-              <div class="tab-pills" id="explorer-category-tabs" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                <button class="btn btn-sm btn-primary active" data-type="">🔥 All (<span id="tab-count-all">0</span>)</button>
-                <button class="btn btn-sm btn-outline" data-type="PLAYER_PROP">🎯 Player Props (<span id="tab-count-player">0</span>)</button>
-                <button class="btn btn-sm btn-outline" data-type="TEAM_PROP">👥 Team Props (<span id="tab-count-team">0</span>)</button>
-                <button class="btn btn-sm btn-outline" data-type="VALUEBET">💰 Valuebets (<span id="tab-count-value">0</span>)</button>
-                <button class="btn btn-sm btn-outline" data-type="SUREBET">♻️ Surebets (<span id="tab-count-sure">0</span>)</button>
-                <button class="btn btn-sm btn-outline" data-type="BOOSTER">🎁 Boosters (<span id="tab-count-boost">0</span>)</button>
+            <!-- Type Radar Navigation Segment -->
+            <div class="opp-radar-card">
+              <div class="opp-radar-tabs" id="explorer-category-tabs" role="tablist" aria-label="Opportunity Categories">
+                <button class="opp-radar-tab active" data-type="" role="tab" aria-selected="true" id="tab-opp-all">
+                  <span class="radar-tab-name">All Opportunities</span>
+                  <span class="radar-tab-count" id="tab-count-all">0</span>
+                </button>
+                <button class="opp-radar-tab" data-type="VALUEBET" role="tab" aria-selected="false" id="tab-opp-value">
+                  <span class="radar-tab-name">Valuebets</span>
+                  <span class="radar-tab-count" id="tab-count-value">0</span>
+                </button>
+                <button class="opp-radar-tab" data-type="SUREBET" role="tab" aria-selected="false" id="tab-opp-sure">
+                  <span class="radar-tab-name">Surebets</span>
+                  <span class="radar-tab-count" id="tab-count-sure">0</span>
+                </button>
+                <button class="opp-radar-tab" data-type="BOOSTER" role="tab" aria-selected="false" id="tab-opp-boost">
+                  <span class="radar-tab-name">Boosters</span>
+                  <span class="radar-tab-count" id="tab-count-boost">0</span>
+                </button>
+                <button class="opp-radar-tab" data-type="PLAYER_PROP" role="tab" aria-selected="false" id="tab-opp-player">
+                  <span class="radar-tab-name">Player Props</span>
+                  <span class="radar-tab-count" id="tab-count-player">0</span>
+                </button>
+                <button class="opp-radar-tab" data-type="TEAM_PROP" role="tab" aria-selected="false" id="tab-opp-team">
+                  <span class="radar-tab-name">Team Props</span>
+                  <span class="radar-tab-count" id="tab-count-team">0</span>
+                </button>
+                <button class="opp-radar-tab" data-type="WATCHLIST" role="tab" aria-selected="false" id="tab-opp-watchlist">
+                  <span class="radar-tab-name">Watchlist (Near-Arb)</span>
+                  <span class="radar-tab-count" id="tab-count-watchlist">0</span>
+                </button>
               </div>
             </div>
 
-            <!-- Filter Toolbar -->
-            <div class="card filter-card">
-              <div class="filter-row">
-                <div class="filter-group">
-                  <label>Status</label>
-                  <select id="filter-opp-status" class="form-control">
+            <!-- Discovery Toolbar -->
+            <div class="opp-discovery-toolbar">
+              <div class="opp-search-box">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="filter-search-text" class="opp-search-input" placeholder="Search Player, Team, Match, Market, or Bookmaker..." aria-label="Search opportunities">
+                <button type="button" id="btn-clear-search" class="opp-search-clear" title="Clear search text" style="display: none;" aria-label="Clear search">&times;</button>
+              </div>
+
+              <div class="opp-filter-controls">
+                <div class="opp-filter-item">
+                  <label for="filter-opp-status" class="visually-hidden">Status</label>
+                  <select id="filter-opp-status" class="form-control form-control-sm opp-select">
                     <option value="">All Statuses</option>
                     <option value="VALUEBET">VALUEBET (Positive EV)</option>
                     <option value="BETTABLE">BETTABLE (Actionable)</option>
                     <option value="AVAILABLE">AVAILABLE</option>
-                    <option value="REFERENCE_ONLY">REFERENCE_ONLY</option>
-                    <option value="NO_EXECUTION_MARKET">NO_EXECUTION_MARKET</option>
-                    <option value="NO_EXECUTION_ODDS">NO_EXECUTION_ODDS</option>
-                    <option value="MATCH_UNCERTAIN">MATCH_UNCERTAIN</option>
+                    <option value="REFERENCE_ONLY">REFERENCE ONLY</option>
                     <option value="EXPIRED">EXPIRED</option>
                   </select>
                 </div>
 
-                <div class="filter-group">
-                  <label>Bookmaker</label>
-                  <select id="filter-provider" class="form-control">
+                <div class="opp-filter-item">
+                  <label for="filter-provider" class="visually-hidden">Bookmaker</label>
+                  <select id="filter-provider" class="form-control form-control-sm opp-select">
                     <option value="">All Bookmakers</option>
                     <option value="Superbet">Superbet</option>
                     <option value="Betclic">Betclic</option>
+                    <option value="STS">STS</option>
+                    <option value="Fortuna">Fortuna</option>
                     <option value="Bet365">Bet365</option>
                     <option value="Unibet">Unibet</option>
                   </select>
                 </div>
 
-                <div class="filter-group">
-                  <label>Min Score</label>
-                  <input type="number" id="filter-min-score" class="form-control" placeholder="0" step="5" min="0" max="100">
+                <div class="opp-filter-item">
+                  <label for="filter-sort" class="visually-hidden">Sort By</label>
+                  <select id="filter-sort" class="form-control form-control-sm opp-select">
+                    <option value="ev">Sort: Net EV (High)</option>
+                    <option value="score">Sort: Quality Score</option>
+                    <option value="odds">Sort: Odds (High)</option>
+                    <option value="kickoff">Sort: Kickoff (Soonest)</option>
+                    <option value="type">Sort: Opportunity Type</option>
+                  </select>
                 </div>
 
-                <div class="filter-group">
-                  <label>Min Exec Edge %</label>
-                  <input type="number" id="filter-min-exec-edge" class="form-control" placeholder="0.0" step="1.0">
-                </div>
+                <button type="button" class="btn btn-outline btn-sm opp-btn-icon" id="btn-sort-order" title="Toggle Sort Order (Ascending / Descending)" aria-label="Toggle Sort Order">
+                  <span id="sort-order-indicator">↓</span>
+                </button>
 
-                <div class="filter-group">
-                  <label>Min EV %</label>
-                  <input type="number" id="filter-min-roi" class="form-control" placeholder="0.0" step="0.5">
-                </div>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-opp-advanced-filters" title="Threshold filters">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                  Thresholds
+                </button>
 
-                <div class="filter-group" style="flex: 1.5;">
-                  <label>Search Player / Match / Market</label>
-                  <input type="text" id="filter-search-text" class="form-control" placeholder="Search Saka, Arsenal, Over 2.5...">
-                </div>
-              </div>
-            </div>
-
-            <!-- Opportunities List Container Card -->
-            <div class="card" id="card-opps-list">
-              <div class="card-header">
-                <div class="card-title-group">
-                  <h3>Unified Opportunity Explorer</h3>
-                  <span class="badge badge-accent" id="opp-count-badge">0 Found</span>
-                </div>
-                <span class="text-muted" style="font-size: 0.85rem;" id="opp-list-meta-info">Sourced from genuine scanner pipeline & Player Props intelligence</span>
-              </div>
-              <div id="opp-list-content-area">
-                <!-- Dynamically rendered list or zero state -->
-                <div class="not-run-state">
-                  <p class="text-muted">Loading opportunities from backend...</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Opportunity Detail Sub-View (Hidden by default, activated on selection) -->
-          <div id="opp-explorer-detail-view" style="display: none;">
-            <div class="section-header">
-              <div>
-                <button class="btn btn-outline" id="btn-back-to-opp-list">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-                  Back to Opportunities
+                <button type="button" class="btn btn-outline btn-sm" id="btn-reset-opp-filters" title="Reset all search, category, and threshold filters">
+                  Reset
                 </button>
               </div>
-              <div class="action-group">
-                <span class="meta-pill">
-                  Opportunity ID: <strong class="mono" id="detail-opp-id">—</strong>
-                </span>
-                <span class="badge badge-success" id="detail-opp-status-badge">NEW</span>
-              </div>
             </div>
 
-            <div class="opp-detail-grid">
-              <!-- Event & Market Information Card -->
-              <div class="card">
-                <div class="card-header">
-                  <div class="card-title-group">
-                    <h3 class="card-title" id="detail-event-title">Event Information</h3>
-                    <span class="badge badge-outline" id="detail-sport-badge">Football</span>
-                  </div>
-                  <span class="mono text-muted" id="detail-event-id">cev_...</span>
-                </div>
-                <div class="detail-event-body">
-                  <div class="status-grid">
-                    <div class="status-item">
-                      <span>Home Team</span>
-                      <strong id="detail-home-team">—</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Away Team</span>
-                      <strong id="detail-away-team">—</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Competition</span>
-                      <strong id="detail-competition">—</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Scheduled Kickoff</span>
-                      <strong class="mono" id="detail-kickoff">—</strong>
-                    </div>
-                  </div>
-
-                  <hr style="border: 0; border-top: 1px solid var(--bg-card-border); margin: 1rem 0;">
-
-                  <div class="status-grid">
-                    <div class="status-item">
-                      <span>Canonical Market</span>
-                      <strong class="text-accent" id="detail-market-type">1X2</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Market Line</span>
-                      <strong id="detail-market-line">N/A</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Period / Scope</span>
-                      <strong id="detail-market-period">FULL_TIME / MATCH</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Canonical Market Key</span>
-                      <strong class="mono text-muted" id="detail-market-key" style="font-size:0.75rem;">—</strong>
-                    </div>
+            <!-- Advanced Thresholds Collapsible Tray -->
+            <div id="opp-advanced-filters-panel" class="opp-advanced-tray" style="display: none;">
+              <div class="opp-tray-grid">
+                <div class="opp-tray-field">
+                  <label for="filter-min-roi">Min Net EV / Edge %</label>
+                  <div class="opp-input-affix">
+                    <input type="number" id="filter-min-roi" class="form-control form-control-sm" placeholder="e.g. 1.5" step="0.5">
+                    <span class="affix">%</span>
                   </div>
                 </div>
-              </div>
 
-              <!-- Mathematical Arbitrage Explanation Card -->
-              <div class="card">
-                <div class="card-header">
-                  <div class="card-title-group">
-                    <h3 class="card-title">Mathematical Explanation</h3>
-                    <span class="badge badge-success" id="detail-math-arb-badge">S < 1.0</span>
+                <div class="opp-tray-field">
+                  <label for="filter-min-score">Min Quality Score</label>
+                  <div class="opp-input-affix">
+                    <input type="number" id="filter-min-score" class="form-control form-control-sm" placeholder="0 - 100" step="5" min="0" max="100">
+                    <span class="affix">pts</span>
                   </div>
-                  <strong class="text-success" id="detail-math-margin-pct" style="font-size: 1.1rem;">+0.00%</strong>
                 </div>
-                <div class="detail-math-body">
-                  <div class="math-formula-box">
-                    <div class="math-formula-title">Implied Probability Sum Formula:</div>
-                    <div class="math-formula-calc mono" id="detail-math-formula-text">
-                      S = 1/odds_1 + 1/odds_2 + ... = 0.0000
-                    </div>
-                  </div>
 
-                  <div class="status-grid margin-top">
-                    <div class="status-item">
-                      <span>Arbitrage Sum (S)</span>
-                      <strong class="mono text-success" id="detail-math-sum-s">0.0000</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Surebet Threshold</span>
-                      <strong class="mono">S &lt; 1.0000</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Guaranteed Margin</span>
-                      <strong class="mono text-success" id="detail-math-margin-val">+0.00%</strong>
-                    </div>
-                    <div class="status-item">
-                      <span>Margin Formula</span>
-                      <strong class="mono" style="font-size: 0.8rem;">(1 / S) - 1</strong>
-                    </div>
+                <div class="opp-tray-field">
+                  <label for="filter-min-exec-edge">Min Execution Edge %</label>
+                  <div class="opp-input-affix">
+                    <input type="number" id="filter-min-exec-edge" class="form-control form-control-sm" placeholder="e.g. 2.0" step="1.0">
+                    <span class="affix">%</span>
                   </div>
+                </div>
 
-                  <p class="text-muted margin-top" style="font-size: 0.82rem;" id="detail-math-note">
-                    Values calculated directly by backend SurebetDetectorEngine using exact arithmetic.
-                  </p>
+                <div class="opp-tray-field" style="display: flex; align-items: flex-end;">
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-clear-thresholds">Clear Thresholds</button>
                 </div>
               </div>
             </div>
 
-            <!-- Selections & Cross-Bookmaker Odds Matrix Card -->
-            <div class="card margin-top">
-              <div class="card-header">
-                <div class="card-title-group">
-                  <h3 class="card-title">Selections & Cross-Bookmaker Odds Comparison</h3>
-                  <span class="badge badge-outline" id="detail-books-used-badge">2 Bookmakers</span>
-                </div>
-              </div>
-              <div class="table-responsive">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Selection Outcome</th>
-                      <th>Market</th>
-                      <th>Line / Target</th>
-                      <th>Period / Scope</th>
-                      <th>Bookmaker</th>
-                      <th>Raw Odds</th>
-                      <th>Tax Rate</th>
-                      <th>Tax Factor</th>
-                      <th>Effective Net Odds</th>
-                      <th>Net Implied Prob</th>
-                      <th>Source Identifier</th>
-                    </tr>
-                  </thead>
-                  <tbody id="detail-legs-table-body">
-                    <!-- Rendered dynamically -->
-                  </tbody>
-                </table>
-              </div>
+            <!-- Active Filter Chips Ribbon -->
+            <div id="opp-active-filter-chips" class="opp-filter-chips" style="display: none;">
+              <!-- Rendered dynamically -->
             </div>
 
-            <!-- SUREBET STAKE CALCULATOR (STAGE 22B) -->
-            <div class="card margin-top" id="detail-stake-calculator-card">
-              <div class="card-header">
-                <div class="card-title-group">
-                  <h3 class="card-title">♻️ Surebet Stake Calculator</h3>
-                  <span class="badge badge-success" id="detail-calc-roi-badge">ROI: +0.00%</span>
+            <!-- Main Opportunity Intelligence Workspace Layout -->
+            <div id="opp-workspace" class="opp-workspace-layout split-active">
+              <!-- Left / Main Stage: Opportunity Feed -->
+              <div id="opp-feed-pane" class="opp-feed-pane">
+                <div class="opp-feed-header">
+                  <div class="opp-feed-title-group">
+                    <span class="opp-feed-label">Detected Opportunities</span>
+                    <span class="badge badge-accent" id="opp-count-badge">0 Found</span>
+                  </div>
+                  <div class="opp-feed-meta-group">
+                    <span class="text-muted" id="opp-feed-sort-label" style="font-size: 0.75rem;">Ranked by Net EV</span>
+                  </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <label for="detail-calc-total-stake" style="font-size: 0.85rem; margin: 0; color: var(--text-muted);">Total Stake (PLN):</label>
-                  <input type="number" id="detail-calc-total-stake" class="form-control form-control-sm mono" value="1000" min="1" step="50" style="width: 130px; font-weight: 700;">
+
+                <!-- Live Dynamic Feed Container -->
+                <div id="opp-list-content-area" class="opp-feed-content" role="region" aria-label="Opportunity feed">
+                  <div class="not-run-state" style="padding: 3rem 1.5rem; text-align: center;">
+                    <div class="spinner-icon" style="font-size: 1.8rem; margin-bottom: 0.5rem; display: inline-block;">⟳</div>
+                    <p class="text-muted">Loading opportunities from Unified Explorer...</p>
+                  </div>
                 </div>
               </div>
 
-              <!-- Invalid / Non-Surebet Alert Container -->
-              <div id="detail-calc-invalid-alert" style="display: none; padding: 0.85rem 1rem; margin: 1rem; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); color: #FCA5A5;">
-                <strong>⚠️ Non-Surebet Opportunity:</strong> The net implied probability sum S &ge; 1.0. Guaranteed profit cannot be achieved across these odds with configured bookmaker tax rates.
-              </div>
-
-              <!-- Surebet Results Summary Cards -->
-              <div class="status-grid margin-top" id="detail-calc-summary-grid" style="padding: 0 1rem;">
-                <div class="status-item">
-                  <span>Total Capital</span>
-                  <strong class="mono" id="detail-calc-summary-total">1,000.00 PLN</strong>
+              <!-- Right / Contextual Stage: Opportunity Inspector Pane (Desktop Integrated) -->
+              <aside id="opp-inspector-pane" class="opp-inspector-pane" aria-labelledby="opp-inspector-title">
+                <div class="opp-inspector-header">
+                  <div class="opp-inspector-heading-wrap">
+                    <span class="opp-inspector-eyebrow">OPPORTUNITY INSPECTION</span>
+                    <h2 class="opp-inspector-title" id="opp-inspector-title">Select an Opportunity</h2>
+                  </div>
+                  <div class="opp-inspector-actions">
+                    <span class="badge badge-accent" id="opp-inspector-badge" style="display: none;">VALUEBET</span>
+                    <button type="button" class="btn btn-outline btn-xs" id="btn-expand-inspector" title="Expand to fullscreen modal" aria-label="Expand Inspector" style="display: none;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                    </button>
+                    <button type="button" class="btn-close" id="btn-close-inspector" title="Close Inspector" aria-label="Close Inspector" style="display: none;">&times;</button>
+                  </div>
                 </div>
-                <div class="status-item">
-                  <span>Guaranteed Payout</span>
-                  <strong class="mono text-success" id="detail-calc-summary-payout">1,000.00 PLN</strong>
+                <div id="opp-inspector-content" class="opp-inspector-body">
+                  <!-- Empty placeholder or detailed inspection dynamically injected -->
+                  <div class="opp-inspector-placeholder">
+                    <div class="inspector-placeholder-icon">🔍</div>
+                    <div class="inspector-placeholder-title">Select an Opportunity to Inspect</div>
+                    <div class="inspector-placeholder-text">
+                      Click any row in the feed or use keyboard <kbd>↑</kbd> <kbd>↓</kbd> to explore live price comparisons, mathematical proof, consensus fair baseline, and cross-bookmaker execution legs.
+                    </div>
+                  </div>
                 </div>
-                <div class="status-item">
-                  <span>Guaranteed Profit</span>
-                  <strong class="mono text-success" id="detail-calc-summary-profit">+0.00 PLN</strong>
-                </div>
-                <div class="status-item">
-                  <span>Net ROI</span>
-                  <strong class="mono text-success" id="detail-calc-summary-roi">+0.00%</strong>
-                </div>
-              </div>
-
-              <!-- Detailed Leg Distribution Table -->
-              <div class="table-responsive margin-top" style="padding: 0 1rem;">
-                <h4 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85; margin-bottom: 0.5rem;">
-                  Optimal Stake Allocation & Payout Per Leg
-                </h4>
-                <table class="data-table" id="detail-calc-legs-table">
-                  <thead>
-                    <tr>
-                      <th>Outcome</th>
-                      <th>Bookmaker</th>
-                      <th>Raw Odds</th>
-                      <th>Tax Factor</th>
-                      <th>Effective Odds</th>
-                      <th>Weight (%)</th>
-                      <th>Optimal Stake (PLN)</th>
-                      <th>Return on Win (PLN)</th>
-                      <th>Net Profit (PLN)</th>
-                    </tr>
-                  </thead>
-                  <tbody id="detail-calc-legs-body">
-                    <!-- Rendered dynamically -->
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Preset Capital Table (50, 100, 200, 500, 1000 PLN) -->
-              <div class="table-responsive margin-top" style="padding: 0 1rem 1.25rem 1rem;">
-                <h4 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85; margin-bottom: 0.5rem;">
-                  Preset Investment Table
-                </h4>
-                <table class="data-table" id="detail-calc-preset-table">
-                  <thead id="detail-calc-preset-thead">
-                    <!-- Dynamic column headers (Total, Leg 1, Leg 2, [Leg 3], Guaranteed payout, Profit) -->
-                  </thead>
-                  <tbody id="detail-calc-preset-tbody">
-                    <!-- Rendered dynamically for 50, 100, 200, 500, 1000 PLN -->
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Lifecycle & Audit Lineage Card -->
-            <div class="card margin-top">
-              <div class="card-header">
-                <h3 class="card-title">Lifecycle & Detection Audit Lineage</h3>
-              </div>
-              <div class="status-grid">
-                <div class="status-item">
-                  <span>Lifecycle Status</span>
-                  <span class="badge badge-success" id="detail-audit-status">NEW</span>
-                </div>
-                <div class="status-item">
-                  <span>First Detected</span>
-                  <strong class="mono" id="detail-audit-first-seen">—</strong>
-                </div>
-                <div class="status-item">
-                  <span>Last Seen / Scan</span>
-                  <strong class="mono" id="detail-audit-last-seen">—</strong>
-                </div>
-                <div class="status-item">
-                  <span>Last Price Change</span>
-                  <strong class="mono" id="detail-audit-last-changed">—</strong>
-                </div>
-                <div class="status-item">
-                  <span>Last Notification</span>
-                  <strong class="mono" id="detail-audit-last-alerted">—</strong>
-                </div>
-                <div class="status-item">
-                  <span>Consecutive Misses</span>
-                  <strong class="mono" id="detail-audit-misses">0</strong>
-                </div>
-              </div>
+              </aside>
             </div>
           </div>
+
         </section>
 
         <!-- PROVIDER MONITOR VIEW -->
-        <section id="view-providers" class="view-section">
+        <section id="view-providers" class="view-section" aria-labelledby="providers-heading">
           <div class="section-header">
             <div>
-              <h1 class="page-title">Provider Framework Monitor</h1>
-              <p class="page-subtitle">Inspect provider health, execution durations, discovery rates, and trigger manual runs.</p>
+              <h1 class="page-title" id="providers-heading">Provider & Scraper Monitor</h1>
+              <p class="page-subtitle">Real-time health telemetry, quota tracking, circuit breakers, and rate limit diagnostics.</p>
+            </div>
+            <div class="action-group">
+              <button class="btn btn-outline btn-sm" id="btn-refresh-providers" title="Refresh provider health">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Refresh
+              </button>
             </div>
           </div>
 
-          <div class="providers-grid" id="providers-cards-container">
-            <!-- Rendered dynamically via app.js -->
+          <!-- Provider Cards Grid -->
+          <div class="dashboard-grid" id="providers-cards-container" style="margin-bottom: 1.25rem;">
+            <!-- Rendered dynamically -->
           </div>
 
-          <div class="card margin-top">
+          <!-- Provider Audit Table -->
+          <div class="card">
             <div class="card-header">
-              <h3 class="card-title">Provider Performance & Audit Log</h3>
+              <h3 class="card-title">Provider Performance & Coverage Audit</h3>
             </div>
             <div class="table-responsive">
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>Provider</th>
+                    <th>Type</th>
                     <th>Status</th>
-                    <th>Last Run Duration</th>
                     <th>Discovered</th>
                     <th>Parsed</th>
-                    <th>Errors</th>
-                    <th>Warnings</th>
-                    <th>Quick Actions</th>
+                    <th>Normalized</th>
+                    <th>Matched</th>
+                    <th>Duration</th>
+                    <th>Circuit Breaker</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody id="provider-table-body">
@@ -778,122 +695,168 @@
           </div>
         </section>
 
-        <!-- EVENT BROWSER VIEW -->
-        <section id="view-events" class="view-section">
+        <!-- CANONICAL EVENT BROWSER: MARKET INTELLIGENCE WORKSPACE -->
+        <section id="view-events" class="view-section" aria-labelledby="events-heading">
+          <!-- Workspace Header -->
           <div class="section-header">
             <div>
-              <h1 class="page-title">Event & Market Explorer</h1>
-              <p class="page-subtitle">Inspect genuine canonical events, cross-bookmaker coverage, market lines, and live odds comparison matrices.</p>
+              <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+                <h1 class="page-title" id="events-heading" style="margin-bottom: 0;">Market Intelligence Workspace</h1>
+                <span class="badge badge-accent" style="font-size: 0.72rem; letter-spacing: 0.04em;">EVENT COVERAGE</span>
+              </div>
+              <p class="page-subtitle">Multi-bookmaker market normalization, depth coverage analytics, and cross-bookmaker odds comparison.</p>
             </div>
             <div class="action-group">
-              <span class="meta-pill" id="events-scan-context-pill">
-                Latest Scan: <strong id="events-scan-time-label">—</strong>
+              <div class="workspace-view-switcher" role="radiogroup" aria-label="View Mode">
+                <button type="button" class="view-mode-btn active" id="btn-mode-workspace" data-mode="workspace" title="Focused Event Workspace">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  Event Workspace
+                </button>
+                <button type="button" class="view-mode-btn" id="btn-mode-matrix" data-mode="matrix" title="All Fixtures Coverage Matrix">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  All Fixtures Matrix (<span id="events-matrix-count" class="mono">—</span>)
+                </button>
+              </div>
+              <span class="meta-pill">
+                Fixtures: <strong id="events-count-pill" class="mono">—</strong>
               </span>
-              <button class="btn btn-outline" id="btn-refresh-events" title="Refresh Events">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <button class="btn btn-outline btn-sm" id="btn-refresh-events" title="Refresh events and coverage data">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 Refresh
               </button>
             </div>
           </div>
 
-          <!-- Multi-Criteria Event Filter Toolbar -->
-          <div class="card filter-card">
-            <div class="filter-row">
-              <div class="filter-group">
-                <label>Sport</label>
-                <select id="filter-event-sport" class="form-control">
-                  <option value="">All Sports</option>
-                  <option value="football">Football</option>
-                </select>
+          <!-- Sticky / Top Fixture Ribbon (Discovery & Fast Switcher) -->
+          <div class="card fixture-switch-ribbon" id="fixture-switch-ribbon">
+            <div class="ribbon-label">
+              <span class="ribbon-tag">ACTIVE FIXTURE</span>
+              <div class="ribbon-match-info" id="ribbon-match-info">
+                <strong class="ribbon-teams" id="ribbon-active-teams">Loading top event...</strong>
+                <span class="ribbon-meta" id="ribbon-active-meta">—</span>
               </div>
+            </div>
+            <div class="ribbon-chips-container" id="ribbon-quick-chips">
+              <!-- Dynamically populated with top ranked matches chips: [ #1 Real Sociedad (612) ], [ #2 Raków (468) ], etc. -->
+            </div>
+            <div class="ribbon-actions">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-open-fixture-selector">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Browse All (<span id="ribbon-all-count">0</span>)
+              </button>
+            </div>
+          </div>
 
-              <div class="filter-group">
-                <label>Competition</label>
-                <input type="text" id="filter-event-competition" class="form-control" placeholder="All Competitions...">
-              </div>
-
-              <div class="filter-group">
-                <label>Bookmaker</label>
-                <select id="filter-event-provider" class="form-control">
-                  <option value="">All Bookmakers</option>
-                  <option value="superbet">Superbet</option>
-                  <option value="betclic">Betclic</option>
-                  <option value="bet365">Bet365 (via Odds API)</option>
-                  <option value="unibet">Unibet (via Odds API)</option>
-                </select>
-              </div>
-
-              <div class="filter-group">
-                <label>Matching Status</label>
-                <select id="filter-event-matched" class="form-control">
-                  <option value="">All Events</option>
-                  <option value="true">Matched (Multi-Bookmaker)</option>
-                  <option value="false">Single Bookmaker (Unmatched)</option>
-                </select>
-              </div>
-
-              <div class="filter-group">
-                <label>Search Teams / ID</label>
-                <input type="text" id="filter-event-search" class="form-control" placeholder="Search team or event ID...">
+          <!-- VIEW MODE 1: FOCUSED EVENT WORKSPACE -->
+          <div id="event-workspace-view" class="intel-view-mode">
+            <!-- Event Intelligence Container (rendered dynamically by loadEventDetail) -->
+            <div id="event-detail-container" class="event-workspace-canvas">
+              <div class="empty-state" style="padding: 3rem 1rem;">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <p style="margin-top: 0.75rem; font-weight: 600;">Loading Market Intelligence Workspace...</p>
+                <span class="text-muted" style="font-size: 0.8rem;">Resolving cross-bookmaker market coverage and depth...</span>
               </div>
             </div>
           </div>
 
-          <!-- Explorer 2-Column Layout -->
-          <div class="events-layout">
-            <!-- Left Column: Canonical Events List -->
-            <div class="card events-list-card">
-              <div class="card-header">
-                <div class="card-title-group">
-                  <h3 class="card-title">Canonical Events</h3>
-                  <span class="badge badge-accent" id="events-count-badge">0 Events</span>
+          <!-- VIEW MODE 2: ALL FIXTURES COVERAGE MATRIX (High-density Table) -->
+          <div id="events-matrix-view" class="intel-view-mode" style="display: none;">
+            <div class="card" style="margin-bottom: 0;">
+              <div class="matrix-filter-bar">
+                <div class="search-input-wrapper" style="flex: 2;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input type="text" id="filter-matrix-search" placeholder="Search team or competition (e.g. Sociedad, Ekstraklasa)..." class="form-input">
                 </div>
+                <select id="filter-matrix-competition" class="form-select" style="flex: 1.2;">
+                  <option value="">All Competitions</option>
+                </select>
+                <select id="filter-matrix-coverage" class="form-select" style="flex: 1;">
+                  <option value="ALL">All Coverage</option>
+                  <option value="DEEP">Deep Coverage (&ge; 40 mkts)</option>
+                  <option value="MEGA">Mega Coverage (&ge; 400 mkts)</option>
+                  <option value="OPPS">Has Opportunity (SB/VB)</option>
+                </select>
               </div>
-              <div class="events-list" id="canonical-events-list">
-                <div class="not-run-state">
-                  <p class="text-muted">Loading events from genuine scanner pipeline...</p>
-                </div>
+
+              <div class="table-responsive" style="max-height: 720px; overflow-y: auto;">
+                <table class="data-table matrix-table" id="fixtures-matrix-table">
+                  <thead style="position: sticky; top: 0; z-index: 10; background: var(--surface-card);">
+                    <tr>
+                      <th style="width: 50px;">Rank</th>
+                      <th>Fixture</th>
+                      <th>Competition</th>
+                      <th>Kickoff</th>
+                      <th>Primary Signal (Matched Mkts)</th>
+                      <th>Bookmaker Lineage</th>
+                      <th>Signals / Opportunities</th>
+                      <th style="text-align: right;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fixtures-matrix-tbody">
+                    <tr><td colspan="8" class="text-center text-muted" style="padding: 2.5rem;">Loading fixtures...</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
+          </div>
 
-            <!-- Right Column: Selected Event Detail & Market Matrix -->
-            <div class="card event-detail-card" id="event-detail-container">
-              <div class="empty-state">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                <p>Select an event from the list to view markets and bookmaker odds matrix.</p>
+          <!-- Hidden container to preserve legacy element if any external script queries it -->
+          <div id="canonical-events-list" style="display: none;"></div>
+
+          <!-- FIXTURE QUICK SELECTOR MODAL -->
+          <div id="fixture-selector-backdrop" class="modal-backdrop"></div>
+          <div id="fixture-selector-modal" class="fixture-modal" role="dialog" aria-modal="true" aria-labelledby="fixture-selector-title">
+            <div class="fixture-modal-header">
+              <div>
+                <h3 id="fixture-selector-title" style="margin: 0; font-size: 1.1rem; font-weight: 700;">Select Fixture to Inspect</h3>
+                <p class="text-muted" style="margin: 0.2rem 0 0 0; font-size: 0.78rem;">Sorted by matched market coverage (highest overlap first).</p>
               </div>
+              <button type="button" class="btn-close-modal" id="btn-close-fixture-modal" aria-label="Close Fixture Selector">✕</button>
+            </div>
+            <div class="fixture-modal-search">
+              <input type="text" id="modal-fixture-search" placeholder="Type team or league to filter instantly..." class="form-input" autofocus>
+            </div>
+            <div class="fixture-modal-list" id="modal-fixture-list">
+              <!-- Dynamically populated with fast-selectable fixture items -->
             </div>
           </div>
         </section>
 
-        <!-- PLAYER PROPS INTELLIGENCE VIEW (StatsHub + Opportunity Engine) -->
-        <section id="view-playerprops" class="view-section">
+        <!-- GLOBAL PROPS SCANNER UI (Player & Team Props Decision Workspace) -->
+        <section id="view-playerprops" class="view-section" aria-labelledby="props-heading">
           <div class="section-header">
             <div>
-              <h1 class="page-title">Player Props Intelligence Engine</h1>
-              <p class="page-subtitle">StatsHub statistics &bull; Complete dataset &bull; Decision engine &bull; Execution-bookmaker comparison.</p>
+              <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+                <h1 class="page-title" id="props-heading" style="margin-bottom: 0;">Global Props Scanner</h1>
+                <div class="scope-switcher" id="props-scope-switcher" role="radiogroup" aria-label="Props Scope">
+                  <button type="button" class="scope-btn" id="props-scope-player" data-scope="PLAYER">PLAYER</button>
+                  <button type="button" class="scope-btn" id="props-scope-team" data-scope="TEAM">TEAM</button>
+                  <button type="button" class="scope-btn active" id="props-scope-all" data-scope="ALL">ALL</button>
+                </div>
+              </div>
+              <p class="page-subtitle">Multi-fixture valuebet scanner across Superbet & Betclic for Player & Team Props backed by StatsHub trends.</p>
             </div>
             <div class="action-group">
               <span class="meta-pill">
                 Provider: <span class="badge badge-accent" id="props-provider-status">StatsHub Live</span>
               </span>
               <span class="meta-pill">
-                Pages: <strong id="props-pages-count">—</strong>
+                Fixtures: <strong id="props-pages-count" class="mono">—</strong>
               </span>
               <button class="btn btn-primary" id="btn-scan-props">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <span id="btn-scan-props-text">Scan Props</span>
               </button>
             </div>
           </div>
 
           <!-- Summary Telemetry Cards -->
-          <div class="metrics-grid" style="margin-bottom: 1.25rem;">
+          <div class="metrics-grid">
             <div class="card metric-card border-accent">
-              <div class="metric-icon accent-glow">📡</div>
+              <div class="metric-icon">📡</div>
               <div class="metric-details">
-                <span class="metric-title">Props Scanned</span>
-                <span class="metric-num" id="props-stat-scanned">0</span>
+                <span class="metric-title">Trends Discovered</span>
+                <span class="metric-num mono" id="props-stat-scanned">0</span>
                 <span class="metric-foot" id="props-stat-source-total">Complete StatsHub Dataset</span>
               </div>
             </div>
@@ -902,7 +865,7 @@
               <div class="metric-icon">🇵🇱</div>
               <div class="metric-details">
                 <span class="metric-title">Polish Odds</span>
-                <span class="metric-num text-info" id="props-stat-polish-odds">0</span>
+                <span class="metric-num mono text-info" id="props-stat-polish-odds">0</span>
                 <span class="metric-foot">Superbet &bull; Betclic Quotes</span>
               </div>
             </div>
@@ -911,7 +874,7 @@
               <div class="metric-icon">⚡</div>
               <div class="metric-details">
                 <span class="metric-title">Bettable Now</span>
-                <span class="metric-num text-success" id="props-stat-bettable">0</span>
+                <span class="metric-num mono text-success" id="props-stat-bettable">0</span>
                 <span class="metric-foot">Active Verified Polish Odds</span>
               </div>
             </div>
@@ -920,7 +883,7 @@
               <div class="metric-icon">🌐</div>
               <div class="metric-details">
                 <span class="metric-title">Reference Only</span>
-                <span class="metric-num text-warning" id="props-stat-ref-only">0</span>
+                <span class="metric-num mono text-warning" id="props-stat-ref-only">0</span>
                 <span class="metric-foot">Bet365 / Global Baseline</span>
               </div>
             </div>
@@ -929,282 +892,343 @@
               <div class="metric-icon">⚠️</div>
               <div class="metric-details">
                 <span class="metric-title">Match Uncertain</span>
-                <span class="metric-num text-danger" id="props-stat-uncertain">0</span>
+                <span class="metric-num mono text-danger" id="props-stat-uncertain">0</span>
                 <span class="metric-foot">Unverified Cross-Mapping</span>
               </div>
             </div>
           </div>
 
           <!-- Scan Diagnostics Collapsible Panel -->
-          <details class="card scan-diagnostics-card" id="props-diagnostics-panel" style="margin-bottom: 1.25rem; cursor: pointer;">
-            <summary style="padding: 0.85rem 1.25rem; font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; justify-content: space-between; user-select: none;">
+          <details class="card scan-diagnostics-card" id="props-diagnostics-panel" style="margin-bottom: 1.25rem;">
+            <summary style="padding: 0.65rem 1rem; font-weight: 600; font-size: 0.86rem; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
               <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span class="badge badge-accent">🔬 SCAN & MATCHING FUNNEL DIAGNOSTICS</span>
-                <span class="text-muted" style="font-size: 0.8rem; font-weight: normal;">Click to inspect acquisition lineage and cross-bookmaker matching telemetry</span>
+                <span class="badge badge-accent">🔬 SCAN & FUNNEL REJECTION DIAGNOSTICS</span>
+                <span class="text-muted" style="font-size: 0.78rem; font-weight: normal;">Multi-fixture funnel metrics and rejection breakdown</span>
               </div>
-              <span class="text-muted" style="font-size: 0.78rem;">Expand Funnel ▼</span>
+              <span class="text-muted" style="font-size: 0.76rem;">Expand Funnel ▼</span>
             </summary>
-            <div style="padding: 0.5rem 1.25rem 1.25rem 1.25rem; border-top: 1px solid var(--bg-card-border); cursor: default;">
-              <div class="diagnostics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-top: 0.5rem;">
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Source Provider</div>
-                  <strong style="font-size: 1rem;">StatsHub</strong>
+            <div style="padding: 0.5rem 1rem 1rem 1rem; border-top: 1px solid var(--border-subtle);">
+              <div class="diagnostics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.65rem; margin-top: 0.5rem;">
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Source Provider</div>
+                  <strong style="font-size: 0.9rem;">StatsHub (Live)</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Pages Fetched</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Pages / Fixtures</div>
                   <strong class="mono" id="diag-pages-fetched">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Props Acquired</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Props Acquired</div>
                   <strong class="mono" id="diag-props-acquired">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Reference Odds</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Reference Odds</div>
                   <strong class="mono text-success" id="diag-ref-odds">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Execution Candidates</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Execution Candidates</div>
                   <strong class="mono" id="diag-exec-candidates">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Parsed Execution Quotes</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Parsed Execution Quotes</div>
                   <strong class="mono" id="diag-exec-quotes">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Active Polish Odds</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Active Polish Odds</div>
                   <strong class="mono text-info" id="diag-active-polish">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Bettable Status</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Bettable Status</div>
                   <strong class="mono text-success" id="diag-bettable-count">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Reference Only</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Reference Only</div>
                   <strong class="mono text-warning" id="diag-ref-only">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">No Execution Market</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">No Execution Market</div>
                   <strong class="mono text-muted" id="diag-no-exec">0</strong>
                 </div>
-                <div class="diag-stat-box">
-                  <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase;">Match Uncertain</div>
+                <div class="diag-stat-box" style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.45rem 0.65rem;">
+                  <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase;">Match Uncertain</div>
                   <strong class="mono text-danger" id="diag-uncertain">0</strong>
+                </div>
+              </div>
+
+              <!-- Rejection Breakdown by Reason Codes -->
+              <div id="props-rejection-breakdown-container" style="margin-top: 0.85rem; padding-top: 0.65rem; border-top: 1px dashed var(--border-subtle);">
+                <div style="font-size: 0.76rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem;">
+                  REJECTION BREAKDOWN (REASON CODES):
+                </div>
+                <div id="props-rejection-chips" style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                  <span class="text-muted" style="font-size: 0.78rem;">No rejections recorded yet.</span>
                 </div>
               </div>
             </div>
           </details>
 
-          <!-- Controls / Filter Panel -->
-          <div class="card props-filter-card" style="margin-bottom: 1.25rem;">
-            <div class="props-controls-grid">
-              <div class="form-group">
-                <label>Stat Type</label>
-                <select id="props-filter-stat" class="form-control">
-                  <option value="shots" selected>Shots</option>
-                  <option value="shotsOnTarget">Shots On Target</option>
-                  <option value="goals">Goals</option>
-                  <option value="assists">Assists</option>
-                  <option value="passes">Passes</option>
-                  <option value="tackles">Tackles</option>
-                  <option value="fouls">Fouls</option>
-                  <option value="cards">Cards</option>
+          <!-- 2-Tier Compact Filter Toolbar -->
+          <div class="card filter-card" style="margin-bottom: 1.25rem;">
+            <!-- Tier 1: Primary Controls -->
+            <div class="filter-row" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;">
+              <div class="filter-group" style="flex: 2; min-width: 200px;">
+                <label for="props-filter-search">Search Player / Team / Match</label>
+                <input type="text" id="props-filter-search" class="form-control form-control-sm" placeholder="Search Vinicius, Arsenal, Over 1.5...">
+              </div>
+
+              <div class="filter-group" style="flex: 1; min-width: 140px;">
+                <label for="props-filter-stat">Stat Type</label>
+                <select id="props-filter-stat" class="form-control form-control-sm">
+                  <option value="" selected>All Stat Types</option>
+                  <optgroup label="Player Props" id="props-optgroup-player">
+                    <option value="shots" data-scope="PLAYER">Shots</option>
+                    <option value="shots_on_target" data-scope="PLAYER">Shots on Target</option>
+                    <option value="goals" data-scope="PLAYER">Goals</option>
+                    <option value="assists" data-scope="PLAYER">Assists</option>
+                    <option value="fouls" data-scope="PLAYER">Fouls</option>
+                    <option value="cards" data-scope="PLAYER">Cards</option>
+                    <option value="passes" data-scope="PLAYER">Passes</option>
+                    <option value="tackles" data-scope="PLAYER">Tackles</option>
+                  </optgroup>
+                  <optgroup label="Team Props" id="props-optgroup-team">
+                    <option value="team_shots" data-scope="TEAM">Shots</option>
+                    <option value="team_shots_on_target" data-scope="TEAM">Shots on Target</option>
+                    <option value="team_goals" data-scope="TEAM">Goals</option>
+                    <option value="team_fouls" data-scope="TEAM">Fouls</option>
+                    <option value="team_cards" data-scope="TEAM">Cards</option>
+                    <option value="team_corners" data-scope="TEAM">Corners</option>
+                    <option value="team_offsides" data-scope="TEAM">Offsides</option>
+                  </optgroup>
                 </select>
               </div>
 
-              <div class="form-group">
-                <label>Position</label>
-                <select id="props-filter-position" class="form-control">
-                  <option value="D,M,F" selected>All Outfield (D, M, F)</option>
-                  <option value="F">Forwards (F)</option>
-                  <option value="M">Midfielders (M)</option>
-                  <option value="D">Defenders (D)</option>
+              <div class="filter-group" style="width: 110px;">
+                <label for="props-filter-min-ev">Min Net EV (%)</label>
+                <input type="number" id="props-filter-min-ev" class="form-control form-control-sm" value="3.0" min="0" max="100" step="0.5">
+              </div>
+
+              <div class="filter-group" style="width: 130px;">
+                <label for="props-filter-horizon">Time Horizon</label>
+                <select id="props-filter-horizon" class="form-control form-control-sm">
+                  <option value="1">Next 24h</option>
+                  <option value="3">Next 3 Days</option>
+                  <option value="7" selected>Next 7 Days</option>
+                  <option value="14">Next 14 Days</option>
                 </select>
               </div>
 
-              <div class="form-group">
-                <label>Last Games</label>
-                <select id="props-filter-lastgames" class="form-control">
-                  <option value="5">Last 5</option>
-                  <option value="10" selected>Last 10</option>
-                  <option value="15">Last 15</option>
-                  <option value="20">Last 20</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label>Min Hit Rate (%)</label>
-                <input type="number" id="props-filter-min-hitrate" class="form-control" value="0" min="0" max="100" step="5">
-              </div>
-
-              <div class="form-group">
-                <label>Min Odds</label>
-                <input type="number" id="props-filter-min-odds" class="form-control" value="1.0" min="1.00" step="0.05">
-              </div>
-
-              <div class="form-group">
-                <label>Stat Threshold / Line</label>
-                <select id="props-filter-threshold" class="form-control">
-                  <option value="0" selected>All Lines</option>
-                  <option value="1">Over 0.5 (≥ 1)</option>
-                  <option value="2">Over 1.5 (≥ 2)</option>
-                  <option value="3">Over 2.5 (≥ 3)</option>
-                  <option value="4">Over 3.5 (≥ 4)</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label>Bookmaker Filter</label>
-                <select id="props-filter-bookmaker" class="form-control">
-                  <option value="" selected>All Bookmakers</option>
-                  <option value="superbet">Superbet (Execution)</option>
-                  <option value="betclic">Betclic (Execution)</option>
-                  <option value="bet365">Bet365 (Reference)</option>
-                  <option value="paddypower">Paddy Power (Reference)</option>
-                  <option value="kambi">Kambi (Reference)</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label>Execution Status</label>
-                <select id="props-filter-exec-status" class="form-control">
-                  <option value="" selected>All Statuses</option>
-                  <option value="VALUEBET">VALUEBET (Superbet / Betclic EV+)</option>
-                  <option value="BETTABLE">BETTABLE (Actionable Now)</option>
-                  <option value="WITH_POLISH_ODDS">WITH POLISH ODDS</option>
-                  <option value="REFERENCE_ONLY">REFERENCE ONLY (Bet365 / Global)</option>
-                  <option value="NO_EXECUTION_MARKET">No Execution Market</option>
-                  <option value="NO_EXECUTION_ODDS">No Execution Odds</option>
-                  <option value="MATCH_UNCERTAIN">Match Uncertain</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label>Min Exec Edge (pp)</label>
-                <input type="number" id="props-filter-min-exec-edge" class="form-control" placeholder="e.g. 5" step="1">
-              </div>
-
-              <div class="form-group">
-                <label>Min Stat Edge (pp)</label>
-                <input type="number" id="props-filter-min-stat-edge" class="form-control" placeholder="e.g. 5" step="1">
-              </div>
-
-              <div class="form-group">
-                <label>Sort By</label>
-                <select id="props-filter-sortby" class="form-control">
-                  <option value="score" selected>Decision Score</option>
-                  <option value="ev">Expected Value (EV %)</option>
-                  <option value="exec_edge">Execution Edge (Polish Bookies)</option>
-                  <option value="stat_edge">Statistical Edge (Reference)</option>
-                  <option value="hit_rate">Historical Hit Rate</option>
-                  <option value="avg">Stat Average (Per Game)</option>
-                  <option value="l5">Last 5 Average (L5)</option>
-                  <option value="l10">Last 10 Average (L10)</option>
-                  <option value="exec_odds">Execution Odds</option>
-                  <option value="ref_odds">Reference Odds</option>
+              <div class="filter-group" style="width: 140px;">
+                <label for="props-filter-sortby">Sort By</label>
+                <select id="props-filter-sortby" class="form-control form-control-sm">
+                  <option value="net_ev" selected>Net EV (High)</option>
+                  <option value="hit_rate">Hit Rate (High)</option>
+                  <option value="odds">Odds (High)</option>
                   <option value="sample_size">Sample Size</option>
+                  <option value="gross_ev">Gross EV</option>
+                  <option value="name">Name (A-Z)</option>
                 </select>
               </div>
 
-              <div class="form-group" style="grid-column: span 2;">
-                <label>Search (Player, Team, Opponent, Match, League)</label>
-                <input type="text" id="props-filter-search" class="form-control" placeholder="Search player (e.g. Mbappe), team, opponent, match...">
+              <div style="display: flex; gap: 0.4rem; align-items: flex-end;">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-advanced-filters" title="Toggle more filters">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+                  <span>More Filters</span>
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-reset-props-filters" title="Reset all filters to defaults">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                  <span>Reset</span>
+                </button>
               </div>
             </div>
 
+            <!-- Tier 2: Secondary / Collapsible Controls -->
+            <div id="props-advanced-filters-panel" style="display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle);">
+              <div class="props-controls-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.65rem;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-tournaments">Competition / League</label>
+                  <select id="props-filter-tournaments" class="form-control form-control-sm">
+                    <option value="" selected>All Competitions</option>
+                    <option value="Premier League">Premier League</option>
+                    <option value="La Liga">La Liga</option>
+                    <option value="Serie A">Serie A</option>
+                    <option value="Bundesliga">Bundesliga</option>
+                    <option value="Ligue 1">Ligue 1</option>
+                    <option value="Champions League">Champions League</option>
+                    <option value="Ekstraklasa">Ekstraklasa</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-min-odds">Min Odds</label>
+                  <input type="number" id="props-filter-min-odds" class="form-control form-control-sm" value="1.0" min="1.00" step="0.05">
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-position">Position / Role</label>
+                  <select id="props-filter-position" class="form-control form-control-sm">
+                    <option value="D,M,F" selected>All Positions</option>
+                    <option value="F">Forwards (F)</option>
+                    <option value="M">Midfielders (M)</option>
+                    <option value="D">Defenders (D)</option>
+                    <option value="HOME">Home Only</option>
+                    <option value="AWAY">Away Only</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-threshold">Stat Line / Threshold</label>
+                  <select id="props-filter-threshold" class="form-control form-control-sm">
+                    <option value="" selected>All Lines</option>
+                    <option value="0.5">Over 0.5</option>
+                    <option value="1.5">Over 1.5</option>
+                    <option value="2.5">Over 2.5</option>
+                    <option value="3.5">Over 3.5</option>
+                    <option value="4.5">Over 4.5</option>
+                    <option value="5.5">Over 5.5</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-bookmaker">Bookmaker</label>
+                  <select id="props-filter-bookmaker" class="form-control form-control-sm">
+                    <option value="" selected>All Bookmakers</option>
+                    <option value="Superbet">Superbet (Exec)</option>
+                    <option value="Betclic">Betclic (Exec)</option>
+                    <option value="Bet365">Bet365 (Ref)</option>
+                    <option value="Unibet">Unibet (Ref)</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-exec-status">Status / Pipeline Result</label>
+                  <select id="props-filter-exec-status" class="form-control form-control-sm">
+                    <option value="" selected>All Statuses</option>
+                    <option value="QUALIFIED">QUALIFIED (Value Bet)</option>
+                    <option value="BELOW_VALUE_THRESHOLD">BELOW_VALUE_THRESHOLD</option>
+                    <option value="INSUFFICIENT_REFERENCE_SOURCES">REF_GAP</option>
+                    <option value="POLISH_ODDS_UNAVAILABLE">NO_POLISH_ODDS</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-limit">Max Results</label>
+                  <select id="props-filter-limit" class="form-control form-control-sm">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Hidden compatibility inputs -->
+            <input type="hidden" id="props-filter-lastgames" value="10">
+            <input type="hidden" id="props-filter-min-hitrate" value="0">
+            <input type="hidden" id="props-filter-min-exec-edge" value="">
+            <input type="hidden" id="props-filter-min-stat-edge" value="">
+
             <!-- Category Filter Tabs -->
-            <div class="market-tabs-container" style="margin-top: 1rem; border-top: 1px solid var(--bg-card-border); padding-top: 0.75rem;">
-              <button class="market-tab-btn active" id="props-tab-all" data-category="all">
-                All Scanned Props <span class="badge badge-outline" id="tab-count-all">0</span>
+            <div class="market-tabs-container" style="margin-top: 0.85rem; border-top: 1px solid var(--border-subtle); padding-top: 0.65rem;">
+              <button class="market-tab-btn active" id="props-tab-top-value" data-category="top_value">
+                🏆 Top Valuebets <span class="badge badge-accent" id="tab-count-valuebet">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-valuebet" data-category="valuebets">
-                💰 Valuebets <span class="badge badge-accent" id="tab-count-valuebet">0</span>
+              <button class="market-tab-btn" id="props-tab-diagnostics" data-category="diagnostics">
+                🔬 All Candidates / Diagnostics <span class="badge badge-outline" id="tab-count-diagnostics">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-bettable" data-category="bettable">
-                ⚡ Bettable Now <span class="badge badge-success" id="tab-count-bettable">0</span>
+              <button class="market-tab-btn" id="props-tab-player" data-category="player">
+                👤 Player Props <span class="badge badge-outline" id="tab-count-player">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-polish" data-category="with_polish_odds">
-                🇵🇱 With Polish Odds <span class="badge badge-info" id="tab-count-polish">0</span>
+              <button class="market-tab-btn" id="props-tab-team" data-category="team">
+                🛡️ Team Props <span class="badge badge-outline" id="tab-count-team">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-ref" data-category="reference_only">
-                🌐 Reference Only <span class="badge badge-warning" id="tab-count-ref">0</span>
+              <button class="market-tab-btn" id="props-tab-superbet" data-category="superbet">
+                🔴 Superbet <span class="badge badge-info" id="tab-count-superbet">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-no-exec" data-category="no_execution_market">
-                ❌ No Execution Market <span class="badge badge-outline" id="tab-count-no-exec">0</span>
+              <button class="market-tab-btn" id="props-tab-betclic" data-category="betclic">
+                🔵 Betclic <span class="badge badge-info" id="tab-count-betclic">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-uncertain" data-category="match_uncertain">
-                ⚠️ Match Uncertain <span class="badge badge-danger" id="tab-count-uncertain">0</span>
+              <button class="market-tab-btn" id="props-tab-below-threshold" data-category="below_threshold">
+                ⚠️ Below Threshold <span class="badge badge-outline" id="tab-count-below-threshold">0</span>
               </button>
+              <button class="market-tab-btn" id="props-tab-ref-gap" data-category="ref_gap">
+                🌐 Reference Gap <span class="badge badge-outline" id="tab-count-ref-gap">0</span>
+              </button>
+              <button class="market-tab-btn" id="props-tab-no-polish" data-category="no_polish">
+                ⚪ No Polish Odds <span class="badge badge-outline" id="tab-count-no-polish">0</span>
+              </button>
+              <!-- Hidden compatibility buttons -->
+              <button class="market-tab-btn" id="props-tab-all" data-category="all" style="display:none;"></button>
+              <button class="market-tab-btn" id="props-tab-valuebet" data-category="valuebets" style="display:none;"></button>
+              <button class="market-tab-btn" id="props-tab-bettable" data-category="bettable" style="display:none;"></button>
+              <button class="market-tab-btn" id="props-tab-polish" data-category="with_polish_odds" style="display:none;"></button>
+              <button class="market-tab-btn" id="props-tab-ref" data-category="reference_only" style="display:none;"></button>
+              <button class="market-tab-btn" id="props-tab-no-exec" data-category="no_execution_market" style="display:none;"></button>
+              <button class="market-tab-btn" id="props-tab-uncertain" data-category="match_uncertain" style="display:none;"></button>
             </div>
           </div>
 
           <!-- Alert / Status Container -->
           <div id="props-alert-container"></div>
 
-          <!-- Main Results Area -->
-          <div class="props-layout-grid">
+          <!-- Main Results Area (Full Width Workspace) -->
+          <div class="props-layout-grid" style="display: block;">
             <!-- Props Table Card -->
-            <div class="card" id="props-table-container" style="flex: 2;">
+            <div class="card" id="props-table-container">
               <div class="card-header">
                 <div class="card-title-group">
-                  <h3 class="card-title" id="props-table-title">Player Props Decision Workspace</h3>
-                  <span class="badge badge-outline" id="props-table-count">0 Props</span>
+                  <h3 class="card-title" id="props-table-title">Global Props Scanner Workspace</h3>
+                  <span class="badge badge-outline" id="props-table-count">0 Opportunities</span>
                 </div>
-                <span class="text-muted" style="font-size: 0.8rem;" id="props-table-meta-line">Complete server-backed dataset</span>
+                <span class="text-muted" style="font-size: 0.78rem;" id="props-table-meta-line">Deterministic Net EV % Ranking (Superbet & Betclic)</span>
               </div>
 
               <div class="table-responsive">
                 <table class="data-table" id="props-data-table">
                   <thead>
                     <tr>
-                      <th>Score</th>
-                      <th>Player</th>
-                      <th>Match & Kickoff</th>
-                      <th>Market & Line</th>
-                      <th>Hit Rate & Sample</th>
-                      <th>Avg (L5 / L10)</th>
-                      <th>Reference Odds</th>
-                      <th>Best Polish Odds</th>
-                      <th>Polish Bookmaker(s)</th>
-                      <th>Stat Edge</th>
-                      <th>Exec Edge</th>
-                      <th>Status & Flags</th>
-                      <th>Action</th>
+                      <th>Value & Net EV</th>
+                      <th>Candidate & Market</th>
+                      <th>Polish Bookmakers & Odds</th>
+                      <th>Reference Fair & Consensus</th>
+                      <th>StatsHub Trend & Action</th>
                     </tr>
                   </thead>
                   <tbody id="props-table-body">
                     <tr>
-                      <td colspan="13" class="text-center text-muted" style="padding: 2.5rem;">
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.5rem; opacity: 0.5;"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/></svg>
-                        <div>No player props scanned yet. Click <strong>Scan Props</strong> to fetch the complete StatsHub dataset.</div>
+                      <td colspan="5" class="text-center text-muted" style="padding: 2.5rem;">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.5rem; opacity: 0.5;"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/></svg>
+                        <div>No props scanned yet. Click <strong>Scan Props</strong> to execute a multi-fixture global scan.</div>
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
+          </div>
 
-            <!-- Detail & Odds Comparison Card (Expandable/Side panel) -->
-            <div class="card prop-detail-card" id="prop-detail-container" style="flex: 1; display: none;">
-              <div class="card-header">
-                <div class="card-title-group">
-                  <h3 class="card-title" id="prop-detail-title">Prop Details</h3>
-                  <span class="badge badge-accent" id="prop-detail-badge">DECISION ENGINE</span>
-                </div>
-                <button class="btn btn-icon btn-sm" id="btn-close-prop-detail" title="Close Panel">&times;</button>
+          <!-- Slide-Over Props Detail Drawer (Non-Destructive Overlay) -->
+          <div class="drawer-backdrop" id="prop-drawer-backdrop"></div>
+          <div class="slide-over-drawer" id="prop-detail-container" style="display: none;" aria-modal="true" role="dialog" aria-labelledby="prop-detail-title">
+            <div class="drawer-header">
+              <div class="card-title-group">
+                <h3 class="card-title" id="prop-detail-title" style="font-size: 1.05rem;">Opportunity Details</h3>
+                <span class="badge badge-accent" id="prop-detail-badge">PROPS VALUE ENGINE</span>
               </div>
-
-              <div id="prop-detail-content">
-                <!-- Dynamically rendered -->
-              </div>
+              <button class="btn-close" id="btn-close-prop-detail" title="Close Panel" aria-label="Close Inspector">&times;</button>
+            </div>
+            <div class="drawer-body" id="prop-detail-content">
+              <!-- Dynamically rendered -->
             </div>
           </div>
         </section>
 
         <!-- HISTORICAL ANALYTICS VIEW -->
-        <section id="view-history" class="view-section">
+        <section id="view-history" class="view-section" aria-labelledby="history-heading">
           <div class="section-header">
             <div>
-              <h1 class="page-title">Historical Market Analytics</h1>
+              <h1 class="page-title" id="history-heading">Historical Market Analytics</h1>
               <p class="page-subtitle">Visualize odds movement time-series, provider drift, and historical replay.</p>
             </div>
           </div>
@@ -1215,14 +1239,13 @@
                 <h3 class="card-title">Odds Movement Timeline Chart</h3>
                 <span class="badge badge-outline">Real Madrid vs Barcelona — 1X2 Market</span>
               </div>
-              <div class="time-selector">
+              <div class="time-selector" style="display: flex; gap: 0.35rem;">
                 <button class="btn btn-sm btn-outline active">24h</button>
                 <button class="btn btn-sm btn-outline">7d</button>
                 <button class="btn btn-sm btn-outline">30d</button>
               </div>
             </div>
 
-            <!-- Canvas SVG Chart Container -->
             <div class="chart-wrapper">
               <canvas id="oddsChartCanvas" height="300"></canvas>
             </div>
@@ -1231,81 +1254,280 @@
               <div class="playback-controls">
                 <button class="btn btn-primary btn-sm" id="btn-chart-play">▶ Replay</button>
                 <button class="btn btn-outline btn-sm" id="btn-chart-pause">⏸ Pause</button>
-                <input type="range" id="replay-slider" min="0" max="6" value="6" class="range-slider">
+                <input type="range" id="replay-slider" min="0" max="6" value="6" class="range-slider" aria-label="Replay timeline slider">
                 <span id="replay-timestamp" class="mono text-muted">2026-08-07T00:00:00Z</span>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- NOTIFICATION CENTER VIEW -->
-        <section id="view-notifications" class="view-section">
+        <!-- NOTIFICATION CENTER VIEW (TELEGRAM CONTROL CENTER) -->
+        <section id="view-notifications" class="view-section" aria-labelledby="notif-heading">
           <div class="section-header">
+
             <div>
-              <h1 class="page-title">Notification Center</h1>
-              <p class="page-subtitle">Track alert delivery status, channel health, and retry histories.</p>
+              <h1 class="page-title" id="notif-heading">Telegram Notification Control Center</h1>
+              <p class="page-subtitle">Real-time Telegram dispatch pipeline, channel connectivity, alert policy, and delivery verification.</p>
+            </div>
+            <div class="action-group">
+              <span class="meta-pill" id="notif-last-synced-pill">
+                Status: <strong id="notif-last-synced-time" class="mono">Checking...</strong>
+              </span>
+              <button class="btn btn-outline btn-sm" id="btn-refresh-telegram-health" title="Refresh Telegram channel health & activity">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Refresh
+              </button>
             </div>
           </div>
 
-          <div class="channels-grid" id="channels-status-container">
-            <!-- Rendered dynamically -->
-          </div>
+          <!-- Main 2-Column Responsive Layout Grid -->
+          <div class="notif-control-grid">
 
-          <div class="card margin-top">
-            <div class="card-header">
-              <h3 class="card-title">Notification Delivery Log</h3>
+            <!-- Left / Primary Column (60-65%): Hero Status + Recent Activity Stream -->
+            <div class="notif-primary-col">
+
+              <!-- Primary Telegram Channel Hero Card -->
+              <div class="tg-hero-card is-operational" id="tg-channel-hero">
+                <div class="tg-hero-header">
+                  <div class="tg-hero-badge is-operational" id="tg-hero-badge">
+                    <span class="tg-pulse-dot pulse" id="tg-hero-dot"></span>
+                    <span id="tg-hero-badge-text">OPERATIONAL</span>
+                  </div>
+                  <span class="text-muted mono" style="font-size: 0.78rem;" id="tg-protocol-tag">Telegram Bot API (TLS 1.3)</span>
+                </div>
+
+                <h2 class="tg-hero-title" id="tg-hero-title">Telegram is ready to deliver live betting alerts</h2>
+                <p class="tg-hero-desc" id="tg-hero-desc">
+                  Bot channel is authenticated and connected to Chat ID: <strong id="tg-hero-chat-id" class="mono">***8129</strong>. Qualified Player Props and Team Props valuebets will dispatch immediately upon detection.
+                </p>
+
+                <!-- Dedicated Diagnostic Error Alert Box (visible only on error) -->
+                <div class="tg-hero-error-box" id="tg-hero-error-box" style="display: none;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div>
+                    <strong style="display: block; margin-bottom: 2px;">Delivery Interrupted:</strong>
+                    <span id="tg-hero-error-message">Unable to connect to Telegram API</span>
+                  </div>
+                </div>
+
+                <!-- Primary Contextual Action Button Group -->
+                <div class="tg-hero-actions" id="tg-hero-actions">
+                  <button class="btn btn-primary btn-sm" id="btn-telegram-send-test">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    Send Test Notification
+                  </button>
+                  <a href="#settings" class="btn btn-outline btn-sm" id="btn-hero-goto-settings" data-view="settings">
+                    Open Settings →
+                  </a>
+                </div>
+
+                <!-- Integrated Supporting Telemetry Strip -->
+                <div class="tg-telemetry-strip" id="tg-telemetry-strip">
+                  <div class="tg-telemetry-item">
+                    <span class="tg-telemetry-label">Last Delivery</span>
+                    <span class="tg-telemetry-value text-success" id="tg-metric-last-delivery">—</span>
+                  </div>
+                  <div class="tg-telemetry-item">
+                    <span class="tg-telemetry-label">Volume Today</span>
+                    <span class="tg-telemetry-value" id="tg-metric-volume-today">0 alerts</span>
+                  </div>
+                  <div class="tg-telemetry-item">
+                    <span class="tg-telemetry-label">Target Channel</span>
+                    <span class="tg-telemetry-value" id="tg-metric-target-chat">—</span>
+                  </div>
+                  <div class="tg-telemetry-item">
+                    <span class="tg-telemetry-label">Digest Window</span>
+                    <span class="tg-telemetry-value" id="tg-metric-digest-window">16:00–22:00</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Real-time Delivery Activity Stream -->
+              <div class="card tg-delivery-stream" id="tg-delivery-stream">
+                <div class="card-header">
+                  <div style="display: flex; align-items: center; gap: 0.65rem;">
+                    <h3 class="card-title">Recent Delivery Activity</h3>
+                    <span class="badge badge-outline" id="tg-stream-count-badge">0 events</span>
+                  </div>
+                  <div class="tg-stream-filters">
+                    <button class="tg-stream-filter-btn active" data-filter="all">All</button>
+                    <button class="tg-stream-filter-btn" data-filter="delivered">Delivered</button>
+                    <button class="tg-stream-filter-btn" data-filter="failed">Failed</button>
+                    <button class="tg-stream-filter-btn" data-filter="suppressed">Suppressed</button>
+                  </div>
+                </div>
+
+                <!-- Activity Stream Container -->
+                <div class="tg-stream-list" id="tg-stream-container">
+                  <!-- Stream rows or intentional empty state rendered dynamically -->
+                </div>
+
+                <!-- Intentional Empty State (hidden when events exist) -->
+                <div class="notif-empty-state" id="notif-empty-state" style="display: none;">
+                  <div class="notif-empty-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                  </div>
+                  <h4 class="notif-empty-title">No delivery activity recorded yet</h4>
+                  <p class="notif-empty-desc">
+                    Notification attempts will stream in here in real time as scanner cycles detect qualified opportunities or when you trigger a diagnostic test dispatch.
+                  </p>
+                  <button class="btn btn-outline btn-sm" id="btn-empty-send-test">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    Send Diagnostic Test Message
+                  </button>
+                </div>
+              </div>
+
             </div>
-            <div class="table-responsive">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Level</th>
-                    <th>Title & Description</th>
-                    <th>Channel</th>
-                    <th>Status</th>
-                    <th>Retries</th>
-                  </tr>
-                </thead>
-                <tbody id="notif-table-body">
-                  <!-- Rendered dynamically -->
-                </tbody>
-              </table>
+
+            <!-- Right / Secondary Column (35-40%): Rules, Diagnostics Console, Specs -->
+            <div class="notif-secondary-col">
+
+              <!-- Dispatch Policy & Rules Card -->
+              <div class="card tg-rules-card" id="tg-rules-card">
+                <div class="card-header">
+                  <div>
+                    <h3 class="card-title">Dispatch Policy & Rules</h3>
+                    <p class="text-muted" style="font-size: 0.76rem; margin: 2px 0 0 0;">Automatic delivery controls and suppression gates</p>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <!-- Rule 1: Instant Valuebet Notifications -->
+                  <div class="tg-rule-item">
+                    <div class="tg-rule-info">
+                      <div class="tg-rule-header">
+                        <span class="tg-rule-name">Instant Valuebet Alerts</span>
+                        <span class="badge badge-success" id="tg-rule-badge-instant">Active</span>
+                      </div>
+                      <p class="tg-rule-desc">
+                        Dispatches immediately upon detecting qualifying props (EV ≥ 3.0%, fresh bookmaker odds). Minor fluctuations (&lt; 1.0 p.p. EV) are automatically suppressed.
+                      </p>
+                    </div>
+                    <label class="tg-switch" aria-label="Toggle Instant Valuebet Alerts">
+                      <input type="checkbox" id="tg-toggle-instant" checked>
+                      <span class="tg-slider"></span>
+                    </label>
+                  </div>
+
+                  <!-- Rule 2: Evening Pre-Match Digest -->
+                  <div class="tg-rule-item">
+                    <div class="tg-rule-info">
+                      <div class="tg-rule-header">
+                        <span class="tg-rule-name">Evening Pre-Match Digest</span>
+                        <span class="badge badge-success" id="tg-rule-badge-digest">Active</span>
+                      </div>
+                      <p class="tg-rule-desc">
+                        Daily summary of top qualified props for the next day, delivered strictly during the 16:00–22:00 Europe/Warsaw evening window (max 1 digest per day).
+                      </p>
+                      <div class="tg-rule-meta">
+                        <span class="badge badge-outline" id="tg-digest-window-pill" style="font-size: 0.72rem;">● Window: 16:00–22:00</span>
+                      </div>
+                    </div>
+                    <label class="tg-switch" aria-label="Toggle Evening Pre-Match Digest">
+                      <input type="checkbox" id="tg-toggle-digest" checked>
+                      <span class="tg-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Channel Diagnostics & Interactive Test Console -->
+              <div class="card tg-test-console" id="tg-test-console">
+                <div class="card-header">
+                  <div>
+                    <h3 class="card-title">Diagnostic Test Console</h3>
+                    <p class="text-muted" style="font-size: 0.76rem; margin: 2px 0 0 0;">End-to-end transport verification with live receipt</p>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p class="text-secondary" style="font-size: 0.82rem; margin-bottom: 1rem; line-height: 1.45;">
+                    Verify that your Telegram Bot token and Chat ID can receive formatted HTML messages from the server.
+                  </p>
+                  <button class="btn btn-outline btn-sm" id="btn-console-send-test" style="width: 100%; justify-content: center;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    Send Diagnostic Test Message
+                  </button>
+
+                  <!-- Live Lifecycle Feedback Box -->
+                  <div class="tg-test-feedback" id="tg-test-feedback">
+                    <!-- Populated dynamically: is-sending, is-success, is-failed -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Environment & Channel Specs -->
+              <div class="card tg-channel-specs" id="tg-channel-specs">
+                <div class="card-header">
+                  <h3 class="card-title">Channel Specifications</h3>
+                </div>
+                <div class="card-body" style="padding: 1rem 1.25rem;">
+                  <table class="tg-specs-table">
+                    <tbody>
+                      <tr>
+                        <td>Channel Protocol</td>
+                        <td>Telegram Bot API</td>
+                      </tr>
+                      <tr>
+                        <td>Target Chat ID</td>
+                        <td id="spec-chat-id">***8129</td>
+                      </tr>
+                      <tr>
+                        <td>Auth Secret</td>
+                        <td>Configured via .env</td>
+                      </tr>
+                      <tr>
+                        <td>Transport Timeout</td>
+                        <td>10.0s</td>
+                      </tr>
+                      <tr>
+                        <td>Failure Isolation</td>
+                        <td style="color: #10B981;">Protected (No Crashing)</td>
+                      </tr>
+                      <tr>
+                        <td>Timezone Anchor</td>
+                        <td>Europe/Warsaw (UTC+2)</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
             </div>
           </div>
         </section>
 
         <!-- SETTINGS VIEW -->
-        <section id="view-settings" class="view-section">
+
+        <section id="view-settings" class="view-section" aria-labelledby="settings-heading">
           <div class="section-header">
             <div>
-              <h1 class="page-title">Settings & Client Preferences</h1>
-              <p class="page-subtitle">Configure interface theme, scanner thresholds, and notification rules.</p>
+              <h1 class="page-title" id="settings-heading">Settings & Client Preferences</h1>
+              <p class="page-subtitle">Configure interface theme, scanner thresholds, and bookmaker payout rules.</p>
             </div>
             <button class="btn btn-primary" id="btn-save-settings">Save Preferences</button>
           </div>
 
-          <div class="settings-grid">
+          <div class="settings-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
             <div class="card">
               <div class="card-header">
                 <h3 class="card-title">UI Preferences</h3>
               </div>
               <div class="form-group">
-                <label>Theme</label>
+                <label for="setting-theme">Theme</label>
                 <select id="setting-theme" class="form-control">
                   <option value="dark">Dark Theme (Default)</option>
                   <option value="light">Light Theme</option>
                 </select>
               </div>
               <div class="form-group">
-                <label>Language</label>
+                <label for="setting-language">Language</label>
                 <select id="setting-language" class="form-control">
                   <option value="en">English</option>
                   <option value="pl">Polski</option>
                 </select>
               </div>
               <div class="form-group">
-                <label>Timezone</label>
+                <label for="setting-timezone">Timezone</label>
                 <select id="setting-timezone" class="form-control">
                   <option value="Europe/Warsaw">Europe/Warsaw (UTC+2)</option>
                   <option value="UTC">UTC</option>
@@ -1318,15 +1540,15 @@
                 <h3 class="card-title">Scanner Engine Parameters</h3>
               </div>
               <div class="form-group">
-                <label>Minimum Surebet ROI %</label>
+                <label for="setting-min-surebet-roi">Minimum Surebet ROI %</label>
                 <input type="number" id="setting-min-surebet-roi" class="form-control" value="1.5" step="0.1">
               </div>
               <div class="form-group">
-                <label>Minimum Valuebet EV %</label>
+                <label for="setting-min-valuebet-ev">Minimum Valuebet EV %</label>
                 <input type="number" id="setting-min-valuebet-ev" class="form-control" value="3.0" step="0.1">
               </div>
               <div class="form-group">
-                <label>Default Max Bankroll Stake (PLN)</label>
+                <label for="setting-max-stake">Default Max Bankroll Stake (PLN)</label>
                 <input type="number" id="setting-max-stake" class="form-control" value="1000">
               </div>
             </div>
@@ -1339,116 +1561,158 @@
                   <span class="badge badge-accent">STAGE 22B</span>
                 </div>
               </div>
-              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 1rem;">
+              <p class="text-muted" style="font-size: 0.78rem; margin-bottom: 0.85rem;">
                 Configure execution withholding taxes (e.g. Polish 12% turnover tax). Effective odds = raw odds &times; (1 - tax rate).
               </p>
 
               <div class="form-group">
-                <label>Superbet Tax Rate (%)</label>
+                <label for="setting-tax-superbet">Superbet Tax Rate (%)</label>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                   <input type="number" id="setting-tax-superbet" class="form-control" value="12" min="0" max="100" step="0.5">
-                  <span class="text-muted mono" style="font-size: 0.85rem; width: 130px;" id="setting-tax-superbet-factor">Factor: 0.88</span>
+                  <span class="text-muted mono" style="font-size: 0.82rem; width: 120px;" id="setting-tax-superbet-factor">Factor: 0.88</span>
                 </div>
               </div>
 
               <div class="form-group">
-                <label>Betclic Tax Rate (%)</label>
+                <label for="setting-tax-betclic">Betclic Tax Rate (%)</label>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                   <input type="number" id="setting-tax-betclic" class="form-control" value="0" min="0" max="100" step="0.5">
-                  <span class="text-muted mono" style="font-size: 0.85rem; width: 130px;" id="setting-tax-betclic-factor">Factor: 1.00</span>
+                  <span class="text-muted mono" style="font-size: 0.82rem; width: 120px;" id="setting-tax-betclic-factor">Factor: 1.00</span>
                 </div>
-                <small class="text-muted" style="display: block; margin-top: 0.25rem; font-size: 0.75rem;">
+                <small class="text-muted" style="display: block; margin-top: 0.25rem; font-size: 0.72rem;">
                   Default is 0% ("Gra bez podatku" promo). Editable to 6%, 12%, etc.
                 </small>
               </div>
 
               <div class="form-group" style="margin-bottom: 0;">
-                <label class="text-muted" style="font-size: 0.8rem;">Reference Bookmakers (Bet365, Unibet, Pinnacle)</label>
-                <div class="text-muted mono" style="font-size: 0.8rem; background: rgba(0,0,0,0.15); padding: 0.4rem 0.6rem; border-radius: var(--radius-sm);">
+                <label class="text-muted" style="font-size: 0.76rem;">Reference Bookmakers (Bet365, Unibet, Pinnacle)</label>
+                <div class="text-muted mono" style="font-size: 0.76rem; background: var(--surface-input); padding: 0.35rem 0.55rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
                   Tax: 0% &bull; Factor: 1.00 (Reference Only / Non-Executable)
                 </div>
+              </div>
+            </div>
+
+            <!-- Telegram Channel Settings -->
+            <div class="card" id="card-settings-telegram">
+              <div class="card-header">
+                <h3 class="card-title">Telegram Alerts Preferences</h3>
+              </div>
+              <div style="padding: 1rem;">
+                <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">
+                  Manage dispatch permissions and send diagnostic test alerts. Tokens and credentials are securely loaded from server environment.
+                </p>
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                  <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="setting-tg-instant" checked>
+                    <span>Enable Instant Props Valuebet Alerts</span>
+                  </label>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                  <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="setting-tg-digest" checked>
+                    <span>Enable Evening Pre-Match Digest (16:00–22:00 Europe/Warsaw)</span>
+                  </label>
+                </div>
+                <button class="btn btn-outline btn-sm" id="btn-settings-telegram-test">
+                  Send test message
+                </button>
               </div>
             </div>
           </div>
         </section>
 
+
         <!-- SCAN PROFILER VIEW (Stage 46) -->
-        <section id="view-profiler" class="view-section">
+        <section id="view-profiler" class="view-section" aria-labelledby="profiler-heading">
           <div class="section-header">
             <div>
-              <h1 class="page-title">Main Scan Execution Profiler & Worker Telemetry</h1>
-              <p class="page-subtitle">Deep forensic diagnostic telemetry, worker activity timelines, request latency distributions, and bottleneck ranking.</p>
+              <div class="profiler-header-title-row" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.35rem;">
+                <h1 class="page-title" id="profiler-heading" style="margin-bottom: 0;">Main Scan Execution Profiler</h1>
+                <div class="scope-switcher" id="profiler-mode-switcher" role="radiogroup" aria-label="Profiler Mode">
+                  <button type="button" class="scope-btn active" id="prof-mode-main" data-mode="main">Main Scan</button>
+                  <button type="button" class="scope-btn" id="prof-mode-team" data-mode="team_props">Team Props</button>
+                  <button type="button" class="scope-btn" id="prof-mode-player" data-mode="player_props">Player Props</button>
+                </div>
+              </div>
+              <p class="page-subtitle" id="profiler-subtitle">Deep forensic diagnostic telemetry, worker activity timelines, request latency distributions, and bottleneck ranking.</p>
             </div>
             <div class="action-group">
               <span class="meta-pill">
                 Trace ID: <strong id="profiler-trace-id" class="mono">—</strong>
               </span>
               <span class="meta-pill">
-                Wall Clock: <strong id="profiler-wall-clock">—</strong>
+                Wall Clock: <strong id="profiler-wall-clock" class="mono">—</strong>
               </span>
-              <button class="btn btn-outline" id="btn-refresh-profiler" title="Reload latest scan trace">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <button class="btn btn-outline btn-sm" id="btn-refresh-profiler" title="Reload latest scan trace">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 Reload Trace
               </button>
-              <button class="btn btn-primary" id="btn-export-trace" title="Export complete trace JSON">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export Trace JSON
+              <button class="btn btn-primary btn-sm" id="btn-export-trace" title="Export complete trace JSON">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export JSON
               </button>
             </div>
           </div>
 
           <!-- Profiler Overview Metrics Cards -->
-          <div class="kpi-grid" style="margin-bottom: 1.5rem;">
-            <div class="kpi-card">
-              <div class="kpi-label">Wall Duration</div>
-              <div class="kpi-value mono" id="prof-kpi-duration">—</div>
-              <div class="kpi-subtext" id="prof-kpi-mode">Scan Mode: NORMAL</div>
+          <div class="kpi-grid">
+            <div class="card kpi-card">
+              <div class="kpi-details">
+                <div class="kpi-label">Wall Duration</div>
+                <div class="kpi-value mono" id="prof-kpi-duration">—</div>
+                <div class="kpi-subtext" id="prof-kpi-mode">Scan Mode: NORMAL</div>
+              </div>
             </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Workers & Concurrency</div>
-              <div class="kpi-value mono" id="prof-kpi-workers">—</div>
-              <div class="kpi-subtext" id="prof-kpi-concurrency">Peak: — | Avg: —</div>
+            <div class="card kpi-card">
+              <div class="kpi-details">
+                <div class="kpi-label">Workers & Concurrency</div>
+                <div class="kpi-value mono" id="prof-kpi-workers">—</div>
+                <div class="kpi-subtext" id="prof-kpi-concurrency">Peak: — | Avg: —</div>
+              </div>
             </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Total HTTP Requests</div>
-              <div class="kpi-value mono" id="prof-kpi-requests">—</div>
-              <div class="kpi-subtext" id="prof-kpi-req-success">Success: — | Failed: —</div>
+            <div class="card kpi-card">
+              <div class="kpi-details">
+                <div class="kpi-label">Total HTTP Requests</div>
+                <div class="kpi-value mono" id="prof-kpi-requests">—</div>
+                <div class="kpi-subtext" id="prof-kpi-req-success">Success: — | Failed: —</div>
+              </div>
             </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Process Memory & CPU</div>
-              <div class="kpi-value mono" id="prof-kpi-memory">—</div>
-              <div class="kpi-subtext" id="prof-kpi-cpu">CPU Delta: —</div>
+            <div class="card kpi-card">
+              <div class="kpi-details">
+                <div class="kpi-label">Process Memory & CPU</div>
+                <div class="kpi-value mono" id="prof-kpi-memory">—</div>
+                <div class="kpi-subtext" id="prof-kpi-cpu">CPU Delta: —</div>
+              </div>
             </div>
           </div>
 
           <!-- Bottleneck Summary Banner -->
-          <div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent-color);">
+          <div class="card" style="margin-bottom: 1.25rem; border-left: 4px solid var(--brand-primary);">
             <div class="card-header">
               <div class="card-title-group">
-                <h3 class="card-title">Bottleneck Ranking & Top Stragglers</h3>
-                <span class="badge badge-accent">AUTOMATED DIAGNOSIS</span>
+                <h3 class="card-title">Bottleneck Ranking & Automated Diagnosis</h3>
+                <span class="badge badge-accent">AUTOMATED FORENSICS</span>
               </div>
             </div>
-            <div id="prof-bottleneck-summary" style="font-size: 0.9rem; line-height: 1.5;">
+            <div id="prof-bottleneck-summary" style="font-size: 0.88rem; line-height: 1.5;">
               <p class="text-muted">No scan trace loaded yet. Run a Main Scan to populate telemetry.</p>
             </div>
           </div>
 
           <!-- Phase Breakdown & Execution Timeline -->
-          <div class="card" style="margin-bottom: 1.5rem;">
+          <div class="card" style="margin-bottom: 1.25rem;">
             <div class="card-header">
               <div class="card-title-group">
                 <h3 class="card-title">Phase Execution Breakdown</h3>
                 <span class="badge badge-cycle-success">Wall-Clock Sequential Phases</span>
               </div>
             </div>
-            <div id="prof-phase-timeline" style="margin-bottom: 1rem;">
-              <!-- Horizontal Stacked Visual Bar -->
-              <div id="prof-phase-bar-container" style="height: 28px; width: 100%; display: flex; border-radius: var(--radius-sm); overflow: hidden; background: var(--bg-surface-alt); margin-bottom: 0.75rem;"></div>
-              <div id="prof-phase-legend" style="display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.8rem;"></div>
+            <div id="prof-phase-timeline" style="margin-bottom: 0.85rem;">
+              <div id="prof-phase-bar-container" style="height: 24px; width: 100%; display: flex; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-input); margin-bottom: 0.65rem;"></div>
+              <div id="prof-phase-legend" style="display: flex; flex-wrap: wrap; gap: 0.85rem; font-size: 0.76rem;"></div>
             </div>
             <div class="table-responsive">
-              <table class="table" id="prof-phases-table">
+              <table class="data-table" id="prof-phases-table">
                 <thead>
                   <tr>
                     <th>Phase Name</th>
@@ -1467,7 +1731,7 @@
           </div>
 
           <!-- Acquisition Forensics Breakdown -->
-          <div class="card" style="margin-bottom: 1.5rem;">
+          <div class="card" style="margin-bottom: 1.25rem;">
             <div class="card-header">
               <div class="card-title-group">
                 <h3 class="card-title">Acquisition Forensics (Per Provider)</h3>
@@ -1475,7 +1739,7 @@
               </div>
             </div>
             <div class="table-responsive">
-              <table class="table" id="prof-forensics-table">
+              <table class="data-table" id="prof-forensics-table">
                 <thead>
                   <tr>
                     <th>Provider</th>
@@ -1497,24 +1761,22 @@
           </div>
 
           <!-- Per-Worker Telemetry & Concurrency Timeline -->
-          <div class="card" style="margin-bottom: 1.5rem;">
+          <div class="card" style="margin-bottom: 1.25rem;">
             <div class="card-header">
               <div class="card-title-group">
                 <h3 class="card-title">Worker Activity & State Timelines</h3>
                 <span class="badge badge-accent">W1..Wn Parallel Execution</span>
               </div>
             </div>
-            <div style="margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 1.5rem; flex-wrap: wrap;">
-              <span><span style="display:inline-block; width:12px; height:12px; background:#10b981; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> WORKING</span>
-              <span><span style="display:inline-block; width:12px; height:12px; background:#f59e0b; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> RATE_LIMIT_WAIT</span>
-              <span><span style="display:inline-block; width:12px; height:12px; background:#3b82f6; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> QUEUE_WAIT</span>
-              <span><span style="display:inline-block; width:12px; height:12px; background:#64748b; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> IDLE</span>
+            <div style="margin-bottom: 0.85rem; font-size: 0.8rem; color: var(--text-muted); display: flex; gap: 1.25rem; flex-wrap: wrap;">
+              <span><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> WORKING</span>
+              <span><span style="display:inline-block; width:10px; height:10px; background:#f59e0b; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> RATE_LIMIT_WAIT</span>
+              <span><span style="display:inline-block; width:10px; height:10px; background:#3b82f6; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> QUEUE_WAIT</span>
+              <span><span style="display:inline-block; width:10px; height:10px; background:#64748b; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> IDLE</span>
             </div>
-            <div id="prof-worker-timelines-container" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
-              <!-- Rendered dynamically -->
-            </div>
+            <div id="prof-worker-timelines-container" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem;"></div>
             <div class="table-responsive">
-              <table class="table" id="prof-workers-table">
+              <table class="data-table" id="prof-workers-table">
                 <thead>
                   <tr>
                     <th>Worker ID</th>
@@ -1537,7 +1799,7 @@
           </div>
 
           <!-- Request Latency Distributions & Stragglers -->
-          <div class="grid grid-2" style="margin-bottom: 1.5rem;">
+          <div class="dashboard-grid">
             <div class="card">
               <div class="card-header">
                 <div class="card-title-group">
@@ -1545,8 +1807,8 @@
                   <span class="badge badge-accent">Percentiles</span>
                 </div>
               </div>
-              <div id="prof-percentiles-container">
-                <table class="table">
+              <div id="prof-percentiles-container" class="table-responsive">
+                <table class="data-table">
                   <thead>
                     <tr>
                       <th>Category</th>
@@ -1573,7 +1835,7 @@
                 </div>
               </div>
               <div class="table-responsive">
-                <table class="table">
+                <table class="data-table">
                   <thead>
                     <tr>
                       <th>Provider</th>
@@ -1598,15 +1860,15 @@
   </div>
 
   <!-- STAKE CALCULATOR MODAL -->
-  <div class="modal-backdrop" id="stake-modal">
+  <div class="modal-backdrop" id="stake-modal" role="dialog" aria-modal="true" aria-labelledby="stake-modal-title">
     <div class="modal-card">
       <div class="modal-header">
-        <h3>Surebet Stake & Profit Calculator</h3>
-        <button class="btn-close" id="modal-close-btn">&times;</button>
+        <h3 id="stake-modal-title" class="card-title">Surebet Stake & Profit Calculator</h3>
+        <button class="btn-close" id="modal-close-btn" aria-label="Close Calculator">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label>Total Investment Capital (€)</label>
+          <label for="calc-total-stake">Total Investment Capital (€)</label>
           <input type="number" id="calc-total-stake" class="form-control" value="1000" step="50">
         </div>
 
@@ -1617,6 +1879,27 @@
     </div>
   </div>
 
-  <script src="app.js?v=24.1.0"></script>
+  <!-- OPPORTUNITY DETAIL MODAL / GLOBAL APPLICATION INSPECTOR OVERLAY -->
+  <div class="drawer-backdrop" id="opp-detail-backdrop"></div>
+  <div class="opp-detail-modal" id="opp-detail-modal" style="display: none;" aria-modal="true" role="dialog" aria-labelledby="opp-detail-modal-title">
+    <div class="drawer-header">
+      <div class="card-title-group">
+        <h3 class="card-title" id="opp-detail-modal-title" style="font-size: 1.05rem;">Opportunity Inspector</h3>
+        <span class="badge badge-accent" id="opp-detail-modal-badge">SUREBET</span>
+      </div>
+      <div class="drawer-header-actions" style="display: flex; align-items: center; gap: 0.5rem;">
+        <button type="button" class="btn btn-sm btn-outline" id="btn-modal-open-explorer" title="Open in Opportunity Explorer" style="display: none;">
+          <span>Full Explorer</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+        <button type="button" class="btn-close" id="btn-close-opp-detail" title="Close Inspector" aria-label="Close Inspector">&times;</button>
+      </div>
+    </div>
+    <div class="drawer-body" id="opp-detail-modal-content">
+      <!-- Dynamically rendered by buildOpportunityInspectorMarkup -->
+    </div>
+  </div>
+
+  <script src="app.js?v=25.4.1"></script>
 </body>
 </html>

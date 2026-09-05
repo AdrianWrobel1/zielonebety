@@ -33,6 +33,33 @@ class NonRetryableError(ProviderError):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Permanent HTTP Status Mapping (P1-NEW-006)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 400/401/403/404 are permanent for a given request: retrying the identical
+# request (especially through nested outer×inner retry layers) only multiplies
+# cost. Everything else stays retryable via the provider-specific error type.
+
+PERMANENT_HTTP_STATUS_CODES = frozenset({400, 401, 403, 404})
+
+
+def http_status_error(status_code, message, retryable_error_factory):
+    """Builds the right exception for a failed HTTP response.
+
+    Returns a NonRetryableError for permanent statuses, otherwise the
+    provider-specific (retryable) error from ``retryable_error_factory``.
+    Raise the result; the ErrorClassifier routes it without further mapping.
+    """
+    try:
+        code = int(status_code)
+    except (TypeError, ValueError):
+        return retryable_error_factory()
+    if code in PERMANENT_HTTP_STATUS_CODES:
+        return NonRetryableError(f"{message} (HTTP {code} permanent — not retried)")
+    return retryable_error_factory()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Lifecycle Errors
 # ─────────────────────────────────────────────────────────────────────────────
 

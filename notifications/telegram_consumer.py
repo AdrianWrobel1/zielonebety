@@ -7,11 +7,13 @@ Implements:
 - TelegramOpportunityConsumer: Delivery consumer implementing the OpportunityConsumer protocol.
 """
 
+from __future__ import annotations
+
 import html
 import os
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from domain.models import MatchEvidence
 from normalization.dispatcher import (
@@ -53,9 +55,18 @@ class TelegramConfig:
 
     @classmethod
     def from_env(cls) -> "TelegramConfig":
-        """Loads Telegram settings from environment variables."""
+        """Loads Telegram settings from environment variables, autoloading .env if present."""
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         chat = os.getenv("TELEGRAM_CHAT_ID")
+        if not token or not chat:
+            try:
+                from dotenv import load_dotenv
+                load_dotenv()
+                token = token or os.getenv("TELEGRAM_BOT_TOKEN")
+                chat = chat or os.getenv("TELEGRAM_CHAT_ID")
+            except ImportError:
+                pass
+
         enabled_val = os.getenv("TELEGRAM_ENABLED", "true").strip().lower()
         enabled = enabled_val in ("true", "1", "yes")
         parse_mode = os.getenv("TELEGRAM_PARSE_MODE", "HTML")
@@ -71,6 +82,7 @@ class TelegramConfig:
             parse_mode=parse_mode if parse_mode else None,
             timeout_seconds=timeout,
         )
+
 
 
 def _format_market_name(mkt_key: CanonicalMarketKey) -> str:

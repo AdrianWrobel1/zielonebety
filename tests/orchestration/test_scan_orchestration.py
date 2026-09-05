@@ -139,14 +139,16 @@ def _build_test_graph(
     event_id: str,
     home_team: str,
     away_team: str,
-    kickoff: str,
-    odds_h: float,
-    odds_d: float,
-    odds_a: float,
+    kickoff: Optional[str] = None,
+    odds_h: float = 2.0,
+    odds_d: float = 3.0,
+    odds_a: float = 4.0,
     market_type: str = "1X2",
     line: Optional[float] = None,
 ) -> NormalizedGraph:
     """Helper to build a controlled NormalizedGraph with referential integrity."""
+    if kickoff is None:
+        kickoff = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
     comp_id = f"comp_{provider_name}_premier_league"
     comp = Competition(
         name="Premier League",
@@ -580,13 +582,16 @@ class TestProductionScanOrchestration(unittest.TestCase):
             opportunity_repository=self.opp_repo,
             delivery_repository=self.del_repo,
             lifecycle_manager=lifecycle,
+            alert_policy=self.alert_policy,
             dispatcher=dispatcher,
         )
         orchestrator.normalization_engine.register_normalizer("superbet", MockNormalizerWrapper([sb_graph]))
         orchestrator.normalization_engine.register_normalizer("betclic", MockNormalizerWrapper([bc_graph]))
 
+        t_eval = datetime(2026, 8, 25, 12, 0, 0, tzinfo=timezone.utc)
         result = orchestrator.run_scan_cycle(
-            providers={"superbet": MockProvider("superbet", [sb_graph]), "betclic": MockProvider("betclic", [bc_graph])}
+            providers={"superbet": MockProvider("superbet", [sb_graph]), "betclic": MockProvider("betclic", [bc_graph])},
+            evaluation_time=t_eval,
         )
 
         self.assertEqual(result.cycle_status, CycleStatus.SUCCESS)
@@ -690,7 +695,10 @@ class TestProductionScanOrchestration(unittest.TestCase):
         p_sb_good = MockProvider("superbet", parsed_items=[sb_graph])
         p_bc_good = MockProvider("betclic", parsed_items=[bc_graph])
 
-        res2 = self.orchestrator.run_scan_cycle(providers={"superbet": p_sb_good, "betclic": p_bc_good})
+        res2 = self.orchestrator.run_scan_cycle(
+            providers={"superbet": p_sb_good, "betclic": p_bc_good},
+            evaluation_time=datetime(2026, 8, 29, 12, 0, 0, tzinfo=timezone.utc),
+        )
         self.assertEqual(res2.cycle_status, CycleStatus.SUCCESS)
         self.assertEqual(res2.detected_opportunities_count, 1)
         self.assertEqual(res2.delivered_count, 1)
@@ -715,7 +723,8 @@ class TestProductionScanOrchestration(unittest.TestCase):
         orch_a.normalization_engine.register_normalizer("betclic", MockNormalizerWrapper([bc_graph]))
 
         res_a = orch_a.run_scan_cycle(
-            providers={"superbet": MockProvider("superbet", [sb_graph]), "betclic": MockProvider("betclic", [bc_graph])}
+            providers={"superbet": MockProvider("superbet", [sb_graph]), "betclic": MockProvider("betclic", [bc_graph])},
+            evaluation_time=datetime(2026, 8, 30, 12, 0, 0, tzinfo=timezone.utc),
         )
         self.assertEqual(res_a.new_opportunities_count, 1)
         self.assertEqual(res_a.delivered_count, 1)
@@ -738,7 +747,8 @@ class TestProductionScanOrchestration(unittest.TestCase):
         orch_b.normalization_engine.register_normalizer("betclic", MockNormalizerWrapper([bc_graph]))
 
         res_b = orch_b.run_scan_cycle(
-            providers={"superbet": MockProvider("superbet", [sb_graph]), "betclic": MockProvider("betclic", [bc_graph])}
+            providers={"superbet": MockProvider("superbet", [sb_graph]), "betclic": MockProvider("betclic", [bc_graph])},
+            evaluation_time=datetime(2026, 8, 30, 13, 0, 0, tzinfo=timezone.utc),
         )
 
         # Instance B must recognize the persisted state and suppress duplicate alerts

@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from providers.base.provider_state import ProviderState
 from providers.base.models import (
     DiagnosticsReport,
+    ProviderAcquisitionAccounting,
     ProviderMetrics,
     QualityReport,
     QualityStatus,
@@ -42,7 +43,7 @@ class ProviderResult:
 
     Optional fields (present when execution reached that stage):
         - discovered_objects, parsed_objects, validation_report
-        - diagnostics, quality_report, metrics
+        - diagnostics, quality_report, metrics, accounting
         - warnings, errors
     """
 
@@ -65,6 +66,7 @@ class ProviderResult:
     diagnostics: Optional[DiagnosticsReport] = None
     quality_report: Optional[QualityReport] = None
     metrics: ProviderMetrics = field(default_factory=ProviderMetrics)
+    accounting: Optional[ProviderAcquisitionAccounting] = None
 
     # Human-readable summaries
     warnings: List[str] = field(default_factory=list)

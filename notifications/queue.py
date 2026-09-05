@@ -1,5 +1,9 @@
 """
 Priority Notification Delivery Queue
+
+.. deprecated::
+    Legacy notification stack (see notifications.notification_engine).
+    Kept only for backward compatibility with existing tests.
 """
 
 from typing import List, Optional

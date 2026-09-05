@@ -84,9 +84,22 @@ class BaseProvider(ProviderInterface):
     def health(self) -> ProviderState:
         return self.state
 
+    def set_discovered_items(self, items: List[Any]) -> None:
+        """Sets cached discovery items to prevent redundant discovery HTTP calls."""
+        self._discovered_items_cache = items
+
+    def get_discovered_items(self) -> Optional[List[Any]]:
+        """Gets cached discovery items if available."""
+        return getattr(self, "_discovered_items_cache", None)
+
+    def clear_discovered_cache(self) -> None:
+        """Explicitly releases cached discovery items and any raw overview payloads."""
+        self._discovered_items_cache = None
+
     def shutdown(self) -> None:
         """Graceful resource release."""
         try:
+            self.clear_discovered_cache()
             if self.state in (ProviderState.UNINITIALIZED, ProviderState.READY, ProviderState.COMPLETED, ProviderState.FAILED):
                 logger.info(f"BaseProvider: Shutting down '{self.metadata.name}'")
         except Exception as e:

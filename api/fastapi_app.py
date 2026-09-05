@@ -6,11 +6,16 @@ from contextlib import asynccontextmanager
 import logging
 import os
 from typing import Optional, Dict, Any
-from fastapi import FastAPI, Query, Body, Response, Request
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Body, Response, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.auth import get_cors_origins, require_admin
 from api.routes import APIRouter
 from api.services import PlatformAPIService, _sanitize_text
 from database.connection import DatabaseManager
@@ -46,27 +51,48 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Enable CORS for local web development
+# Explicit origin allowlist (P1-007): same-origin deployments need no CORS
+# entry; split local development and operator-configured origins are listed
+# explicitly. A wildcard is never combined with credentials.
+# P1-NEW-011: methods/headers are explicit (no "*" with credentials).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Map auth/permission failures to the standardized error envelope."""
+    safe_detail = _sanitize_text(str(exc.detail))
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status_code": exc.status_code,
+            "data": None,
+            "errors": [safe_detail],
+            "metadata": {},
+            "execution_time_ms": 0.0,
+        },
+    )
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler returning sanitized standardized error envelope without leaking tracebacks."""
+    """Global exception handler returning a generic envelope without leaking internals."""
     safe_error = _sanitize_text(str(exc))
     logger.error(f"Unhandled server error on {request.method} {request.url.path}: {safe_error}", exc_info=True)
+    # P1-NEW-011: the exception text is logged server-side only; the client
+    # receives a generic message (no path/config/SQL disclosure).
     return JSONResponse(
         status_code=500,
         content={
             "status_code": 500,
             "data": None,
-            "errors": [f"Internal server error: {safe_error}"],
+            "errors": ["Internal server error."],
             "metadata": {},
             "execution_time_ms": 0.0,
         },
@@ -106,7 +132,7 @@ def get_readiness(response: Response):
 
 @app.post("/api/v1/scan/run")
 @app.post("/api/scan/run")
-def trigger_scan(response: Response, payload: Optional[Dict[str, Any]] = Body(default=None)):
+def trigger_scan(response: Response, payload: Optional[Dict[str, Any]] = Body(default=None), admin: dict = Depends(require_admin)):
     """Trigger a production scan cycle across registered providers."""
     api_res = router_instance.handle_post_run_scan(payload=payload)
     response.status_code = api_res.status_code
@@ -120,11 +146,27 @@ def get_latest_scan():
     return router_instance.handle_get_latest_scan().to_dict()
 
 
+@app.post("/api/v1/scan/ultra")
+@app.post("/api/scan/ultra")
+def trigger_ultra_scan(response: Response, payload: Optional[Dict[str, Any]] = Body(default=None), admin: dict = Depends(require_admin)):
+    """Trigger a comprehensive daily ULTRA SCAN cycle across all today's matches."""
+    api_res = router_instance.handle_post_ultra_scan(payload=payload)
+    response.status_code = api_res.status_code
+    return api_res.to_dict()
+
+
+@app.get("/api/v1/scan/ultra/latest")
+@app.get("/api/scan/ultra/latest")
+def get_latest_ultra_scan():
+    """Fetch structured results of the most recent ULTRA scan cycle."""
+    return router_instance.handle_get_latest_ultra_scan().to_dict()
+
+
 @app.get("/api/v1/scan/trace/latest")
 @app.get("/api/scan/trace/latest")
-def get_latest_trace(response: Response):
-    """Fetch execution trace and worker telemetry of the most recent scan cycle."""
-    api_res = router_instance.handle_get_latest_trace()
+def get_latest_trace(response: Response, mode: str = "main"):
+    """Fetch execution trace and worker telemetry of the most recent scan cycle for a given mode."""
+    api_res = router_instance.handle_get_latest_trace(mode=mode)
     response.status_code = api_res.status_code
     return api_res.to_dict()
 
@@ -140,8 +182,12 @@ def get_trace_by_id(trace_id: str, response: Response):
 
 @app.get("/api/v1/scan/trace/{trace_id}/export")
 @app.get("/api/scan/trace/{trace_id}/export")
-def export_trace_by_id(trace_id: str, response: Response):
-    """Download the complete JSON trace payload for external diagnosis."""
+def export_trace_by_id(trace_id: str, response: Response, admin: dict = Depends(require_admin)):
+    """Download the complete JSON trace payload for external diagnosis.
+
+    P1-NEW-011: trace payloads embed full market/odds snapshots and were
+    previously downloadable without authentication.
+    """
     api_res = router_instance.handle_get_trace_by_id(trace_id)
     if api_res.status_code != 200 or not api_res.data:
         response.status_code = api_res.status_code
@@ -177,14 +223,14 @@ def get_scheduler_status():
 
 @app.post("/api/v1/scan/scheduler/configure")
 @app.post("/api/scan/scheduler/configure")
-def configure_scheduler(payload: Dict[str, Any] = Body(default={})):
+def configure_scheduler(payload: Dict[str, Any] = Body(default={}), admin: dict = Depends(require_admin)):
     """Configure or toggle the automated scan scheduler."""
     return router_instance.handle_post_scheduler_configure(payload).to_dict()
 
 
 @app.post("/api/v1/scan/scheduler/run-now")
 @app.post("/api/scan/scheduler/run-now")
-def scheduler_run_now(response: Response):
+def scheduler_run_now(response: Response, admin: dict = Depends(require_admin)):
     """Trigger one immediate automated scan cycle (same orchestrator as manual)."""
     api_res = router_instance.handle_post_scheduler_run_now()
     response.status_code = api_res.status_code
@@ -202,7 +248,7 @@ def get_providers():
 
 
 @app.post("/api/v1/providers/{provider_name}/run")
-def trigger_provider(provider_name: str):
+def trigger_provider(provider_name: str, admin: dict = Depends(require_admin)):
     """Trigger manual execution run for a single provider."""
     return router_instance.handle_post_trigger_provider(provider_name).to_dict()
 
@@ -215,7 +261,7 @@ def list_events(
     provider: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     matched: Optional[str] = Query(None),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     """Fetch canonical events list with multi-criteria filtering and pagination."""
@@ -297,7 +343,7 @@ def list_unified_explorer_opportunities(
     date_to: Optional[str] = Query(None),
     sort: str = Query("score"),
     order: str = Query("desc"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     """Unified Opportunity Explorer — aggregated view of Player Props, Valuebets, Surebets, Boosters, and Team Props."""
@@ -335,6 +381,25 @@ def list_notifications(limit: int = Query(50, ge=1), offset: int = Query(0, ge=0
     return router_instance.handle_get_notifications(limit=limit, offset=offset).to_dict()
 
 
+@app.get("/api/v1/telegram/health")
+def get_telegram_health():
+    """Fetch Telegram channel health, diagnostics, and digest window status."""
+    return router_instance.handle_get_telegram_health().to_dict()
+
+
+@app.post("/api/v1/telegram/test")
+def send_telegram_test_message(admin: dict = Depends(require_admin)):
+    """Dispatch an administrative diagnostic test message to Telegram."""
+    return router_instance.handle_post_telegram_test().to_dict()
+
+
+@app.post("/api/v1/telegram/configure")
+def configure_telegram(payload: Dict[str, Any] = Body(...), admin: dict = Depends(require_admin)):
+    """Update safe Telegram administrative toggles."""
+    return router_instance.handle_post_telegram_configure(body=payload).to_dict()
+
+
+
 @app.get("/api/v1/history/odds")
 def get_odds_history(event_id: str = Query("ev-real-barca-01"), period: str = Query("24h")):
     """Fetch time-series odds history for trend visualization."""
@@ -348,17 +413,46 @@ def get_settings():
 
 
 @app.post("/api/v1/settings")
-def update_settings(payload: Dict[str, Any] = Body(...)):
+def update_settings(payload: Dict[str, Any] = Body(...), admin: dict = Depends(require_admin)):
     """Update client user preferences."""
     return router_instance.handle_post_settings(payload).to_dict()
 
 
 @app.post("/api/v1/auth/login")
-def auth_login(payload: Dict[str, Any] = Body(default={})):
-    """Simulated login endpoint."""
+def auth_login(request: Request, response: Response, payload: Dict[str, Any] = Body(default={})):
+    """Login endpoint with brute-force throttling (P1-NEW-011)."""
+    from api.auth import is_login_rate_limited, register_login_attempt
+
+    if is_login_rate_limited(request):
+        response.status_code = 429
+        return {
+            "status_code": 429,
+            "data": None,
+            "errors": ["Too many login attempts. Try again shortly."],
+            "metadata": {},
+            "execution_time_ms": 0.0,
+        }
     username = payload.get("username", "admin")
     password = payload.get("password", "")
-    return router_instance.handle_post_auth_login(username=username, password=password).to_dict()
+    api_res = router_instance.handle_post_auth_login(username=username, password=password)
+    register_login_attempt(request, success=(api_res.status_code == 200))
+    response.status_code = api_res.status_code
+    return api_res.to_dict()
+
+
+@app.post("/api/v1/auth/logout")
+def auth_logout(request: Request):
+    """Revoke the caller's bearer session (P1-NEW-011)."""
+    from api.auth import _bearer_token_from_request, revoke_token
+
+    revoked = revoke_token(_bearer_token_from_request(request))
+    return {
+        "status_code": 200,
+        "data": {"revoked": revoked},
+        "errors": [],
+        "metadata": {},
+        "execution_time_ms": 0.0,
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -368,6 +462,7 @@ def auth_login(payload: Dict[str, Any] = Body(default={})):
 @app.post("/api/v1/props/scan")
 @app.get("/api/v1/props/scan")
 def trigger_props_scan(
+    admin: dict = Depends(require_admin),
     stat: Optional[str] = Query("shots"),
     positions: Optional[str] = Query("D,M,F"),
     last_games: int = Query(10, ge=1, le=50),
@@ -462,6 +557,86 @@ def get_props_health():
     return router_instance.handle_get_props_health().to_dict()
 
 
+@app.post("/api/v1/props/global-scan")
+def post_global_props_scan(
+    admin: dict = Depends(require_admin),
+    time_horizon_days: int = Query(7, ge=1, le=14),
+    tournaments: Optional[str] = Query(None),
+    props_scope: str = Query("ALL"),
+    stat_types: Optional[str] = Query(None),
+    min_ev_percent: float = Query(3.0),
+    max_results: int = Query(50, ge=1, le=200),
+    max_fixtures: int = Query(30, ge=1, le=100),
+    max_trends_requests: int = Query(10, ge=1, le=50),
+    max_execution_events: int = Query(20, ge=1, le=50),
+    response: Response = None,
+):
+    """Trigger bounded multi-fixture global scan for Player Props and Team Props."""
+    params = {
+        "time_horizon_days": time_horizon_days,
+        "tournaments": tournaments,
+        "props_scope": props_scope,
+        "stat_types": stat_types,
+        "min_ev_percent": min_ev_percent,
+        "max_results": max_results,
+        "max_fixtures": max_fixtures,
+        "max_trends_requests": max_trends_requests,
+        "max_execution_events": max_execution_events,
+    }
+    api_res = router_instance.handle_post_global_props_scan(params)
+    if response:
+        response.status_code = api_res.status_code
+    return api_res.to_dict()
+
+
+@app.get("/api/v1/props/global-results")
+def get_global_props_results(
+    props_scope: Optional[str] = Query(None),
+    stat: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    min_net_ev: Optional[float] = Query(None),
+    status: Optional[str] = Query(None),
+    bookmaker: Optional[str] = Query(None),
+    view_mode: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    min_odds: Optional[float] = Query(None),
+    competition: Optional[str] = Query(None),
+    position: Optional[str] = Query(None),
+    threshold: Optional[float] = Query(None),
+):
+    """Fetch cached global props scan opportunities with filtering and pagination."""
+    return router_instance.handle_get_global_props_results(
+        props_scope=props_scope,
+        stat=stat,
+        search=search,
+        min_net_ev=min_net_ev,
+        status=status,
+        bookmaker=bookmaker,
+        view_mode=view_mode,
+        sort_by=sort_by,
+        limit=limit,
+        offset=offset,
+        min_odds=min_odds,
+        competition=competition,
+        position=position,
+        threshold=threshold,
+    ).to_dict()
+
+
+@app.get("/api/v1/props/taxonomy")
+def get_props_taxonomy():
+    """Fetch authoritative Props taxonomy metadata including optgroups for UI/API."""
+    return router_instance.handle_get_props_taxonomy().to_dict()
+
+
+@app.get("/api/v1/props/coverage")
+def get_props_coverage():
+    """Fetch 10-stage Props coverage matrix across all target categories."""
+    return router_instance.handle_get_props_coverage().to_dict()
+
+
 @app.get("/api/v1/props/{prop_id}")
 def get_prop_detail(prop_id: str, response: Response):
     """Fetch comprehensive detail, bookmaker odds breakdown, and match history for a prop."""
@@ -475,7 +650,7 @@ def get_prop_detail(prop_id: str, response: Response):
 # ──────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/v1/team-props/scan")
-def trigger_team_props_scan(params: Dict[str, Any] = Body(default_factory=dict)):
+def trigger_team_props_scan(params: Dict[str, Any] = Body(default_factory=dict), admin: dict = Depends(require_admin)):
     """Trigger an on-demand scan of team props data from StatsHub."""
     return router_instance.handle_scan_team_props(config_params=params).to_dict()
 
@@ -531,6 +706,7 @@ def get_team_prop_detail(prop_id: str, response: Response):
 
 
 # Serve static web frontend if directory exists
+
 web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
 if os.path.exists(web_dir):
     index_file = os.path.join(web_dir, "index.html")

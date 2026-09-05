@@ -70,6 +70,11 @@ AGE_GROUPS = frozenset({"u17", "u18", "u19", "u20", "u21", "u23"})
 GENDER_SUFFIXES = frozenset({"women", "w", "fem", "feminino", "ladies"})
 RESERVE_SUFFIXES = frozenset({"ii", "b", "reserves", "reserve", "2"})
 
+# Executable bookmakers only (mirrors normalization.surebet.ALLOWED_EXECUTION_BOOKMAKERS).
+# Reference bookmakers (e.g. bet365/unibet via odds_api) may price fair probability
+# but must never become the executable ValueBetCandidate.bookmaker.
+EXECUTABLE_BOOKMAKERS = frozenset({"superbet", "betclic"})
+
 
 def _check_suffix_compatibility(tokens_a: Tuple[str, ...], tokens_b: Tuple[str, ...]) -> bool:
     suf_a = set(tokens_a) & (AGE_GROUPS | GENDER_SUFFIXES | RESERVE_SUFFIXES)
@@ -137,11 +142,17 @@ class ValuebetEngine:
             for mkt_id, mkt in market_map.items():
                 mkt_key = extract_canonical_market_key(mkt)
                 if not mkt_key:
+                    # P1-004: market has no canonical identity (unknown taxonomy
+                    # or missing mandatory line) -> cannot be matched. Count only.
+                    metrics.markets_rejected_market_key += 1
                     continue
 
                 # Find matching reference market
                 ref_mkt = self._find_matching_reference_market(mkt_key, matched_ref_event)
                 if not ref_mkt:
+                    # P1-004: canonical market but no same-type+line benchmark.
+                    # Count only.
+                    metrics.markets_rejected_reference_missing += 1
                     continue
 
                 metrics.markets_matched += 1
@@ -171,6 +182,9 @@ class ValuebetEngine:
                 for sel in mkt_selections:
                     sel_key = extract_canonical_selection_key(sel, mkt_key, bm_event)
                     if not sel_key:
+                        # P1-004: selection cannot be canonicalized under its
+                        # parent market -> cannot be benchmarked. Count only.
+                        metrics.selections_rejected_key_missing += 1
                         continue
 
                     sel_type = sel_key.selection_type
@@ -178,18 +192,31 @@ class ValuebetEngine:
                     fair_odds = fair_res.fair_odds.get(sel_type)
 
                     if fair_prob is None or fair_odds is None:
+                        # P1-004: canonical selection but no fair benchmark for
+                        # this outcome. Count only.
+                        metrics.selections_rejected_reference_missing += 1
                         continue
 
                     sel_odds_list = odds_by_selection.get(sel.internal_id, [])
                     for o in sel_odds_list:
+                        # P0-002: reference-only bookmakers must never become executable candidates.
+                        # Fair probability/EV math above is untouched; only bookmaker identity is gated.
+                        if (o.bookmaker or "").strip().lower() not in EXECUTABLE_BOOKMAKERS:
+                            continue
                         metrics.selections_evaluated += 1
 
                         try:
                             bm_odds_dec = Decimal(str(o.decimal_odds))
                         except Exception:
+                            # P1-004: executable quote with non-numeric price.
+                            # Count only.
+                            metrics.selections_rejected_invalid_odds += 1
                             continue
 
                         if bm_odds_dec <= DECIMAL_ONE:
+                            # P1-004: executable quote with mathematically
+                            # impossible price (<= 1). Count only.
+                            metrics.selections_rejected_invalid_odds += 1
                             continue
 
                         # Authoritative Value Formula:
@@ -207,7 +234,10 @@ class ValuebetEngine:
                         )
 
                         is_positive_val = value_edge > DECIMAL_ZERO
-                        is_qualified = value_percent >= self.config.min_value_percent
+                        # P0-NEW-001: qualification is gated on tax-adjusted NET EV,
+                        # not gross EV. Gross remains a diagnostic field on the
+                        # candidate; tax is computed once via TaxEngine above.
+                        is_qualified = tax_calc["net_ev_percent"] >= self.config.min_value_percent
 
                         if is_positive_val or self.config.enable_negative_value_candidates:
                             metrics.candidates_found += 1

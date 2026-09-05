@@ -1,18 +1,22 @@
-"""
-Betclic Payload Fetcher Module (Overview & Tier 2 Full Market Acquisition)
-"""
-
 import json
+import logging
 import re
-from typing import List, Dict, Any, Optional, Callable
+import threading
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from providers.base.scraping.http.session_manager import SessionManager
 from providers.base.recovery.retry_engine import RetryEngine
 from providers.base.rate_limiter import RateLimiter
-from providers.base.models import RetryConfig, RateLimitConfig
+from providers.base.models import RetryConfig, RateLimitConfig, ProviderAcquisitionAccounting
+from providers.base.models import build_detail_fetch_failure_payload
+from providers.base.models import build_overview_not_acquired_payload
+from providers.base.exceptions import NonRetryableError, http_status_error
 from providers.betclic.models import BetclicDiscoveredItem
 from providers.betclic.exceptions import BetclicFetchError
 from providers.betclic.config import BetclicConfig, EventSelectionMode
 from providers.betclic.fetch.grpc_client import BetclicGrpcClient
+
+
+logger = logging.getLogger(__name__)
 
 
 class BetclicFetcher:
@@ -26,6 +30,7 @@ class BetclicFetcher:
         rate_limiter: Optional[RateLimiter] = None,
     ):
         self.config = config
+        self._stats_lock = threading.Lock()
         self._session_manager = session_manager or SessionManager(headers=config.headers)
         self._retry_engine = retry_engine or RetryEngine(
             config=RetryConfig(max_retries=config.retry_limit)
@@ -45,10 +50,14 @@ class BetclicFetcher:
         from orchestration.event_selection import DefaultEventSelectionPolicy
         self._selection_policy = DefaultEventSelectionPolicy()
 
-        # Acquisition statistics
+        # Acquisition statistics (Acquisition 2.0 explicit accounting)
         self.stats = {
             "events_considered": 0,
             "events_selected_for_detail": 0,
+            "detail_events_planned": 0,
+            "detail_tasks_submitted": 0,
+            "detail_tasks_started": 0,
+            "html_detail_requests": 0,
             "detail_requests_attempted": 0,
             "detail_requests_successful": 0,
             "detail_requests_failed": 0,
@@ -59,6 +68,7 @@ class BetclicFetcher:
             "detail_network_ms": 0.0,
             "detail_total_ms": 0.0,
             "max_concurrent_details": 1,
+            "failure_reasons": {},
         }
 
     @property
@@ -73,7 +83,9 @@ class BetclicFetcher:
     ) -> List[Dict[str, Any]]:
         """Downloads raw payloads for discovered items (overview or Tier 2 full detail)."""
         raw_responses: List[Dict[str, Any]] = []
-        self.stats["events_considered"] = len(discovered_items)
+        with self._stats_lock:
+            self.stats["events_considered"] = len(discovered_items)
+            self.stats["detail_events_planned"] = len(self.config.selected_event_ids or [])
 
         # In SELECTED mode, if specific event IDs were not pre-configured, dynamically rank and select top popular events
         mode_str = self.config.selection_mode
@@ -91,6 +103,8 @@ class BetclicFetcher:
                     max_detail_requests=max_reqs,
                     preferred_competitions=pref_comps,
                 )
+                with self._stats_lock:
+                    self.stats["detail_events_planned"] = len(self.config.selected_event_ids or [])
             except Exception:
                 pass
 
@@ -122,27 +136,34 @@ class BetclicFetcher:
         # 1. Process overview items instantly
         for idx, item in overview_items_indices:
             if item.metadata and isinstance(item.metadata, dict) and "raw" in item.metadata:
-                self.stats["overview_payloads_used"] += 1
+                with self._stats_lock:
+                    self.stats["overview_payloads_used"] += 1
                 results_by_index[idx] = item.metadata["raw"]
             else:
-                results_by_index[idx] = {
-                    "id": item.provider_event_id,
-                    "name": item.name,
-                    "competition": item.competition_name,
-                    "start_date": item.start_time,
-                    "markets": []
-                }
+                with self._stats_lock:
+                    self.stats["overview_payloads_used"] += 1
+                # P1-NEW-010: overview items not selected for detail have
+                # unknown (not acquired) market state — explicit placeholder.
+                results_by_index[idx] = build_overview_not_acquired_payload(
+                    provider="betclic",
+                    event_id=item.provider_event_id,
+                    name=item.name,
+                    competition=item.competition_name,
+                    start_date=item.start_time,
+                )
 
         # 2. Process detail items (concurrently if workers > 1 with adaptive throttling)
         if detail_items_indices:
-            self.stats["events_selected_for_detail"] += len(detail_items_indices)
+            with self._stats_lock:
+                self.stats["events_selected_for_detail"] += len(detail_items_indices)
+                self.stats["detail_tasks_submitted"] += len(detail_items_indices)
             configured_workers = max(1, workers)
             actual_workers = min(configured_workers, len(detail_items_indices))
-            self.stats["max_concurrent_details"] = max(self.stats.get("max_concurrent_details", 1), actual_workers)
+            with self._stats_lock:
+                self.stats["max_concurrent_details"] = max(self.stats.get("max_concurrent_details", 1), actual_workers)
 
             if actual_workers > 1:
                 import concurrent.futures
-                import threading
                 from orchestration.profiler import get_current_scan_profiler
 
                 profiler = get_current_scan_profiler()
@@ -154,7 +175,11 @@ class BetclicFetcher:
                 def _bc_worker_task_wrapper(item: BetclicDiscoveredItem, worker_index: int):
                     worker_id = f"betclic-worker-{worker_index+1}"
                     if profiler:
+                        from orchestration.profiler import set_current_scan_profiler
+                        set_current_scan_profiler(profiler, set_global=False)
                         profiler.worker_enter()
+                    with self._stats_lock:
+                        self.stats["detail_tasks_started"] += 1
                     try:
                         return self._fetch_detail_event(item, worker_id=worker_id)
                     finally:
@@ -184,33 +209,45 @@ class BetclicFetcher:
                                         f"Betclic detail fetcher adaptive worker step-down to {active_workers} due to {consecutive_failures} failures ({e})"
                                     )
 
-                            # Graceful recovery: always fall back to overview if available, never kill the provider
+                            # P1-003: a failed detail request must NOT be fabricated into a
+                            # bare {"markets": []} response (indistinguishable from a
+                            # legitimate empty response). When genuine Tier-1 overview
+                            # data was captured at discovery it is reused as-is (graceful
+                            # Tier-1 degradation); otherwise emit an explicit FETCH_FAILED
+                            # placeholder (identity + failure reason) so downstream never
+                            # interprets unknown market state as zero markets.
                             if item.metadata and isinstance(item.metadata, dict) and "raw" in item.metadata:
                                 results_by_index[idx] = item.metadata["raw"]
                             else:
-                                results_by_index[idx] = {
-                                    "id": item.provider_event_id,
-                                    "name": item.name,
-                                    "competition": item.competition_name,
-                                    "start_date": item.start_time,
-                                    "markets": []
-                                }
+                                results_by_index[idx] = build_detail_fetch_failure_payload(
+                                    provider="betclic",
+                                    event_id=item.provider_event_id,
+                                    name=item.name,
+                                    competition=item.competition_name,
+                                    start_date=item.start_time,
+                                    exc=e,
+                                )
             else:
                 for idx, item in detail_items_indices:
+                    with self._stats_lock:
+                        self.stats["detail_tasks_started"] += 1
                     try:
                         payload = self._fetch_detail_event(item, worker_id="betclic-worker-1")
                         results_by_index[idx] = payload
                     except Exception as e:
+                        # P1-003: explicit FETCH_FAILED placeholder only when no genuine
+                        # Tier-1 overview data exists (see parallel path above).
                         if item.metadata and isinstance(item.metadata, dict) and "raw" in item.metadata:
                             results_by_index[idx] = item.metadata["raw"]
                         else:
-                            results_by_index[idx] = {
-                                "id": item.provider_event_id,
-                                "name": item.name,
-                                "competition": item.competition_name,
-                                "start_date": item.start_time,
-                                "markets": []
-                            }
+                            results_by_index[idx] = build_detail_fetch_failure_payload(
+                                provider="betclic",
+                                event_id=item.provider_event_id,
+                                name=item.name,
+                                competition=item.competition_name,
+                                start_date=item.start_time,
+                                exc=e,
+                            )
 
         # 3. Assemble final response in exact discovered order
         for idx in range(len(discovered_items)):
@@ -259,17 +296,17 @@ class BetclicFetcher:
             return self.config.grpc_categories
 
         try:
-            comp_name = item.competition_name or (item.metadata.get("competition_name") if item.metadata else "") or ""
+            comp_name = self._selection_policy._extract_item_competition(item) or item.competition_name or ""
             tier = self._selection_policy.calculate_competition_tier(comp_name, self.config.preferred_competitions)
             if tier >= 2:
-                # Minor / Tier 2 competitions do not have player props or complex stats props on Betclic
-                return getattr(self.config, "tier2_grpc_categories", ("", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_cshcp"))
+                # Minor / Tier 2+ competitions do not have player props or complex stats props on Betclic
+                return getattr(self.config, "tier2_grpc_categories", ("", "ca_ftb_rslt", "ca_ftb_goa"))
         except Exception:
             pass
 
         return self.config.grpc_categories
 
-    def _fetch_detail_grpc(self, item: BetclicDiscoveredItem) -> Dict[str, Any]:
+    def _fetch_detail_grpc(self, item: BetclicDiscoveredItem, worker_id: Optional[str] = None) -> Dict[str, Any]:
         """Fetches full market detail payload via Betclic gRPC-Web endpoint."""
         match_id = self._extract_numeric_match_id(item)
         if match_id is None:
@@ -283,6 +320,7 @@ class BetclicFetcher:
             categories=cats,
             rate_limiter=self._rate_limiter,
             parallel=getattr(self.config, "parallel_categories", True),
+            worker_id=worker_id,
         )
 
     def _fetch_detail_html(self, item: BetclicDiscoveredItem, skip_rate_limit: bool = False) -> Dict[str, Any]:
@@ -297,14 +335,21 @@ class BetclicFetcher:
 
         if not skip_rate_limit:
             self._rate_limiter.acquire(1)
+        with self._stats_lock:
+            self.stats["html_detail_requests"] += 1
         resp = self._session_manager.get(
             url=url,
             headers=self.config.headers,
             timeout_seconds=self.config.timeout_seconds,
         )
         if not resp.is_success:
-            raise BetclicFetchError(
-                f"Betclic Tier 2 detail fetch failed with status {resp.status_code} for URL {url}"
+            # P1-NEW-006: 400/401/403/404 are permanent for this request.
+            raise http_status_error(
+                resp.status_code,
+                f"Betclic Tier 2 detail fetch failed with status {resp.status_code} for URL {url}",
+                lambda: BetclicFetchError(
+                    f"Betclic Tier 2 detail fetch failed with status {resp.status_code} for URL {url}"
+                ),
             )
         html = resp.text()
 
@@ -322,7 +367,9 @@ class BetclicFetcher:
                     if isinstance(match_obj, dict):
                         return match_obj
 
-        # If no match object found in script, fallback to discovery raw payload if present
+        # Graceful Tier-1 degradation: genuine overview data captured at discovery.
+        # (P1-003: this passthrough is real provider data, not a fabricated empty
+        # response, so it stays. The fabricated {"markets": []} branch is gone.)
         if item.metadata and isinstance(item.metadata, dict) and "raw" in item.metadata:
             return item.metadata["raw"]
 
@@ -334,7 +381,8 @@ class BetclicFetcher:
         from orchestration.profiler import get_current_scan_profiler
 
         profiler = get_current_scan_profiler()
-        self.stats["detail_requests_attempted"] += 1
+        with self._stats_lock:
+            self.stats["detail_requests_attempted"] += 1
         t_event_start = _time.perf_counter()
         rel_start_s = profiler.elapsed_seconds if profiler else 0.0
 
@@ -346,9 +394,15 @@ class BetclicFetcher:
         req_err_type = None
         req_bytes = 0
         used_mode = "grpc"
+        attempt_count = 0
 
         def _do_fetch():
-            nonlocal req_status, req_bytes, used_mode
+            nonlocal req_status, req_bytes, used_mode, attempt_count
+            attempt_count += 1
+            if attempt_count > 1:
+                with self._stats_lock:
+                    self.stats["detail_requests_retried"] += 1
+
             t_net0 = _time.perf_counter()
             work_start_rel = profiler.elapsed_seconds if profiler else 0.0
 
@@ -380,7 +434,8 @@ class BetclicFetcher:
 
             t_net1 = _time.perf_counter()
             work_end_rel = profiler.elapsed_seconds if profiler else 0.0
-            self.stats["detail_network_ms"] += (t_net1 - t_net0) * 1000.0
+            with self._stats_lock:
+                self.stats["detail_network_ms"] += (t_net1 - t_net0) * 1000.0
 
             if profiler:
                 profiler.record_worker_interval(
@@ -398,10 +453,12 @@ class BetclicFetcher:
                 fn=_do_fetch,
                 stage=f"betclic_fetch_detail_{item.provider_event_id}",
             )
-            self.stats["detail_requests_successful"] += 1
+            with self._stats_lock:
+                self.stats["detail_requests_successful"] += 1
             t_event_end = _time.perf_counter()
             tot_dur_ms = (t_event_end - t_event_start) * 1000.0
-            self.stats["detail_total_ms"] += tot_dur_ms
+            with self._stats_lock:
+                self.stats["detail_total_ms"] += tot_dur_ms
             rel_end_s = profiler.elapsed_seconds if profiler else 0.0
 
             if profiler:
@@ -428,12 +485,15 @@ class BetclicFetcher:
         except Exception as exc:
             req_success = False
             req_err_type = type(exc).__name__
-            self.stats["detail_requests_failed"] += 1
-            if "timeout" in str(exc).lower() or isinstance(exc, (TimeoutError,)):
-                self.stats["detail_requests_timeout"] += 1
+            with self._stats_lock:
+                self.stats["detail_requests_failed"] += 1
+                if "timeout" in str(exc).lower() or isinstance(exc, (TimeoutError,)):
+                    self.stats["detail_requests_timeout"] += 1
+                self.stats["failure_reasons"][req_err_type] = self.stats["failure_reasons"].get(req_err_type, 0) + 1
             t_event_end = _time.perf_counter()
             tot_dur_ms = (t_event_end - t_event_start) * 1000.0
-            self.stats["detail_total_ms"] += tot_dur_ms
+            with self._stats_lock:
+                self.stats["detail_total_ms"] += tot_dur_ms
             rel_end_s = profiler.elapsed_seconds if profiler else 0.0
 
             if profiler:
@@ -458,10 +518,51 @@ class BetclicFetcher:
                     error_type=req_err_type,
                 )
 
-            # Graceful degradation: if detail fetch failed but we have discovery raw payload, use overview
+            # Graceful Tier-1 degradation: genuine overview data captured at discovery.
+            # (P1-003: this passthrough is real provider data, not a fabricated empty
+            # response, so it stays. Only the fabricated {"markets": []} branch now
+            # emits an explicit FETCH_FAILED placeholder at the call sites above.)
             if item.metadata and isinstance(item.metadata, dict) and "raw" in item.metadata:
                 return item.metadata["raw"]
-            if isinstance(exc, BetclicFetchError):
+            if isinstance(exc, (BetclicFetchError, NonRetryableError)):
                 raise
             raise BetclicFetchError(f"Failed fetching detail for Betclic event '{item.provider_event_id}': {exc}") from exc
+
+    def get_accounting(
+        self,
+        discovery_stats: Optional[Dict[str, Any]] = None,
+        discovery_cache_hits: int = 0,
+        parsed_events_count: int = 0,
+        markets_acquired: int = 0,
+        selections_acquired: int = 0,
+    ) -> ProviderAcquisitionAccounting:
+        """Constructs an authoritative Acquisition 2.0 accounting record for Betclic."""
+        disc = discovery_stats or {}
+        with self._stats_lock:
+            # Total detail network requests = gRPC category requests + HTML fallback requests
+            grpc_reqs = self._grpc_client.stats.get("grpc_requests_attempted", 0) if hasattr(self, "_grpc_client") else 0
+            html_reqs = self.stats.get("html_detail_requests", 0)
+            total_detail_network = grpc_reqs + html_reqs
+
+            return ProviderAcquisitionAccounting(
+                provider_name="betclic",
+                discovery_planned=int(disc.get("discovery_planned", 1)),
+                discovery_executed=int(disc.get("discovery_executed", 0)),
+                discovery_network_requests=int(disc.get("discovery_network_requests", 0)),
+                discovery_cache_hits=discovery_cache_hits,
+                events_discovered=int(self.stats.get("events_considered", 0)),
+                detail_events_planned=int(self.stats.get("detail_events_planned", 0)),
+                detail_tasks_submitted=int(self.stats.get("detail_tasks_submitted", 0)),
+                detail_tasks_started=int(self.stats.get("detail_tasks_started", 0)),
+                detail_network_requests=total_detail_network,
+                overview_payloads_reused=int(self.stats.get("overview_payloads_used", 0)),
+                detail_tasks_successful=int(self.stats.get("detail_requests_successful", 0)),
+                detail_tasks_failed=int(self.stats.get("detail_requests_failed", 0)),
+                detail_retries=int(self.stats.get("detail_requests_retried", 0)),
+                detail_timeouts=int(self.stats.get("detail_requests_timeout", 0)),
+                events_parsed=parsed_events_count,
+                markets_parsed=markets_acquired,
+                selections_parsed=selections_acquired,
+                failure_reasons=dict(self.stats.get("failure_reasons", {})),
+            )
 

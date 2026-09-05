@@ -1,0 +1,235 @@
+{
+  "manifest_version": "1.0",
+  "baseline_commit": "5c70a6c178e286897ab295deaa1abc2d0112fea0",
+  "created_at": "2026-08-30T02:00:00Z",
+  "description": "Authoritative Golden Input Manifest for Zielone Bety Phase 1 Deterministic Differential Validation",
+  "datasets": [
+    {
+      "dataset_id": "multi_bookmaker_v1",
+      "dataset_version": "1.0",
+      "data_type": "MULTI_BOOKMAKER_PAYLOADS",
+      "completeness_status": "READY",
+      "providers": ["superbet", "betclic"],
+      "recording_format": "JSON_ARRAY_PAYLOADS",
+      "replay_engine_compatibility": "MOCK_DISCOVERY_PAYLOAD",
+      "description": "Multi-bookmaker dataset with 127 Superbet events and 20 Betclic events with full market richness",
+      "fixtures": [
+        {
+          "file_path": "tests/fixtures/recordings/multi_bookmaker/manifest.json",
+          "size_bytes": 273,
+          "sha256": "e38668511c616e1dd5c1f1d3f8cf7afb19dff1f386aed1c92edf69b5821760a0",
+          "is_manifest": true
+        },
+        {
+          "file_path": "tests/fixtures/recordings/multi_bookmaker/superbet_payloads.json",
+          "size_bytes": 445596,
+          "sha256": "0fdd459f7f0064c1048e4ad2c20e44c1b44aeb48f1e6c96ccd2743175790c217",
+          "provider": "superbet",
+          "events_count": 127
+        },
+        {
+          "file_path": "tests/fixtures/recordings/multi_bookmaker/betclic_payloads.json",
+          "size_bytes": 144557,
+          "sha256": "71fb9ba47065b53cebd996e7f3b0aa19920f846f8ff6e72759db3e849883fbab",
+          "provider": "betclic",
+          "events_count": 20
+        }
+      ],
+      "event_ids": [
+        "13222094", "13222121", "13222135", "13222140", "13222145",
+        "1198919289667584", "1198919289667585"
+      ],
+      "coverage": {
+        "stages_exercised": [
+          "discovery", "selection", "acquisition", "parsing",
+          "normalization", "event_matching", "market_matching",
+          "evaluation", "detection", "final"
+        ],
+        "stages_not_exercised": [],
+        "cross_bookmaker_matching": true,
+        "player_identity_present": true,
+        "market_diversity": "HIGH (1X2, Totals, BTTS, Handicap, Double Chance, Correct Score, Player Props, Team Props, Cards, Corners)",
+        "sufficient_for_regression": true
+      },
+      "limitations": [
+        "Betclic fixture contains 20 events representing a subset of live offerings",
+        "Offline replay mode bypasses HTTP network rate limits and timeouts"
+      ]
+    },
+    {
+      "dataset_id": "superbet_live_v1",
+      "dataset_version": "1.0",
+      "data_type": "HTTP_RECORDING_SESSION",
+      "completeness_status": "READY",
+      "providers": ["superbet"],
+      "recording_format": "REPLAY_ENGINE_MANIFEST",
+      "replay_engine_compatibility": "REPLAY_ENGINE",
+      "description": "Raw Superbet live overview HTTP response containing football events catalog",
+      "fixtures": [
+        {
+          "file_path": "tests/fixtures/recordings/superbet/live_manifest/manifest.json",
+          "size_bytes": 344,
+          "sha256": "83cb16a15ff354fd3a8d7b7f90b906e15530de02e10f626abb0dd47700762a5f",
+          "is_manifest": true
+        },
+        {
+          "file_path": "tests/fixtures/recordings/superbet/live_manifest/response_000.json",
+          "size_bytes": 524729,
+          "sha256": "a98fe92c3b39fcea64f9ac95d07ffe28b0710a98c55e777190b77006253ac7f4",
+          "provider": "superbet",
+          "url": "https://production-superbet-offer-pl.freetls.fastly.net/v3/pl-PL/events",
+          "method": "GET"
+        }
+      ],
+      "event_ids": [],
+      "coverage": {
+        "stages_exercised": ["discovery", "parsing", "normalization"],
+        "stages_not_exercised": ["event_matching", "market_matching", "evaluation", "detection"],
+        "cross_bookmaker_matching": false,
+        "player_identity_present": false,
+        "market_diversity": "MEDIUM (Overview 1X2, Double Chance, Totals)",
+        "sufficient_for_regression": true
+      },
+      "limitations": [
+        "Single provider overview fixture only; does not exercise cross-matching or deep player props"
+      ]
+    },
+    {
+      "dataset_id": "superbet_detail_v1",
+      "dataset_version": "1.0",
+      "data_type": "HTTP_RECORDING_SESSION",
+      "completeness_status": "READY",
+      "providers": ["superbet"],
+      "recording_format": "REPLAY_ENGINE_MANIFEST",
+      "replay_engine_compatibility": "REPLAY_ENGINE",
+      "description": "Deep market detail HTTP response for event 13222121 (Chicago Fire vs Portland Timbers) with >100 markets",
+      "fixtures": [
+        {
+          "file_path": "tests/fixtures/recordings/superbet/detail_manifest/manifest.json",
+          "size_bytes": 383,
+          "sha256": "8a9193f3878c150499f6e0a5d4ee6631ccb29fd6dbc2f467c8687681b55519a9",
+          "is_manifest": true
+        },
+        {
+          "file_path": "tests/fixtures/recordings/superbet/detail_manifest/response_detail_000.json",
+          "size_bytes": 3605818,
+          "sha256": "0342bab79eaafcc15c489a257ca4078429ae98913936c12eda31f49d76c0df65",
+          "provider": "superbet",
+          "event_id": "13222121",
+          "url": "https://production-superbet-offer-pl.freetls.fastly.net/v2/pl-PL/events/13222121",
+          "method": "GET"
+        }
+      ],
+      "event_ids": ["13222121"],
+      "coverage": {
+        "stages_exercised": ["parsing", "normalization"],
+        "stages_not_exercised": ["event_matching", "market_matching", "evaluation", "detection"],
+        "cross_bookmaker_matching": false,
+        "player_identity_present": true,
+        "market_diversity": "HIGH (>100 market types, player props, cards, corners, fouls, shots, intervals)",
+        "sufficient_for_regression": true
+      },
+      "limitations": [
+        "Single match detail payload; does not include target provider counter-offer"
+      ]
+    },
+    {
+      "dataset_id": "betclic_live_v1",
+      "dataset_version": "1.0",
+      "data_type": "HTTP_RECORDING_SESSION",
+      "completeness_status": "READY",
+      "providers": ["betclic"],
+      "recording_format": "REPLAY_ENGINE_MANIFEST",
+      "replay_engine_compatibility": "REPLAY_ENGINE",
+      "description": "Raw Betclic football events overview HTTP response (Barcelona vs Real Madrid)",
+      "fixtures": [
+        {
+          "file_path": "tests/fixtures/recordings/betclic/live_manifest/manifest.json",
+          "size_bytes": 334,
+          "sha256": "b5fe41690a8db53ca31ea1f2d3776fd3ab14b4b3943eb23f01c2446a2ce9eb66",
+          "is_manifest": true
+        },
+        {
+          "file_path": "tests/fixtures/recordings/betclic/live_manifest/response_000.json",
+          "size_bytes": 989,
+          "sha256": "0116063a2101d3850441ad107ccdfbc934c6feb379c4f41705893b39a0a69d69",
+          "provider": "betclic",
+          "url": "https://api.betclic.pl/v2/sportsbook/football/events",
+          "method": "GET"
+        }
+      ],
+      "event_ids": ["event_betclic_9901"],
+      "coverage": {
+        "stages_exercised": ["discovery", "parsing", "normalization"],
+        "stages_not_exercised": ["event_matching", "market_matching", "evaluation", "detection"],
+        "cross_bookmaker_matching": false,
+        "player_identity_present": false,
+        "market_diversity": "LOW (1X2, Totals)",
+        "sufficient_for_regression": true
+      },
+      "limitations": [
+        "Single match overview payload"
+      ]
+    },
+    {
+      "dataset_id": "betclic_detail_v1",
+      "dataset_version": "1.0",
+      "data_type": "EMBEDDED_DETAIL_PAYLOADS",
+      "completeness_status": "PARTIAL",
+      "providers": ["betclic"],
+      "recording_format": "JSON_ARRAY_PAYLOADS",
+      "replay_engine_compatibility": "MOCK_DISCOVERY_PAYLOAD",
+      "description": "Betclic detail market payloads embedded within multi_bookmaker recording (20 matches)",
+      "fixtures": [
+        {
+          "file_path": "tests/fixtures/recordings/multi_bookmaker/betclic_payloads.json",
+          "size_bytes": 144557,
+          "sha256": "71fb9ba47065b53cebd996e7f3b0aa19920f846f8ff6e72759db3e849883fbab",
+          "provider": "betclic",
+          "events_count": 20
+        }
+      ],
+      "event_ids": ["1198919289667584", "1198919289667585"],
+      "coverage": {
+        "stages_exercised": ["discovery", "parsing", "normalization"],
+        "stages_not_exercised": ["standalone_grpc_intercept"],
+        "cross_bookmaker_matching": false,
+        "player_identity_present": true,
+        "market_diversity": "HIGH (Main, Totals, Handicaps, Player Props)",
+        "sufficient_for_regression": true
+      },
+      "limitations": [
+        "Embedded in multi_bookmaker JSON payloads rather than standalone raw gRPC capture stream"
+      ]
+    },
+    {
+      "dataset_id": "reference_odds_v1",
+      "dataset_version": "1.0",
+      "data_type": "REFERENCE_ODDS_FIXTURES",
+      "completeness_status": "READY",
+      "providers": ["the_odds_api", "pinnacle"],
+      "recording_format": "PYTHON_DOMAIN_FIXTURES",
+      "replay_engine_compatibility": "OFFLINE_PROVIDER_FIXTURE",
+      "description": "Offline reference odds fixtures for Pinnacle / The Odds API valuebet calculations",
+      "fixtures": [
+        {
+          "file_path": "tests/fixtures/reference_odds_fixtures.py",
+          "size_bytes": 7491,
+          "sha256": "c79a13e921809461c8fefdeb32a754310273a48954a929a566a7773de6b25a29"
+        }
+      ],
+      "event_ids": ["ref_arsenal_chelsea", "ref_real_madrid_barcelona"],
+      "coverage": {
+        "stages_exercised": ["reference_fetch", "fair_odds_calculation", "valuebet_evaluation"],
+        "stages_not_exercised": ["live_odds_api_http"],
+        "cross_bookmaker_matching": true,
+        "player_identity_present": false,
+        "market_diversity": "MEDIUM (1X2, Totals, BTTS)",
+        "sufficient_for_regression": true
+      },
+      "limitations": [
+        "Synthetic reference provider fixture for deterministic EV verification"
+      ]
+    }
+  ]
+}

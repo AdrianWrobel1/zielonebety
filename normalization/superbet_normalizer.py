@@ -2,9 +2,11 @@
 Superbet Provider Normalizer Implementation
 """
 
+from __future__ import annotations
+
 import functools
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from domain.models import Competition, Event, Market, Selection, Odds
 from normalization.base_normalizer import BaseNormalizer, NormalizedGraph
 from normalization.exceptions import NormalizationError
@@ -149,7 +151,7 @@ class SuperbetNormalizer(BaseNormalizer):
         "even": "EVEN",
     }
 
-    def normalize_event(self, provider_event: SuperbetEvent) -> NormalizedGraph:
+    def normalize_event(self, provider_event: SuperbetEvent, include_markets: bool = True) -> NormalizedGraph:
         """Transforms a SuperbetEvent into a canonical entity graph."""
         if not isinstance(provider_event, SuperbetEvent):
             raise NormalizationError(
@@ -220,6 +222,15 @@ class SuperbetNormalizer(BaseNormalizer):
             metadata=event_metadata,
         )
 
+        if not include_markets:
+            return NormalizedGraph(
+                competition=competition,
+                event=event,
+                markets=[],
+                selections=[],
+                odds_list=[],
+            )
+
         markets: List[Market] = []
         selections: List[Selection] = []
         odds_list: List[Odds] = []
@@ -262,8 +273,21 @@ class SuperbetNormalizer(BaseNormalizer):
 
                 canonical_sel_type = self._resolve_selection_type(ss, home, away, canonical_mkt_type)
                 selection_line = self._extract_selection_line(ss) or market_line
+                if selection_line is None:
+                    if canonical_mkt_type == "PLAYER_GOALS":
+                        name_low = (sm.name or "").lower()
+                        if "2+" in name_low or "2 lub więcej" in name_low:
+                            selection_line = 1.5
+                        elif "3+" in name_low or "3 lub więcej" in name_low:
+                            selection_line = 2.5
+                        else:
+                            selection_line = 0.5
+                    elif canonical_mkt_type in ("PLAYER_CARDS", "PLAYER_ASSISTS"):
+                        selection_line = 0.5
 
-                participant = player_name
+                participant = self._extract_player_name_from_selection(ss) if canonical_mkt_type.startswith("PLAYER_") else None
+                if not participant:
+                    participant = player_name
                 if not participant:
                     if canonical_sel_type == "HOME":
                         participant = home
@@ -299,6 +323,52 @@ class SuperbetNormalizer(BaseNormalizer):
             selections=selections,
             odds_list=odds_list,
         )
+
+    def _extract_player_name_from_selection(self, selection: SuperbetSelection) -> Optional[str]:
+        """Extracts and normalizes player name from a single SuperbetSelection."""
+        if selection.specifiers:
+            if "player_name" in selection.specifiers and selection.specifiers["player_name"]:
+                val_str = str(selection.specifiers["player_name"]).strip()
+                if "," in val_str:
+                    parts = [p.strip() for p in val_str.split(",") if p.strip()]
+                    if len(parts) == 2:
+                        return f"{parts[1]} {parts[0]}"
+                return val_str
+            for k, v in selection.specifiers.items():
+                k_low = k.lower()
+                if ("player" in k_low or k_low.startswith("ss_p")) and "id" not in k_low and v:
+                    val_str = str(v).strip()
+                    if "," in val_str:
+                        parts = [p.strip() for p in val_str.split(",") if p.strip()]
+                        if len(parts) == 2:
+                            return f"{parts[1]} {parts[0]}"
+                    return val_str
+            for k, v in selection.specifiers.items():
+                if ("player" in k.lower() or k.startswith("ss_p")) and v:
+                    val_str = str(v).strip()
+                    if "," in val_str:
+                        parts = [p.strip() for p in val_str.split(",") if p.strip()]
+                        if len(parts) == 2:
+                            return f"{parts[1]} {parts[0]}"
+                    return val_str
+
+        # Parse from selection name if format is 'Player Name - powyżej 0.5'
+        if " - " in selection.name:
+            p_candidate = selection.name.split(" - ")[0].strip()
+            if p_candidate and not any(k in p_candidate.lower() for k in ("powyżej", "powyzej", "poniżej", "ponizej", "over", "under")):
+                if "," in p_candidate:
+                    parts = [p.strip() for p in p_candidate.split(",") if p.strip()]
+                    if len(parts) == 2:
+                        return f"{parts[1]} {parts[0]}"
+                return p_candidate
+        elif not any(k in selection.name.lower() for k in ("1", "x", "2", "over", "under", "powyżej", "powyzej", "poniżej", "ponizej", "tak", "nie", "yes", "no", "remis", "draw")):
+            clean_s = selection.name.strip()
+            if "," in clean_s:
+                parts = [p.strip() for p in clean_s.split(",") if p.strip()]
+                if len(parts) == 2:
+                    return f"{parts[1]} {parts[0]}"
+            return clean_s
+        return None
 
     def _extract_player_name_from_market(self, market: SuperbetMarket) -> Optional[str]:
         """Extracts player name from Superbet market specifiers or selections, prioritizing player_name over player_id."""
@@ -511,6 +581,8 @@ class SuperbetNormalizer(BaseNormalizer):
             return "PLAYER_FOULS"
         if "poda" in name_lower and "zawodnik" in name_lower:
             return "PLAYER_PASSES"
+        if any(k in name_lower for k in ("odbiór", "odbior", "odbiorów", "odbiorow", "tackle", "wślizg", "wslizg")) and "zawodnik" in name_lower:
+            return "PLAYER_TACKLES"
 
         # Exact and prefix matching for standard markets
         if name_lower in ("mecz", "wynik meczu", "1x2", "1 x 2", "zwycięzca meczu", "zwyciezca meczu", "zwycięzca", "zwyciezca"):
@@ -577,10 +649,10 @@ class SuperbetNormalizer(BaseNormalizer):
         if canonical_mkt_type in ("PLAYER_GOALS", "PLAYER_CARDS", "PLAYER_ASSISTS") and not any(k in name_lower for k in ("poniżej", "ponizej", "powyżej", "powyzej", "under", "over")):
             return "YES"
 
-        # 3. Totals / Prop prefix matching
-        if name_lower.startswith(("poniżej", "ponizej", "under")):
+        # 3. Totals / Prop matching
+        if any(k in name_lower for k in ("poniżej", "ponizej", "under")):
             return "UNDER"
-        if name_lower.startswith(("powyżej", "powyzej", "over")):
+        if any(k in name_lower for k in ("powyżej", "powyzej", "over")):
             return "OVER"
 
         # 4. Participant name matching for DNB and Handicap

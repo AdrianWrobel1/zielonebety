@@ -9,12 +9,14 @@ Stage 11 Changes:
 """
 
 import logging
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from providers.base.scraping.http.session_manager import SessionManager
 from providers.base.recovery.retry_engine import RetryEngine
 from providers.base.rate_limiter import RateLimiter
 from providers.base.models import RetryConfig, RateLimitConfig
+from providers.base.exceptions import NonRetryableError
 from providers.odds_api.config import OddsApiConfig
 from providers.odds_api.exceptions import (
     OddsApiFetchError,
@@ -29,8 +31,11 @@ logger = logging.getLogger("zielonebety.provider.odds_api")
 # ─────────────────────────────────────────────────────────────────────────────
 # Module-level persistent cache (survives provider instance recreation)
 # Key: event_id -> (timestamp, payload)
+# P1-NEW-007: guarded by _odds_cache_lock so concurrent misses for the same
+# event cannot stampede into duplicate quota-spending HTTP requests.
 # ─────────────────────────────────────────────────────────────────────────────
 _persistent_odds_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_odds_cache_lock = threading.Lock()
 
 
 def get_persistent_odds_cache() -> Dict[str, Tuple[float, Dict[str, Any]]]:
@@ -40,7 +45,8 @@ def get_persistent_odds_cache() -> Dict[str, Tuple[float, Dict[str, Any]]]:
 
 def clear_persistent_odds_cache() -> None:
     """Clear the persistent cache (for testing)."""
-    _persistent_odds_cache.clear()
+    with _odds_cache_lock:
+        _persistent_odds_cache.clear()
 
 
 class OddsApiFetcher:
@@ -102,10 +108,13 @@ class OddsApiFetcher:
 
         # 1. Check persistent cache
         for it in discovered_items:
-            cached = self._cache.get(it.provider_event_id)
-            if cached and (now - cached[0]) < self.config.cache_ttl_seconds:
+            with _odds_cache_lock:
+                cached = self._cache.get(it.provider_event_id)
+                fresh = bool(cached and (now - cached[0]) < self.config.cache_ttl_seconds)
+                payload = cached[1] if fresh else None
+            if fresh:
                 self.stats["cache_hits"] += 1
-                results.append(cached[1])
+                results.append(payload)
             else:
                 self.stats["cache_misses"] += 1
                 pending_items.append(it)
@@ -194,6 +203,12 @@ class OddsApiFetcher:
                     raise OddsApiAccessDeniedError(
                         f"Odds API.io 403 Forbidden — access denied."
                     )
+                if resp.status_code == 404:
+                    # P1-NEW-006: unknown event id is permanent for this
+                    # request — must not be retried (quota burn fan-out).
+                    raise NonRetryableError(
+                        f"Odds API.io 404 Not Found for events {event_ids_str} — not retried."
+                    )
                 if not resp.is_success:
                     raise OddsApiFetchError(
                         f"Odds API.io /odds/multi fetch failed with status {resp.status_code}: {resp.text()[:200]}"
@@ -212,12 +227,14 @@ class OddsApiFetcher:
                         if isinstance(odds_payload, dict):
                             eid = str(odds_payload.get("id", ""))
                             if eid:
-                                self._cache[eid] = (fetch_time, odds_payload)
+                                with _odds_cache_lock:
+                                    self._cache[eid] = (fetch_time, odds_payload)
                             results.append(odds_payload)
                 elif isinstance(data, dict):
                     eid = str(data.get("id", ""))
                     if eid:
-                        self._cache[eid] = (fetch_time, data)
+                        with _odds_cache_lock:
+                            self._cache[eid] = (fetch_time, data)
                     results.append(data)
 
             except (OddsApiQuotaExceededError, OddsApiAccessDeniedError) as e:

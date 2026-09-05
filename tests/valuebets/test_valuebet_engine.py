@@ -36,8 +36,9 @@ class TestValuebetEngine(unittest.TestCase):
             Fair prob Home: ~0.482758... -> Fair odds: ~2.0714
 
         Bookmaker (Superbet):
-            Home: 2.30 (Bookmaker implies 1/2.30 = 43.48%)
-            Value: (2.30 * 0.482758) - 1 = +11.03%
+            Home: 2.50 (Bookmaker implies 1/2.50 = 40.00%)
+            Gross value: (2.50 * 0.482758) - 1 = +20.69%
+            Net (12% tax, eff 2.20): (2.20 * 0.482758) - 1 = +6.21% >= 3% -> qualified
         """
         ref_mkt = fixture_valid_1x2_reference_market()
         ref_ev = create_reference_event(home_team="Arsenal", away_team="Chelsea", markets=[ref_mkt])
@@ -47,7 +48,7 @@ class TestValuebetEngine(unittest.TestCase):
             away_team="Chelsea",
             bookmaker="superbet",
             market_type=CanonicalMarketType.ONE_X_TWO.value,
-            selections_odds={"HOME": 2.30, "DRAW": 3.40, "AWAY": 3.60},
+            selections_odds={"HOME": 2.50, "DRAW": 3.40, "AWAY": 3.60},
         )
 
         res = self.engine.detect_valuebets([bm_graph], [ref_ev])
@@ -60,13 +61,14 @@ class TestValuebetEngine(unittest.TestCase):
         val_home = next((c for c in res.qualified_valuebets if c.selection_type == "HOME"), None)
         self.assertIsNotNone(val_home)
         self.assertEqual(val_home.bookmaker, "superbet")
-        self.assertEqual(val_home.bookmaker_odds, Decimal("2.30"))
+        self.assertEqual(val_home.bookmaker_odds, Decimal("2.50"))
         self.assertTrue(val_home.is_qualified)
-        self.assertGreater(val_home.value_percent, Decimal("10.0"))
-        self.assertLess(val_home.value_percent, Decimal("12.0"))
+        self.assertGreater(val_home.value_percent, Decimal("19.0"))
+        self.assertLess(val_home.value_percent, Decimal("22.0"))
+        self.assertGreaterEqual(val_home.net_value_percent, Decimal("3.0"))
 
-        # Verify fingerprint structure
-        self.assertIn("VALUEBET_", val_home.fingerprint)
+        # Verify fingerprint structure (stable canonical form, no volatile odds)
+        self.assertIn("opp:VALUEBET:", val_home.fingerprint)
         self.assertIn("1X2", val_home.fingerprint)
         self.assertIn("HOME", val_home.fingerprint)
 
@@ -142,13 +144,14 @@ class TestValuebetEngine(unittest.TestCase):
 
         # Reference: Yes 1.80, No 2.10. Overround: 1/1.8 + 1/2.1 = 0.5556 + 0.4762 = 1.0317
         # Fair prob Yes: 0.5556 / 1.0317 = 0.5385 -> Fair odds: 1.857
-        # Bookmaker offers Yes at 2.05 -> value = 2.05 * 0.5385 - 1 = +10.39%
+        # Bookmaker offers Yes at 2.30 -> gross = 2.30 * 0.5385 - 1 = +23.85%
+        # Net (12% tax, eff 2.024): +8.98% >= 3% -> qualified (P0-NEW-001)
         bm_graph = create_bookmaker_graph(
             home_team="Bayern Munich",
             away_team="Dortmund",
             bookmaker="superbet",
             market_type=CanonicalMarketType.BTTS.value,
-            selections_odds={"YES": 2.05, "NO": 1.70},
+            selections_odds={"YES": 2.30, "NO": 1.70},
         )
 
         res = self.engine.detect_valuebets([bm_graph], [ref_ev])
@@ -181,7 +184,7 @@ class TestValuebetEngine(unittest.TestCase):
             away_team="Milan",
             bookmaker="superbet",
             market_type=CanonicalMarketType.DRAW_NO_BET.value,
-            selections_odds={"HOME": 2.05, "AWAY": 1.70},
+            selections_odds={"HOME": 2.30, "AWAY": 1.70},
         )
 
         res = self.engine.detect_valuebets([bm_graph], [ref_ev])
@@ -232,7 +235,7 @@ class TestValuebetEngine(unittest.TestCase):
             bookmaker="superbet",
             market_type=CanonicalMarketType.HANDICAP.value,
             line=1.5,
-            selections_odds={"HOME": 2.20, "AWAY": 1.70},
+            selections_odds={"HOME": 2.50, "AWAY": 1.70},
         )
 
         res = self.engine.detect_valuebets([bm_graph], [ref_ev])
@@ -240,7 +243,8 @@ class TestValuebetEngine(unittest.TestCase):
         val_hd = res.qualified_valuebets[0]
         self.assertEqual(val_hd.market_type, "HANDICAP")
         self.assertEqual(val_hd.selection_type, "HOME")
-        self.assertEqual(val_hd.value_percent, Decimal("10.00"))
+        self.assertEqual(val_hd.value_percent, Decimal("25.00"))
+        self.assertEqual(val_hd.net_value_percent, Decimal("10.00"))
 
 
 if __name__ == "__main__":

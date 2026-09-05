@@ -93,10 +93,17 @@ class ValuebetQualityPolicy:
         if bm_odds < self.config.min_bookmaker_odds or bm_odds > self.config.max_bookmaker_odds:
             rejection_reasons.append(ValuebetRejectionReason.INVALID_ODDS)
 
-        # 2. Value Percent Bounds
+        # 2. Value Percent Bounds (gross diagnostic + net gate)
         val_pct = candidate.value_percent
         if val_pct < self.config.min_value_percent:
             rejection_reasons.append(ValuebetRejectionReason.LOW_VALUE)
+
+        # P0-NEW-001: QUALIFIED => NET_EV >= threshold. Gross alone must not
+        # qualify a taxed (e.g. Superbet 12%) opportunity whose net is negative.
+        net_pct = candidate.net_value_percent
+        if net_pct is not None and net_pct < self.config.min_value_percent:
+            if ValuebetRejectionReason.LOW_VALUE not in rejection_reasons:
+                rejection_reasons.append(ValuebetRejectionReason.LOW_VALUE)
 
         # 3. Competition Tier
         comp_name = candidate.competition_name or ""

@@ -4,6 +4,7 @@ Opportunity Repository Implementation for Persistent Lifecycle Tracking
 
 from typing import List, Optional, Set
 from datetime import datetime, timezone
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from database.repositories.base_repository import BaseRepository
 from database.models import OpportunityRecordORM
@@ -24,13 +25,33 @@ class OpportunityRepository(BaseRepository[OpportunityRecordORM]):
         )
 
     def save_or_update(self, record: OpportunityRecordORM) -> OpportunityRecordORM:
-        """Persists a new opportunity or updates an existing record."""
+        """Persists a new opportunity or updates an existing record.
+
+        P1-NEW-008: check-then-insert races (two writers observing no row,
+        then both flushing) surface as IntegrityError on the UNIQUE
+        fingerprint. Recover by rolling back the failed flush, re-reading
+        the winner, and applying this write as an update — last-writer-wins,
+        never a 500, never a duplicate.
+        """
         existing = self.get_by_fingerprint(record.fingerprint)
         if not existing:
             self.session.add(record)
-            self.session.flush()
+            try:
+                self.session.flush()
+            except IntegrityError:
+                self.session.rollback()
+                existing = self.get_by_fingerprint(record.fingerprint)
+                if existing is None:
+                    raise
+                return self._apply_update(existing, record)
             return record
 
+        return self._apply_update(existing, record)
+
+    def _apply_update(
+        self, existing: OpportunityRecordORM, record: OpportunityRecordORM
+    ) -> OpportunityRecordORM:
+        """Applies record fields onto an existing row and flushes."""
         # Update existing record fields
         existing.status = record.status
         existing.last_seen_at = record.last_seen_at
@@ -45,7 +66,7 @@ class OpportunityRepository(BaseRepository[OpportunityRecordORM]):
             existing.expired_at = record.expired_at
         if record.delivery_status is not None:
             existing.delivery_status = record.delivery_status
-        if record.alert_count > 0:
+        if (record.alert_count or 0) > 0:
             existing.alert_count = record.alert_count
 
         self.session.flush()
@@ -129,3 +150,43 @@ class OpportunityRepository(BaseRepository[OpportunityRecordORM]):
 
         self.session.flush()
         return expired_records
+
+    def batch_process_market_misses(
+        self,
+        scanned_markets: dict,  # Dict[Tuple[str, str], Set[str]]
+        max_misses: int = 2,
+        miss_time: Optional[datetime] = None,
+    ) -> List[OpportunityRecordORM]:
+        """Batch processes market misses across all active opportunities in a single database round-trip.
+
+        Inverts the N+1 market loop: loads active opportunities once upfront.
+        If no active opportunities exist, returns immediately without issuing further queries or flushes.
+        """
+        now = miss_time or datetime.now(timezone.utc)
+        active_records = self.list_active()
+        if not active_records:
+            return []
+
+        expired_records: List[OpportunityRecordORM] = []
+        any_modified = False
+
+        for record in active_records:
+            mkt_tuple = (record.canonical_event_id, record.market_key)
+            if mkt_tuple not in scanned_markets:
+                # Market was not scanned in this cycle, so not treated as absence
+                continue
+
+            active_fps = scanned_markets[mkt_tuple]
+            if record.fingerprint not in active_fps:
+                record.consecutive_misses = (record.consecutive_misses or 0) + 1
+                any_modified = True
+                if record.consecutive_misses >= max_misses:
+                    record.status = "EXPIRED"
+                    record.expired_at = now
+                    expired_records.append(record)
+
+        if any_modified:
+            self.session.flush()
+
+        return expired_records
+

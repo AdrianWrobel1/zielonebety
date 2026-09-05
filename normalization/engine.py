@@ -5,9 +5,11 @@ Routes provider results to the correct normalizer and produces
 NormalizationResult containers.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from normalization.base_normalizer import BaseNormalizer, NormalizedGraph
 from normalization.betclic_normalizer import BetclicNormalizer
@@ -27,6 +29,10 @@ class NormalizationResult:
     failed_count: int = 0
     errors: List[str] = field(default_factory=list)
     total_count: int = 0
+    # P1-NEW-010: Tier-1 overview placeholders skipped because markets were
+    # never acquired. Distinct from failed_count (acquisition/parser failure)
+    # and from success_count (genuine detail incl. legitimate empty).
+    skipped_not_acquired_count: int = 0
 
     @property
     def success_count(self) -> int:
@@ -66,12 +72,14 @@ class NormalizationEngine:
         self,
         provider_name: str,
         parsed_objects: List[Any],
+        include_markets: bool = True,
     ) -> NormalizationResult:
         """Normalize parsed provider objects into canonical graphs.
 
         Args:
             provider_name: The provider that produced the data.
             parsed_objects: List of provider-specific parsed model instances.
+            include_markets: Whether to normalize markets and selections (set False for overview/identity matching).
 
         Returns:
             NormalizationResult containing successful graphs and error details.
@@ -93,8 +101,40 @@ class NormalizationEngine:
         seen_identities: Dict[Tuple[str, str], NormalizedGraph] = {}
 
         for obj in parsed_objects:
+            # P1-003: a failed detail acquisition has unknown market state. It must
+            # never become a canonical graph (which downstream would read as a
+            # legitimate empty event). Reuse the existing failed_count/errors channel.
+            if getattr(obj, "fetch_failed", False) is True:
+                result.failed_count += 1
+                eid = (
+                    getattr(obj, "event_id", None)
+                    or getattr(obj, "provider_event_id", None)
+                    or "?"
+                )
+                err = getattr(obj, "fetch_error", None) or "unknown acquisition error"
+                error_msg = f"Detail acquisition failed for event '{eid}': {err} (market state unknown)"
+                result.errors.append(error_msg)
+                logger.warning(
+                    "Normalization skipped failed acquisition for provider '%s': %s",
+                    provider_name,
+                    error_msg,
+                )
+                continue
+            # P1-NEW-010: Tier-1 overview placeholder — markets never acquired.
+            # Skip without a graph and without failed_count; the NOT_ACQUIRED
+            # state stays distinguishable from SUCCESS_EMPTY and FETCH_FAILED.
+            if getattr(obj, "overview_only", False) is True:
+                result.skipped_not_acquired_count += 1
+                continue
             try:
-                graph = normalizer.normalize_event(obj)
+                try:
+                    graph = normalizer.normalize_event(obj, include_markets=include_markets)
+                except TypeError:
+                    graph = normalizer.normalize_event(obj)
+                    if not include_markets:
+                        graph.markets = []
+                        graph.selections = []
+                        graph.odds_list = []
                 # Deduplicate by authoritative provider identity: (provider, provider_event_id)
                 identities = [(str(k), str(v)) for k, v in graph.event.provider_ids.items() if v]
                 if identities:

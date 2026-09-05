@@ -2,10 +2,12 @@
 Betclic Provider Normalizer Implementation
 """
 
+from __future__ import annotations
+
 import functools
 from collections import defaultdict
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from domain.models import Competition, Event, Market, Selection, Odds
 from normalization.base_normalizer import BaseNormalizer, NormalizedGraph
 from normalization.exceptions import NormalizationError
@@ -343,7 +345,7 @@ class BetclicNormalizer(BaseNormalizer):
         "X2_DRAW_AWAY": "DRAW_AWAY",
     }
 
-    def normalize_event(self, provider_event: BetclicEvent) -> NormalizedGraph:
+    def normalize_event(self, provider_event: BetclicEvent, include_markets: bool = True) -> NormalizedGraph:
         """Transforms a BetclicEvent into a canonical entity graph."""
         if not isinstance(provider_event, BetclicEvent):
             raise NormalizationError(f"Expected BetclicEvent instance, got {type(provider_event)}")
@@ -409,6 +411,15 @@ class BetclicNormalizer(BaseNormalizer):
             provider_ids={"betclic": provider_event.provider_event_id},
             metadata=event_metadata,
         )
+
+        if not include_markets:
+            return NormalizedGraph(
+                competition=competition,
+                event=event,
+                markets=[],
+                selections=[],
+                odds_list=[],
+            )
 
         markets: List[Market] = []
         selections: List[Selection] = []
@@ -840,7 +851,7 @@ class BetclicNormalizer(BaseNormalizer):
             return "TOTALS"
         if any(k in full_text for k in ("LICZBA SPALONYCH", "SUMA SPALONYCH", "SPALONE POWYZEJ", "SPALONE W MECZU", "SPALONE -", "SPALONE")):
             return "TOTALS"
-        if any(k in full_text for k in ("LICZBA FAULI", "SUMA FAULI", "CELNYCH STRZALOW", "CELNE STRZALY", "LICZBA STRZALOW", "STRZALY")):
+        if any(k in full_text for k in ("LICZBA FAULI", "SUMA FAULI", "FAULE W MECZU", "FAULE POWYZEJ", "FAULE", "FAULI", "CELNYCH STRZALOW", "CELNE STRZALY", "STRZALY CELNE", "LICZBA STRZALOW", "STRZALY W MECZU", "STRZALY", "STRZALOW")):
             return "TOTALS"
 
         # Team statistical totals regex pattern

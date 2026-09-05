@@ -4,6 +4,7 @@ Unit tests for ValuebetQualityPolicy and Ranking Engine (Stage 9.2).
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Optional
 import pytest
 
 from valuebets.models import ValueBetCandidate

@@ -6,9 +6,11 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Set, Dict, Any, Union, Optional
 from providers.base.scraping.http.session_manager import SessionManager
 from providers.base.recovery.retry_engine import RetryEngine
-from providers.base.models import RetryConfig
+from providers.base.rate_limiter import RateLimiter
+from providers.base.models import RetryConfig, RateLimitConfig
 from providers.superbet.models import SuperbetDiscoveredItem
 from providers.superbet.exceptions import SuperbetDiscoveryError
+from providers.base.exceptions import NonRetryableError, http_status_error
 from providers.superbet.config import SuperbetConfig
 
 
@@ -20,15 +22,31 @@ class SuperbetDiscovery:
         config: SuperbetConfig,
         session_manager: Optional[SessionManager] = None,
         retry_engine: Optional[RetryEngine] = None,
+        rate_limiter: Optional[RateLimiter] = None,
     ):
         self.config = config
         self._session_manager = session_manager or config.session_manager or SessionManager(headers=config.headers)
         self._retry_engine = retry_engine or RetryEngine(
             config=RetryConfig(max_retries=config.max_retries)
         )
+        self._rate_limiter = rate_limiter or config.rate_limiter or RateLimiter(
+            config=RateLimitConfig(
+                requests_per_second=config.rate_limit_per_sec,
+                burst_limit=config.rate_limit_burst,
+                cooldown_ms=config.rate_limit_cooldown_ms,
+            )
+        )
+        self.stats: Dict[str, Any] = {
+            "discovery_planned": 1,
+            "discovery_executed": 0,
+            "discovery_network_requests": 0,
+            "events_discovered": 0,
+            "retries": 0,
+            "errors": 0,
+        }
 
     def fetch_discovery_payload(self) -> Dict[str, Any]:
-        """Fetches live discovery payload from Superbet offering endpoint."""
+        """Fetches live discovery payload from Superbet offering endpoint with rate limiting."""
         now = datetime.now(timezone.utc)
         start_date = (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:00:00.000Z")
         end_date = (now + timedelta(hours=self.config.hours_ahead)).strftime("%Y-%m-%dT%H:00:00.000Z")
@@ -41,9 +59,20 @@ class SuperbetDiscovery:
             "sports": str(self.config.sport_id),
         }
 
+        self.stats["discovery_executed"] += 1
+
         def _do_request():
             from orchestration.profiler import get_current_scan_profiler
             profiler = get_current_scan_profiler()
+
+            t_q0 = datetime.now(timezone.utc).timestamp()
+            q_start_rel = profiler.elapsed_seconds if profiler else 0.0
+            self._rate_limiter.acquire(1)
+            t_q1 = datetime.now(timezone.utc).timestamp()
+            q_end_rel = profiler.elapsed_seconds if profiler else 0.0
+            q_wait_ms = max(0.0, (t_q1 - t_q0) * 1000.0)
+
+            self.stats["discovery_network_requests"] += 1
             rel_start = profiler.elapsed_seconds if profiler else 0.0
 
             resp = self._session_manager.get(
@@ -62,13 +91,19 @@ class SuperbetDiscovery:
                     start_rel_s=rel_start,
                     end_rel_s=rel_end,
                     http_status=resp.status_code,
+                    rate_limit_wait_ms=q_wait_ms,
                     success=resp.is_success,
                     bytes_received=len(resp.body) if hasattr(resp, "body") and resp.body else 0,
                 )
 
             if not resp.is_success:
-                raise SuperbetDiscoveryError(
-                    f"Superbet discovery HTTP request failed with status {resp.status_code} for URL {url}"
+                # P1-NEW-006: permanent statuses are non-retryable.
+                raise http_status_error(
+                    resp.status_code,
+                    f"Superbet discovery HTTP request failed with status {resp.status_code} for URL {url}",
+                    lambda: SuperbetDiscoveryError(
+                        f"Superbet discovery HTTP request failed with status {resp.status_code} for URL {url}"
+                    ),
                 )
             return resp.json()
 
@@ -78,7 +113,8 @@ class SuperbetDiscovery:
                 stage="superbet_discovery_fetch",
             )
         except Exception as exc:
-            if isinstance(exc, SuperbetDiscoveryError):
+            self.stats["errors"] += 1
+            if isinstance(exc, (SuperbetDiscoveryError, NonRetryableError)):
                 raise
             raise SuperbetDiscoveryError(f"Superbet discovery acquisition failed: {exc}") from exc
 
@@ -168,4 +204,5 @@ class SuperbetDiscovery:
                     )
                 )
 
+        self.stats["events_discovered"] = len(discovered)
         return discovered

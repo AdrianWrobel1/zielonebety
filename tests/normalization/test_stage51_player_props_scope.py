@@ -1,4 +1,4 @@
-﻿"""
+"""
 Stage 51: Dedicated Unit Tests for Market Scope, Player Goalscorer, and Player Assists
 """
 import pytest

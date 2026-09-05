@@ -357,7 +357,7 @@ class TestMarketMatchingArchitecture(unittest.TestCase):
         graph = normalizer.normalize_event(events[0])
 
         # Stage 50: Normalizer now filters unallowed market families early
-        self.assertEqual(len(graph.markets), 1031)
+        self.assertEqual(len(graph.markets), 545)
 
         market_index, unsupported = self.matcher.index_markets(graph.markets)
 
@@ -365,9 +365,9 @@ class TestMarketMatchingArchitecture(unittest.TestCase):
         total_supported_markets = sum(len(mkts) for mkts in market_index.values())
         total_unsupported_markets = len(unsupported)
 
-        self.assertEqual(total_supported_markets, 940)
-        self.assertEqual(total_unsupported_markets, 91)
-        self.assertEqual(total_supported_markets + total_unsupported_markets, 1031)
+        self.assertEqual(total_supported_markets, 482)
+        self.assertEqual(total_unsupported_markets, 63)
+        self.assertEqual(total_supported_markets + total_unsupported_markets, 545)
 
         # Supported market type verification
         types_in_index = {k.market_type for k in market_index.keys()}

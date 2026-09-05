@@ -43,6 +43,18 @@ DEFAULT_BETCLIC_DISCOVERY_URLS = [
     "https://www.betclic.pl/pilka-nozna-sfootball/liga-mistrzow-c8",
     "https://www.betclic.pl/pilka-nozna-sfootball/liga-europy-c9",
     "https://www.betclic.pl/pilka-nozna-sfootball/liga-konferencji-c53",
+    # Secondary European leagues & domestic cups
+    "https://www.betclic.pl/pilka-nozna-sfootball/championship-c2",
+    "https://www.betclic.pl/pilka-nozna-sfootball/la-liga-2-c28",
+    "https://www.betclic.pl/pilka-nozna-sfootball/serie-b-c29",
+    "https://www.betclic.pl/pilka-nozna-sfootball/2-bundesliga-c25",
+    "https://www.betclic.pl/pilka-nozna-sfootball/ligue-2-c19",
+    "https://www.betclic.pl/pilka-nozna-sfootball/eredivisie-c17",
+    "https://www.betclic.pl/pilka-nozna-sfootball/primeira-liga-c30",
+    "https://www.betclic.pl/pilka-nozna-sfootball/fa-cup-c15",
+    "https://www.betclic.pl/pilka-nozna-sfootball/copa-del-rey-c14",
+    "https://www.betclic.pl/pilka-nozna-sfootball/coppa-italia-c13",
+    "https://www.betclic.pl/pilka-nozna-sfootball/dfb-pokal-c16",
     # Domestic cups
     "https://www.betclic.pl/pilka-nozna-sfootball/puchar-polski-c33",
 ]

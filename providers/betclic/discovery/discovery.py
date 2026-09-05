@@ -54,8 +54,11 @@ class BetclicDiscovery:
             parser=self.parser,
         )
 
-        # Discovery run diagnostics
+        # Discovery run diagnostics (Acquisition 2.0)
         self.stats: Dict[str, Any] = {
+            "discovery_planned": len(config.discovery_urls or DEFAULT_BETCLIC_DISCOVERY_URLS),
+            "discovery_executed": 0,
+            "discovery_network_requests": 0,
             "acquisition_method": "HTTP_SESSION",
             "session_initialized": True,
             "events_discovered": 0,
@@ -195,7 +198,14 @@ class BetclicDiscovery:
         return merged
 
     def _parse_event_time(self, time_str: str) -> Optional[datetime]:
-        """Parse event start time string to UTC datetime."""
+        """Parse event start time string to UTC datetime.
+
+        P1-NEW-009: always returns an aware UTC datetime or None. Naive
+        payloads are coerced to UTC (the source field is ``matchDateUtc``);
+        previously a naive value crashed ``_filter_by_horizon`` with
+        ``TypeError: can't compare offset-naive and offset-aware``,
+        aborting the entire discovery batch on one malformed timestamp.
+        """
         if not time_str:
             return None
         clean = time_str.replace("Z", "+00:00")
@@ -210,9 +220,12 @@ class BetclicDiscovery:
                         clean = parts[0] + "." + frac_and_tz[:min(i, 6)] + frac_and_tz[i:]
                         break
         try:
-            return datetime.fromisoformat(clean)
+            dt = datetime.fromisoformat(clean)
         except (ValueError, TypeError):
             return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
 
     def _filter_by_horizon(self, discovered: List[BetclicDiscoveredItem]) -> List[BetclicDiscoveredItem]:
         """Stage 22C: Filter events to configured hours_ahead horizon."""
@@ -262,9 +275,20 @@ class BetclicDiscovery:
         """Discovers, validates, and deduplicates event references from live or supplied raw payloads."""
         is_live = raw_competitions_payload is None
 
-        # Check internal discovery TTL cache for live runs
+        # Check internal discovery TTL cache for live runs.
+        # P1-NEW-007: the cache entry is valid only for the same horizon
+        # (hours_ahead) and selection mode it was computed with — a cached
+        # list filtered for one horizon must never serve another.
         now_ts = datetime.now(timezone.utc).timestamp()
-        if is_live and self._cached_discovery_items is not None:
+        cache_context = (
+            getattr(self.config, "hours_ahead", None),
+            getattr(self.config, "selection_mode", None),
+        )
+        if (
+            is_live
+            and self._cached_discovery_items is not None
+            and getattr(self, "_cached_discovery_context", None) == cache_context
+        ):
             cache_ts = self._cached_discovery_ts
             ttl = getattr(self.config, "discovery_cache_ttl_seconds", 120.0) or 120.0
             if (now_ts - cache_ts) < ttl:
@@ -358,10 +382,16 @@ class BetclicDiscovery:
             if is_live:
                 discovered = self._filter_by_horizon(discovered)
                 self._cached_discovery_items = list(discovered)
+                self._cached_discovery_context = (
+                    getattr(self.config, "hours_ahead", None),
+                    getattr(self.config, "selection_mode", None),
+                )
                 self._cached_discovery_ts = datetime.now(timezone.utc).timestamp()
 
             self.stats["acquisition_method"] = "HTTP_SESSION" if is_live else "INJECTED_PAYLOAD"
             self.stats["session_initialized"] = self.acquisition.session_manager.session is not None
+            self.stats["discovery_executed"] = 1 if is_live else 0
+            self.stats["discovery_network_requests"] = int(self.acquisition.last_diagnostics.get("urls_attempted", 0)) if is_live else 0
             self.stats["events_discovered"] = len(discovered)
             self.stats["events_parsed"] = len(discovered)
             self.stats["events_valid"] = len(discovered)

@@ -40,7 +40,12 @@ from domain.models import Competition, Event, Market, Selection, Odds
 from normalization.alert_policy import DefaultOpportunityAlertPolicy
 from normalization.base_normalizer import NormalizedGraph
 from normalization.delivery_reliability import DeliveryReconciliationService
-from normalization.dispatcher import OpportunityDispatcher, OpportunityConsumer
+from normalization.dispatcher import (
+    OpportunityDispatcher,
+    OpportunityConsumer,
+    ConsumerDeliveryResult,
+    DeliveryStatus,
+)
 from normalization.engine import NormalizationEngine
 from normalization.lifecycle import OpportunityLifecycleManager
 from normalization.surebet import (

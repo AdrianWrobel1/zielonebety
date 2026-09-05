@@ -1,5 +1,9 @@
 """
 Notification Rule Engine & Deduplication Filter
+
+.. deprecated::
+    Legacy notification stack (see notifications.notification_engine).
+    Kept only for backward compatibility with existing tests.
 """
 
 from typing import Optional, Set

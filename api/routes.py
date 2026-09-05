@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any, Optional, Union
 from api.models import APIResponse
 from api.services import PlatformAPIService
-from api.exceptions import APIError, ResourceNotFoundError
+from api.exceptions import APIError, ResourceNotFoundError, UnauthorizedError
 
 
 class APIRouter:
@@ -127,6 +127,8 @@ class APIRouter:
             config_override = None
             if payload and isinstance(payload, dict):
                 scan_mode = str(payload.get("scan_mode", "NORMAL")).upper()
+                if scan_mode == "ULTRA":
+                    return self.handle_post_ultra_scan(payload)
                 max_details = payload.get("max_detail_requests")
                 config_override = ScanConfig(
                     scan_mode=scan_mode,
@@ -177,24 +179,77 @@ class APIRouter:
             execution_time_ms=round(elapsed_ms, 2),
         )
 
-    def handle_get_latest_trace(self) -> APIResponse:
-        """GET /api/v1/scan/trace/latest"""
+    def handle_post_ultra_scan(self, payload: Optional[Dict[str, Any]] = None) -> APIResponse:
+        """POST /api/v1/scan/ultra"""
         start = time.perf_counter()
-        trace = self.service.get_latest_trace()
+        try:
+            scope_params = dict(payload) if isinstance(payload, dict) else {}
+            dispatch_tg = bool(scope_params.pop("dispatch_telegram", True))
+            ultra_data = self.service.run_ultra_scan(
+                scope_params=scope_params,
+                manual=True,
+                dispatch_telegram=dispatch_tg,
+            )
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            return APIResponse(
+                status_code=200,
+                data=ultra_data,
+                metadata={"execution_id": ultra_data.get("execution_id")},
+                execution_time_ms=round(elapsed_ms, 2),
+            )
+        except APIError as api_err:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            return APIResponse(
+                status_code=api_err.status_code,
+                errors=[str(api_err)],
+                execution_time_ms=round(elapsed_ms, 2),
+            )
+        except Exception as exc:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            return APIResponse(
+                status_code=500,
+                errors=[f"ULTRA SCAN execution error: {str(exc)}"],
+                execution_time_ms=round(elapsed_ms, 2),
+            )
+
+    def handle_get_latest_ultra_scan(self) -> APIResponse:
+        """GET /api/v1/scan/ultra/latest"""
+        start = time.perf_counter()
+        latest = self.service.get_latest_ultra_scan()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        if latest is None:
+            return APIResponse(
+                status_code=200,
+                data=None,
+                metadata={"status": "NOT_RUN", "message": "No ULTRA scan has been executed yet."},
+                execution_time_ms=round(elapsed_ms, 2),
+            )
+        return APIResponse(
+            status_code=200,
+            data=latest,
+            metadata={"execution_id": latest.get("execution_id")},
+            execution_time_ms=round(elapsed_ms, 2),
+        )
+
+    def handle_get_latest_trace(self, mode: str = "main") -> APIResponse:
+        """GET /api/v1/scan/trace/latest?mode=main|team_props|player_props"""
+        start = time.perf_counter()
+        trace = self.service.get_latest_trace(mode=mode)
         elapsed_ms = (time.perf_counter() - start) * 1000.0
 
         if trace is None:
+            mode_label = "Main Scan" if mode == "main" else ("Team Props" if mode == "team_props" else ("Player Props" if mode == "player_props" else mode))
             return APIResponse(
                 status_code=404,
                 data=None,
-                errors=["No profiler trace available yet."],
+                errors=[f"No profiler trace available yet for {mode_label}."],
                 execution_time_ms=round(elapsed_ms, 2),
             )
 
         return APIResponse(
             status_code=200,
             data=trace,
-            metadata={"trace_id": trace.get("trace_id")},
+            metadata={"trace_id": trace.get("trace_id"), "scan_type": trace.get("scan_type", mode)},
             execution_time_ms=round(elapsed_ms, 2),
         )
 
@@ -265,6 +320,7 @@ class APIRouter:
                 scan_scope=payload.get("scan_scope"),
                 hours_ahead=payload.get("hours_ahead"),
                 event_limit=payload.get("event_limit"),
+                adaptive_mode=payload.get("adaptive_mode"),
             )
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             return APIResponse(
@@ -441,6 +497,41 @@ class APIRouter:
             execution_time_ms=round(elapsed_ms, 2)
         )
 
+    def handle_get_telegram_health(self) -> APIResponse:
+        """GET /api/v1/telegram/health"""
+        start = time.perf_counter()
+        health = self.service.get_telegram_health()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return APIResponse(
+            status_code=200,
+            data=health,
+            execution_time_ms=round(elapsed_ms, 2),
+        )
+
+    def handle_post_telegram_test(self) -> APIResponse:
+        """POST /api/v1/telegram/test"""
+        start = time.perf_counter()
+        result = self.service.send_telegram_test_message()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return APIResponse(
+            status_code=200,
+            data=result,
+            execution_time_ms=round(elapsed_ms, 2),
+        )
+
+    def handle_post_telegram_configure(self, body: Optional[Dict[str, Any]] = None) -> APIResponse:
+        """POST /api/v1/telegram/configure"""
+        start = time.perf_counter()
+        payload = body or {}
+        updated_health = self.service.configure_telegram(payload)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return APIResponse(
+            status_code=200,
+            data=updated_health,
+            execution_time_ms=round(elapsed_ms, 2),
+        )
+
+
     def handle_get_odds_history(self, event_id: str = "ev-real-barca-01", period: str = "24h") -> APIResponse:
         """GET /api/v1/history/odds"""
         start = time.perf_counter()
@@ -477,7 +568,15 @@ class APIRouter:
     def handle_post_auth_login(self, username: str = "admin", password: str = "") -> APIResponse:
         """POST /api/v1/auth/login"""
         start = time.perf_counter()
-        auth_data = self.service.authenticate_user(username=username, password=password)
+        try:
+            auth_data = self.service.authenticate_user(username=username, password=password)
+        except UnauthorizedError as auth_err:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            return APIResponse(
+                status_code=auth_err.status_code,
+                errors=[str(auth_err)],
+                execution_time_ms=round(elapsed_ms, 2)
+            )
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         return APIResponse(
             status_code=200,
@@ -552,6 +651,28 @@ class APIRouter:
         return APIResponse(
             status_code=200,
             data=results,
+            execution_time_ms=round(elapsed_ms, 2),
+        )
+
+    def handle_get_props_taxonomy(self) -> APIResponse:
+        """GET /api/v1/props/taxonomy"""
+        start = time.perf_counter()
+        data = self.service.get_props_taxonomy()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return APIResponse(
+            status_code=200,
+            data=data,
+            execution_time_ms=round(elapsed_ms, 2),
+        )
+
+    def handle_get_props_coverage(self) -> APIResponse:
+        """GET /api/v1/props/coverage"""
+        start = time.perf_counter()
+        data = self.service.get_props_coverage()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return APIResponse(
+            status_code=200,
+            data=data,
             execution_time_ms=round(elapsed_ms, 2),
         )
 
@@ -669,5 +790,78 @@ class APIRouter:
             data=health_data,
             execution_time_ms=round(elapsed_ms, 2),
         )
+
+    def handle_post_global_props_scan(self, scope_params: Optional[Dict[str, Any]] = None) -> APIResponse:
+        """POST /api/v1/props/global-scan"""
+        start = time.perf_counter()
+        try:
+            results = self.service.scan_global_props(scope_params=scope_params)
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            return APIResponse(
+                status_code=200,
+                data=results,
+                execution_time_ms=round(elapsed_ms, 2),
+            )
+        except Exception as e:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            return APIResponse(
+                status_code=500,
+                data=None,
+                errors=[f"Global props scan failed: {str(e)}"],
+                execution_time_ms=round(elapsed_ms, 2),
+            )
+
+    def handle_get_global_props_results(
+        self,
+        props_scope: Optional[str] = None,
+        stat: Optional[str] = None,
+        search: Optional[str] = None,
+        min_net_ev: Optional[float] = None,
+        status: Optional[str] = None,
+        bookmaker: Optional[str] = None,
+        view_mode: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        min_odds: Optional[float] = None,
+        competition: Optional[str] = None,
+        position: Optional[str] = None,
+        threshold: Optional[float] = None,
+    ) -> APIResponse:
+        """GET /api/v1/props/global-results"""
+        start = time.perf_counter()
+        kwargs = {
+            "props_scope": props_scope,
+            "stat": stat,
+            "search": search,
+            "min_net_ev": min_net_ev,
+            "limit": limit,
+            "offset": offset,
+        }
+        if status is not None:
+            kwargs["status"] = status
+        if bookmaker is not None:
+            kwargs["bookmaker"] = bookmaker
+        if view_mode is not None:
+            kwargs["view_mode"] = view_mode
+        if sort_by is not None:
+            kwargs["sort_by"] = sort_by
+        if min_odds is not None:
+            kwargs["min_odds"] = min_odds
+        if competition is not None:
+            kwargs["competition"] = competition
+        if position is not None:
+            kwargs["position"] = position
+        if threshold is not None:
+            kwargs["threshold"] = threshold
+
+        results = self.service.get_global_props_results(**kwargs)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return APIResponse(
+            status_code=200,
+            data=results,
+            execution_time_ms=round(elapsed_ms, 2),
+        )
+
 
 

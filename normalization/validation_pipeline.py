@@ -69,6 +69,8 @@ from normalization.aggregator import (
 from normalization.market_identity import (
     CanonicalMarketKey,
     CanonicalMarketType,
+    MarketCompletenessStatus,
+    SUPPORTED_MARKET_REQUIRED_SELECTIONS,
     extract_canonical_market_key,
 )
 from normalization.market_matcher import (
@@ -131,6 +133,12 @@ class MatchedMarketLineage:
     market_decision: MarketMatchDecision
     selection_batch_result: SelectionMatchBatchResult
     comparable_selections: List[ComparableSelectionPair] = field(default_factory=list)
+    completeness_status: MarketCompletenessStatus = MarketCompletenessStatus.COMPLETE
+    required_selection_types: Tuple[str, ...] = field(default_factory=tuple)
+    matched_selection_types: Tuple[str, ...] = field(default_factory=tuple)
+    missing_selection_types: Tuple[str, ...] = field(default_factory=tuple)
+    is_evaluation_eligible: bool = True
+    exclusion_reasons: Tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -698,6 +706,42 @@ class CrossBookmakerValidationPipeline:
                             ce_comparable_selections.append(pair)
                             comparable_selections.append(pair)
 
+                        # Stage 5.2 Completeness & Evaluation Eligibility Evaluation
+                        mkt_type_val = mkt_key.market_type.upper()
+                        req_types = SUPPORTED_MARKET_REQUIRED_SELECTIONS.get(mkt_type_val, ())
+                        matched_sel_types = tuple(
+                            sorted(set(pair.canonical_selection_key.selection_type.upper() for pair in market_comparable_pairs))
+                        )
+
+                        if not req_types:
+                            comp_status = MarketCompletenessStatus.UNSUPPORTED
+                            miss_types = ()
+                            is_eval = False
+                            excl_reasons = ("UNSUPPORTED_MARKET_TYPE_FOR_EVALUATION",)
+                        elif len(market_comparable_pairs) == 0:
+                            comp_status = MarketCompletenessStatus.INCOMPLETE
+                            miss_types = req_types
+                            is_eval = False
+                            excl_reasons = ("ZERO_COMPARABLE_SELECTIONS",)
+                        else:
+                            miss_types = tuple(t for t in req_types if t not in matched_sel_types)
+                            if not miss_types:
+                                comp_status = MarketCompletenessStatus.COMPLETE
+                                is_eval = True
+                                excl_reasons = ()
+                            else:
+                                comp_status = MarketCompletenessStatus.PARTIAL
+                                is_eval = False
+                                excl_reasons = (f"MISSING_REQUIRED_SELECTIONS:{','.join(miss_types)}",)
+
+                        # Check player prop validity if applicable
+                        if mkt_key.scope == "PLAYER" or mkt_type_val.startswith("PLAYER_"):
+                            p_name = getattr(mkt_key, "player_name", None)
+                            if not p_name or p_name.strip().lower() in ("", "unknown", "unresolved"):
+                                is_eval = False
+                                comp_status = MarketCompletenessStatus.INVALID
+                                excl_reasons = ("UNRESOLVED_PLAYER_IDENTITY",)
+
                         matched_markets_lineage.append(
                             MatchedMarketLineage(
                                 canonical_event_id=ce.canonical_event_id,
@@ -709,6 +753,12 @@ class CrossBookmakerValidationPipeline:
                                 market_decision=mkt_dec,
                                 selection_batch_result=sel_batch_res,
                                 comparable_selections=market_comparable_pairs,
+                                completeness_status=comp_status,
+                                required_selection_types=req_types,
+                                matched_selection_types=matched_sel_types,
+                                missing_selection_types=miss_types,
+                                is_evaluation_eligible=is_eval,
+                                exclusion_reasons=excl_reasons,
                             )
                         )
 

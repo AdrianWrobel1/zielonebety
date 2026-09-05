@@ -33,6 +33,51 @@ class MarketMatchDecisionType(str, Enum):
     AMBIGUOUS = "AMBIGUOUS"
 
 
+def _is_abbreviated_player_compatible(name_a: Optional[str], name_b: Optional[str]) -> bool:
+    """Conservative initial<->full player-name compatibility (P1-NEW-003).
+
+    Stateless and symmetric: exactly one side must be an initial+surname form
+    (e.g. 'r lewandowski') and the other a full multi-token form with the same
+    surname whose first token starts with that initial (e.g. 'robert
+    lewandowski'). Dots are ignored ('r.' == 'r').
+
+    Safety bounds (deliberately narrower than the scanner's fuzzy rule):
+    - surname (last token) must be identical and >= 4 chars;
+    - initial must be a single char; full side's first token >= 2 chars;
+    - full-vs-full with different first names is NEVER compatible here
+      (same-name-different-player pairs stay distinct);
+    - single-token names never compatible.
+
+    This avoids wiring the stateful global PlayerIdentityResolver (whose
+    autonomous registration and team-context-blind initial matching could
+    force-match across scans) into the hot matching path, while fixing the
+    systematic 'R. Lewandowski' vs 'Robert Lewandowski' false negative.
+    """
+    if not name_a or not name_b or name_a == name_b:
+        return False
+
+    def _toks(raw: str) -> List[str]:
+        return [t.strip(".") for t in str(raw).lower().split() if t.strip(".")]
+
+    ta, tb = _toks(name_a), _toks(name_b)
+    if len(ta) < 2 or len(tb) < 2:
+        return False
+    if ta[-1] != tb[-1] or len(ta[-1]) < 4:
+        return False
+
+    def _initial_form(t: List[str]) -> Optional[str]:
+        return t[0] if len(t) == 2 and len(t[0]) == 1 else None
+
+    ia, ib = _initial_form(ta), _initial_form(tb)
+    if (ia is None) == (ib is None):
+        # Both initial-form (handled by exact match) or both full-form
+        # (different first names stay distinct) -> not compatible.
+        return False
+    if ia is not None:
+        return len(tb[0]) >= 2 and tb[0].startswith(ia)
+    return len(ta[0]) >= 2 and ta[0].startswith(ib)
+
+
 @dataclass(frozen=True)
 class MarketMatchDecision:
     """Auditable result of a market matching evaluation."""
@@ -181,11 +226,27 @@ class MarketMatcher:
         else:
             evidence["line"] = "exact"
 
-        if getattr(key_source, "player_name", None) != getattr(key_target, "player_name", None):
-            reasons.append("PLAYER_MISMATCH")
-            evidence["player_name"] = f"mismatch ({getattr(key_source, 'player_name', None)} vs {getattr(key_target, 'player_name', None)})"
+        s_cplr = getattr(key_source, "canonical_player_id", None)
+        t_cplr = getattr(key_target, "canonical_player_id", None)
+        s_pname = getattr(key_source, "player_name", None)
+        t_pname = getattr(key_target, "player_name", None)
+
+        if s_cplr and t_cplr:
+            if s_cplr != t_cplr:
+                reasons.append("PLAYER_MISMATCH")
+                evidence["canonical_player_id"] = f"mismatch ({s_cplr} vs {t_cplr})"
+            else:
+                evidence["canonical_player_id"] = "exact"
+        elif s_pname != t_pname:
+            # P1-NEW-003: initial<->full abbreviation compatibility is not a
+            # mismatch (e.g. 'r lewandowski' vs 'robert lewandowski').
+            if _is_abbreviated_player_compatible(s_pname, t_pname):
+                evidence["player_name"] = "abbreviation_compatible"
+            else:
+                reasons.append("PLAYER_MISMATCH")
+                evidence["player_name"] = f"mismatch ({s_pname} vs {t_pname})"
         else:
-            evidence["player_name"] = "exact"
+            evidence["player_name"] = "exact" if s_pname else "not_applicable"
 
         if reasons:
             return MarketMatchDecision(
@@ -286,6 +347,38 @@ class MarketMatcher:
 
             targets = target_index.get(s_key, [])
             if not targets:
+                # P1-NEW-003: bounded fallback for PLAYER scope only. Exact
+                # index lookup cannot pair initial<->full name variants
+                # ('r lewandowski' vs 'robert lewandowski') since player_name
+                # is part of the key. Scan PLAYER keys sharing every other
+                # dimension for abbreviation compatibility. Exactly one
+                # compatible candidate pairs; zero or several stay unmatched
+                # (ambiguous players are never force-matched).
+                if s_key.scope == "PLAYER" and s_key.player_name:
+                    fallback_hits: List[Tuple[CanonicalMarketKey, List[Market]]] = []
+                    for t_key, t_ms in target_index.items():
+                        if (
+                            t_key.market_type == s_key.market_type
+                            and t_key.line == s_key.line
+                            and t_key.period == s_key.period
+                            and t_key.scope == s_key.scope
+                            and t_key.metric == s_key.metric
+                            and (t_key.participant_role or None) == (s_key.participant_role or None)
+                            and t_key.sport == s_key.sport
+                            and _is_abbreviated_player_compatible(s_key.player_name, t_key.player_name)
+                        ):
+                            fallback_hits.append((t_key, t_ms))
+                    # Deterministic order for reproducible pairing.
+                    fallback_hits.sort(key=lambda h: h[0].to_key_string())
+                    single_hits = [(k, ms) for k, ms in fallback_hits if len(ms) == 1]
+                    if len(single_hits) == 1:
+                        t_key, t_ms = single_hits[0]
+                        tm = t_ms[0]
+                        decision = self.match(sm, tm)
+                        if decision.decision == MarketMatchDecisionType.MATCHED:
+                            matched_pairs.append(decision)
+                            matched_target_keys.add(t_key)
+                            continue
                 unmatched_source_keys.append(s_key)
                 continue
 

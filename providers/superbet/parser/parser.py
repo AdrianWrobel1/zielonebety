@@ -4,6 +4,12 @@ Superbet Payload Parser Module (Tier 1 Overview & Tier 2 Full Market Parsing)
 
 import json
 from typing import List, Dict, Any, Tuple
+from providers.base.models import (
+    DETAIL_FETCH_ERROR_KEY,
+    DETAIL_FETCH_ERROR_TYPE_KEY,
+    DETAIL_FETCH_FAILED_KEY,
+    OVERVIEW_NOT_ACQUIRED_KEY,
+)
 from providers.superbet.models import (
     SuperbetEvent,
     SuperbetMarket,
@@ -25,7 +31,7 @@ class SuperbetParser:
         " — ",   # Em dash
     ]
 
-    def parse_payloads(self, raw_responses: List[Dict[str, Any]]) -> List[SuperbetEvent]:
+    def parse_payloads(self, raw_responses: List[Dict[str, Any]], include_markets: bool = True) -> List[SuperbetEvent]:
         """Parses a list of raw response dicts into SuperbetEvent objects."""
         parsed_events: List[SuperbetEvent] = []
 
@@ -38,9 +44,9 @@ class SuperbetParser:
                 if "data" in payload and isinstance(payload["data"], list) and len(payload["data"]) > 0:
                     for ev_dict in payload["data"]:
                         if isinstance(ev_dict, dict):
-                            parsed_events.append(self._parse_single_event(ev_dict))
+                            parsed_events.append(self._parse_single_event(ev_dict, include_markets=include_markets))
                 else:
-                    parsed_events.append(self._parse_single_event(payload))
+                    parsed_events.append(self._parse_single_event(payload, include_markets=include_markets))
 
             except Exception as e:
                 if isinstance(e, SuperbetParsingError):
@@ -49,7 +55,7 @@ class SuperbetParser:
 
         return parsed_events
 
-    def _parse_single_event(self, payload: Dict[str, Any]) -> SuperbetEvent:
+    def _parse_single_event(self, payload: Dict[str, Any], include_markets: bool = True) -> SuperbetEvent:
         """Parses an individual event dictionary."""
         fixture = payload.get("fixture", {}) if isinstance(payload.get("fixture"), dict) else {}
 
@@ -100,14 +106,25 @@ class SuperbetParser:
         )
 
         markets: List[SuperbetMarket] = []
-        raw_markets = payload.get("markets", [])
+        if include_markets:
+            raw_markets = payload.get("markets", [])
 
-        # 1. Tier 2 flat odds structure (e.g. from /v2/pl-PL/events/{event_id})
-        if "odds" in payload and isinstance(payload["odds"], list):
-            markets = self._parse_flat_odds_markets(event_id, payload["odds"])
-        # 2. Tier 1 / standard hierarchical markets structure (e.g. from /v3/pl-PL/events)
-        elif isinstance(raw_markets, list) and len(raw_markets) > 0:
-            markets = self._parse_hierarchical_markets(event_id, raw_markets)
+            # 1. Tier 2 flat odds structure (e.g. from /v2/pl-PL/events/{event_id})
+            if "odds" in payload and isinstance(payload["odds"], list):
+                markets = self._parse_flat_odds_markets(event_id, payload["odds"])
+            # 2. Tier 1 / standard hierarchical markets structure (e.g. from /v3/pl-PL/events)
+            elif isinstance(raw_markets, list) and len(raw_markets) > 0:
+                markets = self._parse_hierarchical_markets(event_id, raw_markets)
+
+        # P1-003: propagate explicit detail-acquisition failure state so a
+        # failed request is never equivalent to a legitimate empty response.
+        fetch_failed = payload.get(DETAIL_FETCH_FAILED_KEY) is True
+        fetch_error = payload.get(DETAIL_FETCH_ERROR_KEY) if fetch_failed else None
+        fetch_error_type = payload.get(DETAIL_FETCH_ERROR_TYPE_KEY) if fetch_failed else None
+        # P1-NEW-010: propagate Tier-1 overview NOT_ACQUIRED state so an
+        # event whose markets were never acquired is never equivalent to a
+        # legitimate zero-market detail response.
+        overview_only = payload.get(OVERVIEW_NOT_ACQUIRED_KEY) is True
 
         return SuperbetEvent(
             event_id=event_id,
@@ -124,6 +141,10 @@ class SuperbetParser:
             category_id=category_id,
             markets=markets,
             raw_metadata=payload,
+            fetch_failed=fetch_failed,
+            fetch_error=str(fetch_error) if fetch_error else None,
+            fetch_error_type=str(fetch_error_type) if fetch_error_type else None,
+            overview_only=overview_only,
         )
 
     @staticmethod
@@ -150,8 +171,8 @@ class SuperbetParser:
         if ";" in name_lower:
             return False
 
-        # 3. Reject disallowed statistical metrics (Passes, Saves, Intercepts, Woodwork, etc.)
-        if any(k in name_lower for k in ("podań", "podan", "podania", "obronionych", "obron", "przechwyt", "słupek", "slupek", "poprzeczk")):
+        # 3. Reject disallowed statistical metrics (Saves, Intercepts, Woodwork, etc.)
+        if any(k in name_lower for k in ("obronionych", "obron", "przechwyt", "słupek", "slupek", "poprzeczk")):
             return False
 
         # 4. Reject specific body part / sub-variant player markets not in canonical scope

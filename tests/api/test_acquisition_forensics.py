@@ -1,4 +1,4 @@
-﻿"""
+"""
 Targeted tests for Acquisition Forensics and Scan Profiler Telemetry (Stage 47)
 """
 

@@ -4,7 +4,7 @@ StatsHub Provider Configuration
 
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from providers.statshub.constants import (
     STATSHUB_BASE_URL,
@@ -18,6 +18,7 @@ class StatsHubConfig:
 
     # Core
     base_url: str = STATSHUB_BASE_URL
+    mode: str = "hunter"  # "hunter", "player_trends", "team_trends"
     enabled: bool = field(default_factory=lambda: os.environ.get("STATSHUB_ENABLED", "true").lower() in ("true", "1", "yes"))
     request_timeout: float = 20.0
     max_retries: int = 3
@@ -25,6 +26,7 @@ class StatsHubConfig:
 
     # Query parameters — stat filter
     stat: str = "shots"
+    stat_type: Optional[str] = None
     positions: str = "D,M,F"
     last_games: int = 10
 
@@ -33,9 +35,14 @@ class StatsHubConfig:
     end_of_day: Optional[int] = None
     days_ahead: int = field(default_factory=lambda: int(os.environ.get("STATSHUB_DAYS_AHEAD", "7")))
 
-    # Query parameters — tournaments/fixtures
+    # Query parameters — tournaments/fixtures/trends
     tournaments: str = ""
     fixture_ids: str = ""
+    games: str = ""  # comma-separated event IDs for Trends API (e.g. "16416308")
+    player_id: Optional[Union[int, str]] = None
+    unique_tournament_id: Optional[Union[int, str]] = None
+    odds_type: Optional[str] = None  # "over", "under"
+    line: Optional[float] = None
 
     # Query parameters — filters
     min_minutes_played: int = 0
@@ -73,7 +80,7 @@ class StatsHubConfig:
     rate_limit_cooldown_ms: int = 250
 
     def build_query_params(self) -> Dict[str, str]:
-        """Build URL query parameters for the StatsHub API request."""
+        """Build URL query parameters for the StatsHub Hunter API request."""
         params: Dict[str, str] = {
             "stat": self.stat,
             "lastGames": str(self.last_games),
@@ -108,3 +115,46 @@ class StatsHubConfig:
             params["fixtureIds"] = self.fixture_ids
 
         return params
+
+    def build_trends_query_params(self) -> Dict[str, str]:
+        """Build URL query parameters for StatsHub Player/Team Trends API requests."""
+        params: Dict[str, str] = {
+            "page": str(self.page),
+            "limit": str(self.limit),
+        }
+        if self.games:
+            params["games"] = str(self.games)
+        if self.player_id is not None:
+            params["playerId"] = str(self.player_id)
+        if self.unique_tournament_id is not None:
+            params["uniqueTournamentId"] = str(self.unique_tournament_id)
+
+        target_stat = self.stat_type or self.stat
+        if target_stat:
+            params["statType"] = target_stat
+        if self.odds_type:
+            params["oddsType"] = self.odds_type
+        if self.line is not None:
+            params["line"] = str(self.line)
+
+        return params
+
+    def build_cache_key(self) -> str:
+        """Deterministic cache key distinguishing global hunter vs event trends and parameters."""
+        if self.mode == "player_trends":
+            return (
+                f"statshub:event:player_trends:{self.games}:{self.player_id}:"
+                f"{self.unique_tournament_id}:{self.stat_type or self.stat}:{self.odds_type}:{self.line}:{self.page}:{self.limit}"
+            )
+        elif self.mode == "team_trends":
+            return (
+                f"statshub:event:team_trends:{self.games}:{self.stat_type or self.stat}:"
+                f"{self.odds_type}:{self.line}:{self.page}:{self.limit}"
+            )
+        else:
+            return (
+                f"statshub:global:hunter:{self.stat}:{self.positions}:{self.last_games}:"
+                f"{self.hit_rate_threshold}:{self.stat_threshold}:{self.start_of_day}:"
+                f"{self.end_of_day}:{self.tournaments}:{self.page}:{self.limit}"
+            )
+

@@ -2,7 +2,9 @@
 Surebet (Arbitrage) Detection Algorithm
 """
 
-from typing import List, Dict, Optional
+from __future__ import annotations
+
+from typing import Any, List, Dict, Optional
 from domain.models import Event, Market, Selection, Odds
 from scanner.models import Opportunity, OpportunityType, OpportunityLeg
 

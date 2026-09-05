@@ -145,6 +145,36 @@ class TestPlayerPropModels(unittest.TestCase):
         with self.assertRaises(Exception):
             odds.decimal_odds = 2.50
 
+    def test_statshub_fixture_deep_link_and_ids(self):
+        from providers.statshub.models import StatsHubFixture
+        fix = StatsHubFixture(
+            fixture_id="16416308",
+            event_internal_id=362992,
+            slug="celta-vigo-vs-athletic-club",
+            home_team="Celta Vigo",
+            away_team="Athletic Club",
+            competition="LaLiga",
+        )
+        self.assertEqual(fix.fixture_id, "16416308")
+        self.assertEqual(fix.event_internal_id, 362992)
+        self.assertEqual(fix.slug, "celta-vigo-vs-athletic-club")
+        self.assertEqual(fix.get_fixture_url(), "https://www.statshub.com/fixture/celta-vigo-vs-athletic-club/362992")
+
+    def test_statshub_team_fixture_deep_link_and_ids(self):
+        from providers.statshub.team_models import StatsHubTeamFixture
+        fix = StatsHubTeamFixture(
+            fixture_id="16416308",
+            event_internal_id="362992",
+            home_team_slug="celta-vigo",
+            away_team_slug="athletic-club",
+            home_team="Celta Vigo",
+            away_team="Athletic Club",
+        )
+        self.assertEqual(fix.fixture_id, "16416308")
+        self.assertEqual(fix.event_internal_id, "362992")
+        self.assertEqual(fix.get_fixture_url(), "https://www.statshub.com/fixture/celta-vigo-vs-athletic-club/362992")
+
 
 if __name__ == "__main__":
     unittest.main()
+

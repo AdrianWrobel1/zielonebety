@@ -9,12 +9,14 @@ Defines the provider-independent semantic contract for betting markets:
 - Safe key extraction from normalized Market models
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 import functools
 import re
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 import unicodedata
 
 from domain.models import Market
@@ -80,6 +82,49 @@ class ParticipantRole(str, Enum):
     HOME = "HOME"
     AWAY = "AWAY"
     NONE = "NONE"
+
+
+class MarketCompletenessStatus(str, Enum):
+    """Authoritative qualification status for market evaluation completeness."""
+    COMPLETE = "COMPLETE"        # All required mutually exclusive selections present and matched
+    PARTIAL = "PARTIAL"          # Some required selections present, but partition incomplete
+    INCOMPLETE = "INCOMPLETE"    # Zero selections matched
+    UNSUPPORTED = "UNSUPPORTED"  # Market semantics do not establish a proven complete partition
+    INVALID = "INVALID"          # Missing necessary market dimensions (e.g. line, scope, player)
+
+
+# Explicit required canonical selection sets for supported canonical market types.
+# Only markets with mathematically proven mutually exclusive and collectively exhaustive
+# partitions are admitted here.
+SUPPORTED_MARKET_REQUIRED_SELECTIONS: Dict[str, Tuple[str, ...]] = {
+    # 1X2 Match Result: Home, Draw, Away (3-way partition)
+    CanonicalMarketType.ONE_X_TWO.value: ("HOME", "DRAW", "AWAY"),
+    # Both Teams To Score (BTTS): Yes, No (2-way partition)
+    CanonicalMarketType.BTTS.value: ("YES", "NO"),
+    # Totals (Over / Under): Over, Under (2-way partition bound to parent line)
+    CanonicalMarketType.TOTALS.value: ("OVER", "UNDER"),
+    # Draw No Bet (DNB): Home, Away (2-way partition for decisive match)
+    CanonicalMarketType.DRAW_NO_BET.value: ("HOME", "AWAY"),
+    # Half Time Result: Home, Draw, Away (3-way partition for FIRST_HALF period)
+    CanonicalMarketType.HALF_TIME_RESULT.value: ("HOME", "DRAW", "AWAY"),
+    # Match Goals Odd/Even: Odd, Even (2-way partition)
+    CanonicalMarketType.ODD_EVEN.value: ("ODD", "EVEN"),
+    # Handicap (2-way partition bound to line: Home, Away)
+    CanonicalMarketType.HANDICAP.value: ("HOME", "AWAY"),
+    # Asian Handicap (2-way partition bound to line: Home, Away)
+    CanonicalMarketType.ASIAN_HANDICAP.value: ("HOME", "AWAY"),
+    # Double Chance: 1X (Home/Draw), 12 (Home/Away), X2 (Draw/Away) (3-way partition)
+    CanonicalMarketType.DOUBLE_CHANCE.value: ("1X", "12", "X2"),
+    # Player Props (Over / Under partitions)
+    CanonicalMarketType.PLAYER_SHOTS.value: ("OVER", "UNDER"),
+    CanonicalMarketType.PLAYER_SHOTS_ON_TARGET.value: ("OVER", "UNDER"),
+    CanonicalMarketType.PLAYER_FOULS.value: ("OVER", "UNDER"),
+    CanonicalMarketType.PLAYER_PASSES.value: ("OVER", "UNDER"),
+    CanonicalMarketType.PLAYER_TACKLES.value: ("OVER", "UNDER"),
+    CanonicalMarketType.PLAYER_GOALS.value: ("YES", "NO"),
+    CanonicalMarketType.PLAYER_CARDS.value: ("YES", "NO"),
+    CanonicalMarketType.PLAYER_ASSISTS.value: ("YES", "NO"),
+}
 
 
 # Line-dependent canonical market types that strictly require a line
@@ -198,6 +243,7 @@ class CanonicalMarketKey:
     participant_role: Optional[str] = None
     sport: str = "football"
     player_name: Optional[str] = None
+    canonical_player_id: Optional[str] = None
 
     def __post_init__(self):
         # Ensure line is normalized Decimal or None
@@ -543,10 +589,12 @@ def extract_canonical_market_key(
         # For player props, player_name is mandatory
         if not player_name:
             return None
+        canonical_player_id = meta.get("canonical_player_id")
     else:
         # Extract metric
         metric = meta.get("metric", MarketMetric.GOALS.value).upper()
         player_name = None
+        canonical_player_id = None
 
     # Extract sport
     sport = meta.get("sport", default_sport).lower()
@@ -557,8 +605,11 @@ def extract_canonical_market_key(
         if norm_line is None:
             # Line is mandatory for line-dependent markets
             return None
-    elif canonical_type != CanonicalMarketType.PLAYER_GOALS.value and canonical_type != CanonicalMarketType.PLAYER_CARDS.value:
-        # Non-line markets should not have a line in identity
+    elif canonical_type != CanonicalMarketType.PLAYER_GOALS.value and canonical_type != CanonicalMarketType.PLAYER_CARDS.value and canonical_type != CanonicalMarketType.PLAYER_ASSISTS.value:
+        # Non-line markets should not have a line in identity.
+        # P0-NEW-002: PLAYER_GOALS/CARDS/ASSISTS preserve an explicit line
+        # when present (OVER/UNDER variants) while still allowing line-less
+        # YES/NO binaries — consistent with props_taxonomy is_line_dependent.
         norm_line = None
 
     return CanonicalMarketKey(
@@ -570,4 +621,183 @@ def extract_canonical_market_key(
         participant_role=role,
         sport=sport,
         player_name=player_name,
+        canonical_player_id=canonical_player_id,
     )
+
+
+def classify_market_category(mkt_type_or_name: Any, key_or_mkt: Any = None) -> str:
+    """Authoritative platform-wide market category classifier.
+
+    Maps any CanonicalMarketKey, Market domain entity, raw name string, or dictionary
+    into one of the 24 standard market breakdown telemetry categories:
+    - 1X2, BTTS, TOTALS, TEAM_GOALS
+    - CARDS, TEAM_CARDS, CARD_POINTS, TEAM_CARD_POINTS
+    - CORNERS, TEAM_CORNERS, OFFSIDES, TEAM_OFFSIDES
+    - FOULS, TEAM_FOULS, SHOTS, TEAM_SHOTS, SHOTS_ON_TARGET, TEAM_SHOTS_ON_TARGET
+    - DOUBLE_CHANCE, DRAW_NO_BET, HALF_TIME_RESULT, HANDICAP
+    - PLAYER_PROPS, OTHER
+    """
+    # 1. Inspect CanonicalMarketKey or object with metric & scope
+    if hasattr(mkt_type_or_name, "metric") and hasattr(mkt_type_or_name, "scope"):
+        metric = getattr(mkt_type_or_name, "metric", "GOALS") or "GOALS"
+        scope = getattr(mkt_type_or_name, "scope", "MATCH") or "MATCH"
+        m_type = getattr(mkt_type_or_name, "market_type", "") or ""
+        player_name = getattr(mkt_type_or_name, "player_name", None)
+
+        if scope == "PLAYER" or player_name:
+            return "PLAYER_PROPS"
+
+        if scope == "TEAM":
+            if metric == "CARD_POINTS":
+                return "TEAM_CARD_POINTS"
+            if metric == "CARDS":
+                return "TEAM_CARDS"
+            if metric == "CORNERS":
+                return "TEAM_CORNERS"
+            if metric == "SHOTS":
+                return "TEAM_SHOTS"
+            if metric == "SHOTS_ON_TARGET":
+                return "TEAM_SHOTS_ON_TARGET"
+            if metric == "FOULS":
+                return "TEAM_FOULS"
+            if metric == "OFFSIDES":
+                return "TEAM_OFFSIDES"
+            if metric == "GOALS":
+                return "TEAM_GOALS"
+
+        if metric == "CARD_POINTS":
+            return "CARD_POINTS"
+        if metric == "CARDS":
+            return "CARDS"
+        if metric == "CORNERS":
+            return "CORNERS"
+        if metric == "SHOTS":
+            return "SHOTS"
+        if metric == "SHOTS_ON_TARGET":
+            return "SHOTS_ON_TARGET"
+        if metric == "FOULS":
+            return "FOULS"
+        if metric == "OFFSIDES":
+            return "OFFSIDES"
+
+        if m_type == "TOTALS":
+            return "TOTALS"
+        if m_type in ("1X2", "MATCH_RESULT"):
+            return "1X2"
+        if m_type == "BTTS":
+            return "BTTS"
+        if m_type == "DOUBLE_CHANCE":
+            return "DOUBLE_CHANCE"
+        if m_type == "DRAW_NO_BET":
+            return "DRAW_NO_BET"
+        if m_type == "HALF_TIME_RESULT":
+            return "HALF_TIME_RESULT"
+        if m_type in ("HANDICAP", "ASIAN_HANDICAP"):
+            return "HANDICAP"
+        mkt_type_or_name = m_type
+
+    # 2. Inspect dict or metadata on key_or_mkt
+    target_obj = key_or_mkt if key_or_mkt is not None else mkt_type_or_name
+    if isinstance(target_obj, dict):
+        metric = target_obj.get("metric", "GOALS")
+        scope = target_obj.get("scope", "MATCH")
+        if scope == "PLAYER" or target_obj.get("player_name"):
+            return "PLAYER_PROPS"
+        if scope == "TEAM":
+            team_map = {
+                "CARD_POINTS": "TEAM_CARD_POINTS",
+                "CARDS": "TEAM_CARDS",
+                "CORNERS": "TEAM_CORNERS",
+                "SHOTS": "TEAM_SHOTS",
+                "SHOTS_ON_TARGET": "TEAM_SHOTS_ON_TARGET",
+                "FOULS": "TEAM_FOULS",
+                "OFFSIDES": "TEAM_OFFSIDES",
+                "GOALS": "TEAM_GOALS",
+            }
+            if metric in team_map:
+                return team_map[metric]
+        match_map = {
+            "CARD_POINTS": "CARD_POINTS",
+            "CARDS": "CARDS",
+            "CORNERS": "CORNERS",
+            "SHOTS": "SHOTS",
+            "SHOTS_ON_TARGET": "SHOTS_ON_TARGET",
+            "FOULS": "FOULS",
+            "OFFSIDES": "OFFSIDES",
+        }
+        if metric in match_map:
+            return match_map[metric]
+
+    if hasattr(target_obj, "metadata") and isinstance(target_obj.metadata, dict):
+        metric = target_obj.metadata.get("metric", "GOALS")
+        scope = target_obj.metadata.get("scope", "MATCH")
+        if scope == "PLAYER" or target_obj.metadata.get("player_name"):
+            return "PLAYER_PROPS"
+        if scope == "TEAM":
+            team_map = {
+                "CARD_POINTS": "TEAM_CARD_POINTS",
+                "CARDS": "TEAM_CARDS",
+                "CORNERS": "TEAM_CORNERS",
+                "SHOTS": "TEAM_SHOTS",
+                "SHOTS_ON_TARGET": "TEAM_SHOTS_ON_TARGET",
+                "FOULS": "TEAM_FOULS",
+                "OFFSIDES": "TEAM_OFFSIDES",
+                "GOALS": "TEAM_GOALS",
+            }
+            if metric in team_map:
+                return team_map[metric]
+        match_map = {
+            "CARD_POINTS": "CARD_POINTS",
+            "CARDS": "CARDS",
+            "CORNERS": "CORNERS",
+            "SHOTS": "SHOTS",
+            "SHOTS_ON_TARGET": "SHOTS_ON_TARGET",
+            "FOULS": "FOULS",
+            "OFFSIDES": "OFFSIDES",
+        }
+        if metric in match_map:
+            return match_map[metric]
+
+    m = (str(mkt_type_or_name) if mkt_type_or_name else "").upper().strip()
+
+    # 3. Player Props heuristics
+    if any(k in m for k in ("PLAYER_", "STRZELEC", "ZAWODNIK", "GRACZ", "GOALSCORER", "ASYSTY ZAWODNIKA", "CELNE STRZAŁY", "CELNE STRZALY")):
+        return "PLAYER_PROPS"
+
+    # 4. Raw string name heuristics
+    is_team_hint = any(k in m for k in ("GOSPODARZ", "GOŚC", "GOSC", "DRUŻYN", "DRUZYN", "TEAM"))
+    if any(k in m for k in ("RZUTÓW ROŻNYCH", "RZUTOW ROZNYCH", "RZ.ROŻNYCH", "RZ.ROZNYCH", "ROŻNE", "ROZNE", "CORNER")):
+        return "TEAM_CORNERS" if is_team_hint else "CORNERS"
+    if any(k in m for k in ("PUNKTY KARTKOWE", "PUNKTÓW KARTKOWYCH")):
+        return "TEAM_CARD_POINTS" if is_team_hint else "CARD_POINTS"
+    if any(k in m for k in ("ŻÓŁTYCH KARTEK", "ZOLTYCH KARTEK", "KARTEK", "KARTK", "KARTKI", "KARTKI ŻÓŁTE", "KARTKI ZOLTE", "CARDS")):
+        return "TEAM_CARDS" if is_team_hint else "CARDS"
+    if any(k in m for k in ("STRZAŁY CELNE", "STRZALY CELNE", "CELNE STRZAŁY", "CELNE STRZALY", "SHOTS ON TARGET")):
+        return "TEAM_SHOTS_ON_TARGET" if is_team_hint else "SHOTS_ON_TARGET"
+    if any(k in m for k in ("STRZAŁY", "STRZALY", "SHOTS")):
+        return "TEAM_SHOTS" if is_team_hint else "SHOTS"
+    if any(k in m for k in ("FAULE", "FAULI", "FOULS")):
+        return "TEAM_FOULS" if is_team_hint else "FOULS"
+    if any(k in m for k in ("SPALONE", "SPALONYCH", "OFFSIDES")):
+        return "TEAM_OFFSIDES" if is_team_hint else "OFFSIDES"
+
+    if is_team_hint and any(k in m for k in ("GOAL", "GOL", "LICZBA GOLI")):
+        return "TEAM_GOALS"
+
+    # 5. Core Market Types
+    if m in ("1X2", "MATCH_RESULT", "1_X_2") or "WYNIK MECZU" in m:
+        return "1X2"
+    if m in ("BTTS", "BOTH_TEAMS_TO_SCORE") or "OBIE DRUŻYNY STRZELĄ" in m or "OBIE DRUZYNY STRZELA" in m:
+        return "BTTS"
+    if m in ("TOTALS", "OVER_UNDER", "TOTAL_GOALS", "O/U") or any(k in m for k in ("LICZBA GOLI", "SUMA GOLI", "PONIŻEJ/POWYŻEJ", "PONIZEJ/POWYZEJ")):
+        return "TOTALS"
+    if m == "DOUBLE_CHANCE" or "PODWÓJNA SZANSA" in m or "PODWOJNA SZANSA" in m:
+        return "DOUBLE_CHANCE"
+    if m == "DRAW_NO_BET" or "ZAKŁAD BEZ REMISU" in m or "ZAKLAD BEZ REMISU" in m:
+        return "DRAW_NO_BET"
+    if m == "HALF_TIME_RESULT" or "1. POŁOWA" in m or "1. POLOWA" in m:
+        return "HALF_TIME_RESULT"
+    if m in ("HANDICAP", "ASIAN_HANDICAP") or "HANDICAP" in m:
+        return "HANDICAP"
+
+    return "OTHER"

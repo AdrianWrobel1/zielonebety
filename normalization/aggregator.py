@@ -445,7 +445,9 @@ class CanonicalEventAggregator:
                 ev_item.evidence["competition_name"] = canonical_comp.name if canonical_comp else None
                 ev_item.evidence["start_time"] = canonical_start
 
-            # Generate Deterministic Canonical ID
+            # Generate Deterministic Canonical ID (v2: 15-min bucket; dateless
+            # branch disambiguated by reconciled competition to avoid silent
+            # cross-competition collapse).
             norm_h, _ = normalize_team_name(canonical_home)
             norm_a, _ = normalize_team_name(canonical_away)
             canonical_id = generate_deterministic_canonical_event_id(
@@ -453,6 +455,7 @@ class CanonicalEventAggregator:
                 home_team_norm=norm_h,
                 away_team_norm=norm_a,
                 scheduled_start_utc=canonical_start,
+                competition_norm=canonical_comp.name if canonical_comp else None,
             )
 
             canonical_ev = CanonicalEvent(

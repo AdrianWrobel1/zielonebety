@@ -81,10 +81,22 @@ class StatsHubTeamPropsProvider(BaseProvider):
 
     def fetch(self, discovery_items: Optional[List[Any]] = None) -> List[Any]:
         """Fetch raw JSON payloads from StatsHub props API."""
-        self.context.logger.info(f"StatsHub fetching team props (stat={self.statshub_config.stat})")
+        self.context.logger.info(f"StatsHub fetching team props (mode={self.statshub_config.mode}, stat={self.statshub_config.stat})")
         if self._raw_mock_payload is not None:
             self.context.logger.info("Using mock payload for StatsHub team fetch.")
             return [self._raw_mock_payload] if isinstance(self._raw_mock_payload, dict) else self._raw_mock_payload
+
+        if self.statshub_config.mode == "team_trends":
+            try:
+                raw_data = self.client.fetch_team_trends(
+                    games=self.statshub_config.games,
+                    config_override=self.statshub_config,
+                )
+                return [raw_data] if isinstance(raw_data, dict) else raw_data
+            except Exception as e:
+                self.context.logger.error(f"StatsHub team trends fetch failed: {e}")
+                self.errors.append(str(e))
+                return []
 
         if not self.statshub_config.auto_paginate:
             try:
@@ -152,11 +164,11 @@ class StatsHubTeamPropsProvider(BaseProvider):
             raw_discovered_count += len(results)
             parsed_results.extend(results)
 
-        # Deduplicate deterministically by (team_name, fixture_id, stat_type, participant_role)
+        # Deduplicate deterministically by (team_name, fixture_id, stat_type, participant_role, odds_type, line)
         deduped_dict: Dict[str, StatsHubTeamPropResult] = {}
         for r in parsed_results:
             ts = r.team_stat
-            dedup_key = f"{ts.team_name.strip().lower()}::{ts.fixture.fixture_id}::{ts.stat_type.lower()}::{ts.participant_role}"
+            dedup_key = f"{ts.team_name.strip().lower()}::{ts.fixture.fixture_id}::{ts.stat_type.lower()}::{ts.participant_role}::{ts.odds_type.lower()}::{ts.line}"
             if dedup_key not in deduped_dict:
                 deduped_dict[dedup_key] = r
             else:

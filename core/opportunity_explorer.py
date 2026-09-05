@@ -34,6 +34,7 @@ class OpportunityType(str, Enum):
     VALUEBET = "VALUEBET"
     SUREBET = "SUREBET"
     BOOSTER = "BOOSTER"
+    WATCHLIST = "WATCHLIST"
 
 
 class UnifiedExecutionStatus(str, Enum):
@@ -174,6 +175,9 @@ class OpportunityExplorerAdapter:
         stat_edge_pct = prop.get("raw_edge_pct") or edges.get("statistical_pct")
         exec_edge_pct = prop.get("execution_edge_pct") or edges.get("execution_pct")
         gross_ev = prop.get("execution_ev_pct") or edges.get("execution_ev_pct") or prop.get("reference_ev_pct")
+        # P1-NEW-004: net EV (tax-adjusted) comes from the source engine —
+        # zero recalculation here, per this layer's contract.
+        net_ev = prop.get("net_ev_pct") or edges.get("net_execution_pct") or edges.get("net_pct")
 
         # Extract Value Bet fields
         fair_odds_val = prop.get("fair_odds")
@@ -198,7 +202,10 @@ class OpportunityExplorerAdapter:
             prop.get("is_valuebet")
             or prop.get("actionability") == "VALUEBET"
             or prop.get("execution_status") == "VALUEBET"
-            or (prop.get("execution_status") == "BETTABLE" and gross_ev is not None and float(gross_ev) > 0.0)
+            # BETTABLE promotes only when net EV is not known-negative:
+            # gross-positive / net-negative (e.g. taxed Superbet) stays BETTABLE.
+            or (prop.get("execution_status") == "BETTABLE" and gross_ev is not None and float(gross_ev) > 0.0
+                and (net_ev is None or float(net_ev) > 0.0))
         )
 
         status_str = str(prop.get("actionability") or prop.get("execution_status") or prop.get("status") or "REFERENCE_ONLY")
@@ -226,7 +233,7 @@ class OpportunityExplorerAdapter:
             statistical_edge_pct=float(stat_edge_pct) if stat_edge_pct is not None else None,
             execution_edge_pct=float(exec_edge_pct) if exec_edge_pct is not None else None,
             gross_ev_pct=float(gross_ev) if gross_ev is not None else None,
-            net_ev_pct=None,
+            net_ev_pct=float(net_ev) if net_ev is not None else None,
             fair_odds=float(fair_odds_val) if fair_odds_val is not None else None,
             model_probability_pct=float(model_p_pct) if model_p_pct is not None else None,
             value_edge_pp=float(val_edge_pp) if val_edge_pp is not None else None,
@@ -250,6 +257,8 @@ class OpportunityExplorerAdapter:
         stat_edge_pct = prop.get("raw_edge_pct") or edges.get("statistical_pct")
         exec_edge_pct = prop.get("execution_edge_pct") or edges.get("execution_pct")
         gross_ev = prop.get("execution_ev_pct") or edges.get("execution_ev_pct") or prop.get("reference_ev_pct")
+        # P1-NEW-004: net EV from the source engine; no recalculation here.
+        net_ev = prop.get("net_ev_pct") or edges.get("net_execution_pct") or edges.get("net_pct")
 
         # Extract Value Bet fields
         fair_odds_val = prop.get("fair_odds")
@@ -274,7 +283,9 @@ class OpportunityExplorerAdapter:
             prop.get("is_valuebet")
             or prop.get("actionability") == "VALUEBET"
             or prop.get("execution_status") == "VALUEBET"
-            or (prop.get("execution_status") == "BETTABLE" and gross_ev is not None and float(gross_ev) > 0.0)
+            # BETTABLE promotes only when net EV is not known-negative.
+            or (prop.get("execution_status") == "BETTABLE" and gross_ev is not None and float(gross_ev) > 0.0
+                and (net_ev is None or float(net_ev) > 0.0))
         )
 
         status_str = str(prop.get("actionability") or prop.get("execution_status") or prop.get("status") or "REFERENCE_ONLY")
@@ -302,7 +313,7 @@ class OpportunityExplorerAdapter:
             statistical_edge_pct=float(stat_edge_pct) if stat_edge_pct is not None else None,
             execution_edge_pct=float(exec_edge_pct) if exec_edge_pct is not None else None,
             gross_ev_pct=float(gross_ev) if gross_ev is not None else None,
-            net_ev_pct=None,
+            net_ev_pct=float(net_ev) if net_ev is not None else None,
             fair_odds=float(fair_odds_val) if fair_odds_val is not None else None,
             model_probability_pct=float(model_p_pct) if model_p_pct is not None else None,
             value_edge_pp=float(val_edge_pp) if val_edge_pp is not None else None,
@@ -378,9 +389,29 @@ class OpportunityExplorerAdapter:
             score=50.0 if exec_odds else 10.0,
             status=status_str,
             quality_flags=[],
-            created_at=event.get("created_at") or event.get("detected_at"),
-            expires_at=None,
-            details={"event": event, "market": market, "selection": selection},
+            details={
+                "event": {
+                    "id": event.get("id") or event.get("canonical_event_id"),
+                    "home_team": home,
+                    "away_team": away,
+                    "competition": event.get("competition"),
+                    "kickoff": event.get("kickoff"),
+                    "sport": event.get("sport", "football"),
+                },
+                "market": {
+                    "market_type": m_type,
+                    "line": line,
+                    "period": market.get("period", "FULL_TIME"),
+                    "scope": market.get("scope", "TEAM"),
+                },
+                "selection": {
+                    "participant": team,
+                    "selection_type": side,
+                    "line": line,
+                    "odds": odds_map,
+                    "best_odds": best_o,
+                },
+            },
         )
 
     @staticmethod
@@ -409,6 +440,16 @@ class OpportunityExplorerAdapter:
         fair_p = val.get("fair_probability") or val.get("reference_fair_probability")
         model_pct = round(float(fair_p) * 100.0, 1) if fair_p is not None else None
 
+        # P1-NEW-004: the engine's net-gated qualification is authoritative.
+        # Prefer the explicit flag; fall back to net EV, then (legacy dicts
+        # without net fields) to gross EV.
+        is_q = val.get("is_qualified", None)
+        if is_q is None:
+            if net_val_pct is not None:
+                is_q = float(net_val_pct) > 0.0
+            else:
+                is_q = bool(val_pct and float(val_pct) > 0.0)
+
         return UnifiedOpportunityDTO(
             id=str(val.get("candidate_id") or val.get("opportunity_id") or val.get("id") or "vbc_unknown"),
             type=val_type,
@@ -434,7 +475,7 @@ class OpportunityExplorerAdapter:
             fair_odds=float(ref_odds) if ref_odds is not None else None,
             model_probability_pct=model_pct,
             value_edge_pp=float(val_pct) if val_pct is not None else None,
-            is_valuebet=True if (val_pct and float(val_pct) > 0.0) else False,
+            is_valuebet=bool(is_q),
             score=float(val.get("quality_score") or (float(val_pct) * 5.0 if val_pct else 50.0)),
             status="VALUEBET" if val.get("is_qualified", True) else "REFERENCE_ONLY",
             quality_flags=list(val.get("quality_flags") or []),
@@ -558,3 +599,108 @@ class OpportunityExplorerAdapter:
             expires_at=b.get("expires_at"),
             details=b,
         )
+
+    @staticmethod
+    def from_ultra_opportunity(opp: Union[Dict[str, Any], Any]) -> UnifiedOpportunityDTO:
+        """Adapts an UltraOpportunity dataclass or serialized dict into UnifiedOpportunityDTO."""
+        if hasattr(opp, "to_dict"):
+            d = opp.to_dict()
+        elif isinstance(opp, dict):
+            d = opp
+        else:
+            d = getattr(opp, "__dict__", {})
+
+        cat = str(d.get("category", "")).upper()
+        if cat == "PLAYER_PROP":
+            dto_type = OpportunityType.PLAYER_PROP.value
+        elif cat == "TEAM_PROP":
+            dto_type = OpportunityType.TEAM_PROP.value
+        elif cat == "VALUEBET":
+            dto_type = OpportunityType.VALUEBET.value
+        elif cat == "SUREBET":
+            dto_type = OpportunityType.SUREBET.value
+        elif cat in ("WATCHLIST", "NEAR_SUREBET"):
+            dto_type = OpportunityType.WATCHLIST.value
+        else:
+            dto_type = OpportunityType.VALUEBET.value
+
+        match_name = d.get("match_name") or ""
+        home, away = None, None
+        if " vs " in match_name:
+            parts = match_name.split(" vs ", 1)
+            home, away = parts[0].strip(), parts[1].strip()
+        elif " - " in match_name:
+            parts = match_name.split(" - ", 1)
+            home, away = parts[0].strip(), parts[1].strip()
+
+        details = d.get("details") or {}
+        player_name = details.get("player_name") or details.get("player")
+
+        bm = d.get("bookmaker") or "Superbet"
+        ref_sources = list(d.get("reference_sources") or [])
+        all_bms = [bm]
+        for src in ref_sources:
+            if src and src not in all_bms:
+                all_bms.append(src)
+
+        edge = d.get("edge_pct")
+        raw_odds = d.get("raw_odds")
+        eff_odds = d.get("effective_odds")
+        fair_odds = d.get("fair_odds")
+
+        is_val = cat == "VALUEBET" or (cat in ("PLAYER_PROP", "TEAM_PROP") and edge is not None and float(edge) > 0.0)
+        if cat in ("WATCHLIST", "NEAR_SUREBET"):
+            status = "WATCHLIST"
+        else:
+            status = "VALUEBET" if is_val else "AVAILABLE"
+
+        line_val = None
+        if details.get("line") is not None:
+            try:
+                line_val = float(details["line"])
+            except (ValueError, TypeError):
+                line_val = None
+
+        raw_score = d.get("ultra_rank_score")
+        if cat in ("WATCHLIST", "NEAR_SUREBET"):
+            score_val = float(raw_score) if raw_score is not None else 10.0
+        else:
+            score_val = float(raw_score) if raw_score is not None else (float(edge) * 5.0 if edge else 50.0)
+
+        fair_odds_val = float(fair_odds) if fair_odds is not None else None
+        model_prob = round(100.0 / fair_odds_val, 1) if (fair_odds_val and fair_odds_val > 0) else None
+
+        return UnifiedOpportunityDTO(
+            id=str(d.get("opportunity_id") or "ultra_unknown"),
+            type=dto_type,
+            source="ultra_scan",
+            player=player_name,
+            team=home,
+            opponent=away,
+            event=match_name,
+            kickoff=d.get("kickoff"),
+            sport="football",
+            competition=d.get("competition"),
+            market=d.get("market_display"),
+            line=line_val,
+            side=d.get("selection_display"),
+            reference_odds=fair_odds_val,
+            execution_odds=float(eff_odds or raw_odds) if (eff_odds or raw_odds) is not None else None,
+            best_bookmaker=bm,
+            all_bookmakers=all_bms,
+            statistical_edge_pct=float(edge) if cat in ("PLAYER_PROP", "TEAM_PROP") and edge is not None else None,
+            execution_edge_pct=float(edge) if edge is not None else None,
+            gross_ev_pct=float(edge) if edge is not None else None,
+            net_ev_pct=float(edge) if edge is not None else None,
+            fair_odds=fair_odds_val,
+            model_probability_pct=model_prob,
+            value_edge_pp=float(edge) if edge is not None else None,
+            is_valuebet=is_val,
+            score=score_val,
+            status=status,
+            quality_flags=[],
+            created_at=details.get("detected_at"),
+            expires_at=None,
+            details=details,
+        )
+

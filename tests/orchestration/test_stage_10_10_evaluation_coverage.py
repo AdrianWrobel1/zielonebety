@@ -433,7 +433,7 @@ class TestStage1010EvaluationCoverage:
             scope=MarketScope.MATCH.value,
             period=MarketPeriod.FULL_TIME.value,
         )
-        # Arbitrage opportunity: YES=2.10 (Betclic), NO=2.15 (Superbet) -> S = 1/2.10 + 1/2.15 = 0.476 + 0.465 = 0.941 < 1.0
+        # Arbitrage opportunity: YES=2.10 (Betclic), NO=2.50 (Superbet net 2.20) -> S = 1/2.10 + 1/2.20 = 0.476 + 0.454 = 0.930 < 1.0
         pairs = [
             _make_comparable_pair(
                 "cev_1",
@@ -446,7 +446,7 @@ class TestStage1010EvaluationCoverage:
                 "cev_1",
                 mkt_key,
                 CanonicalSelectionKey(market_key=mkt_key, selection_type=CanonicalSelectionType.NO.value),
-                source_odds_val=2.15,
+                source_odds_val=2.50,
                 target_odds_val=1.75,
             ),
         ]

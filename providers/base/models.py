@@ -531,3 +531,177 @@ class FrameworkHealthReport:
             return self[key]
         except KeyError:
             return default
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Acquisition Accounting Model (Acquisition 2.0)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class ProviderAcquisitionAccounting:
+    """
+    Explicit mathematical acquisition accounting model (Acquisition 2.0).
+
+    Strictly separates:
+      PLANNED != SUBMITTED != STARTED != NETWORK REQUEST != CACHE HIT != SUCCESS != FAILED != RETRY != PARSED
+    """
+    provider_name: str = ""
+    discovery_planned: int = 0
+    discovery_executed: int = 0
+    discovery_network_requests: int = 0
+    discovery_cache_hits: int = 0
+    events_discovered: int = 0
+
+    detail_events_planned: int = 0
+    detail_tasks_submitted: int = 0
+    detail_tasks_started: int = 0
+    detail_network_requests: int = 0
+    overview_payloads_reused: int = 0  # Overview payloads reused directly from discovery without detail network requests
+
+    detail_tasks_successful: int = 0
+    detail_tasks_failed: int = 0
+    detail_retries: int = 0
+    detail_timeouts: int = 0
+
+    events_parsed: int = 0
+    markets_parsed: int = 0
+    selections_parsed: int = 0
+
+    failure_reasons: Dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "provider_name": self.provider_name,
+            "discovery_planned": self.discovery_planned,
+            "discovery_executed": self.discovery_executed,
+            "discovery_network_requests": self.discovery_network_requests,
+            "discovery_cache_hits": self.discovery_cache_hits,
+            "events_discovered": self.events_discovered,
+            "detail_events_planned": self.detail_events_planned,
+            "detail_tasks_submitted": self.detail_tasks_submitted,
+            "detail_tasks_started": self.detail_tasks_started,
+            "detail_network_requests": self.detail_network_requests,
+            "overview_payloads_reused": self.overview_payloads_reused,
+            "detail_tasks_successful": self.detail_tasks_successful,
+            "detail_tasks_failed": self.detail_tasks_failed,
+            "detail_retries": self.detail_retries,
+            "detail_timeouts": self.detail_timeouts,
+            "events_parsed": self.events_parsed,
+            "markets_parsed": self.markets_parsed,
+            "selections_parsed": self.selections_parsed,
+            "failure_reasons": dict(self.failure_reasons),
+        }
+
+    def validate_invariants(self) -> List[str]:
+        """Validates mathematical integrity of acquisition cardinalities."""
+        violations = []
+        if self.detail_tasks_submitted > 0:
+            if self.detail_tasks_successful + self.detail_tasks_failed != self.detail_tasks_submitted:
+                violations.append(
+                    f"Task completion mismatch: successful ({self.detail_tasks_successful}) + "
+                    f"failed ({self.detail_tasks_failed}) != submitted ({self.detail_tasks_submitted})"
+                )
+        if self.detail_tasks_started > self.detail_tasks_submitted:
+            violations.append(
+                f"Tasks started ({self.detail_tasks_started}) exceeds submitted ({self.detail_tasks_submitted})"
+            )
+        return violations
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Detail Acquisition Failure Contract (P1-003)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A failed Tier 2 detail request must never be represented solely as
+# `markets == []`: that shape is indistinguishable from a legitimate
+# successful empty response (SUCCESS_EMPTY_MARKETS). Fetchers therefore emit
+# an explicit failure placeholder that preserves event identity plus a short
+# safe failure reason; parsers propagate it onto the event model; the
+# normalization engine refuses to turn it into a canonical graph.
+
+DETAIL_FETCH_FAILED_KEY = "_detail_fetch_failed"
+DETAIL_FETCH_ERROR_KEY = "_detail_fetch_error"
+DETAIL_FETCH_ERROR_TYPE_KEY = "_detail_fetch_error_type"
+DETAIL_FETCH_PROVIDER_KEY = "_detail_fetch_provider"
+
+# P1-NEW-010: Tier-1 overview placeholder contract (NOT_ACQUIRED).
+#
+# Overview/Tier-1 items that were never selected for detail acquisition have
+# unknown market state, but that is NOT an acquisition failure and NOT a
+# legitimate zero-market detail response. Fabricated overview placeholders
+# carry this marker so parsers propagate `overview_only=True` and the
+# normalization engine skips them with a distinct counter instead of
+# treating them as SUCCESS_EMPTY_MARKETS.
+OVERVIEW_NOT_ACQUIRED_KEY = "_overview_not_acquired"
+OVERVIEW_NOT_ACQUIRED_REASON_KEY = "_overview_not_acquired_reason"
+
+DETAIL_FETCH_ERROR_MAX_CHARS = 200
+
+
+def build_detail_fetch_failure_payload(
+    provider: str,
+    event_id: Any,
+    name: Any = "",
+    competition: Any = "",
+    start_date: Any = "",
+    exc: Optional[BaseException] = None,
+) -> Dict[str, Any]:
+    """Builds an explicit FETCH_FAILED placeholder for a failed detail request.
+
+    Shape stays parser-compatible (`markets == []` plus identity fields) so a
+    single failed event cannot abort the scan, while the marker keys carry
+    independent failure information. `name` falls back to `event_id` because
+    parsers require a non-empty event name.
+    """
+    err_type = type(exc).__name__ if exc is not None else "UnknownError"
+    raw_msg = str(exc) if exc is not None else ""
+    safe_msg = " ".join(raw_msg.split())[:DETAIL_FETCH_ERROR_MAX_CHARS]
+    return {
+        "id": str(event_id),
+        "name": str(name) or str(event_id),
+        "competition": str(competition or ""),
+        "start_date": str(start_date or ""),
+        "markets": [],
+        DETAIL_FETCH_FAILED_KEY: True,
+        DETAIL_FETCH_ERROR_KEY: f"{err_type}: {safe_msg}" if safe_msg else err_type,
+        DETAIL_FETCH_ERROR_TYPE_KEY: err_type,
+        DETAIL_FETCH_PROVIDER_KEY: str(provider),
+    }
+
+
+def is_detail_fetch_failure(payload: Any) -> bool:
+    """True when a raw fetcher payload is an explicit FETCH_FAILED placeholder."""
+    return isinstance(payload, dict) and payload.get(DETAIL_FETCH_FAILED_KEY) is True
+
+
+def build_overview_not_acquired_payload(
+    provider: str,
+    event_id: Any,
+    name: Any = "",
+    competition: Any = "",
+    start_date: Any = "",
+    reason: str = "overview_only_not_selected_for_detail",
+) -> Dict[str, Any]:
+    """Builds an explicit NOT_ACQUIRED Tier-1 overview placeholder.
+
+    Shape stays parser-compatible (`markets == []` plus identity fields) so
+    overview items never abort the scan, while the marker keys keep the
+    placeholder distinguishable from both SUCCESS_EMPTY_MARKETS and
+    FETCH_FAILED downstream.
+    """
+    return {
+        "id": str(event_id),
+        "name": str(name) or str(event_id),
+        "competition": str(competition or ""),
+        "start_date": str(start_date or ""),
+        "markets": [],
+        OVERVIEW_NOT_ACQUIRED_KEY: True,
+        OVERVIEW_NOT_ACQUIRED_REASON_KEY: str(reason),
+        DETAIL_FETCH_PROVIDER_KEY: str(provider),
+    }
+
+
+def is_overview_not_acquired(payload: Any) -> bool:
+    """True when a raw payload is an explicit NOT_ACQUIRED overview placeholder."""
+    return isinstance(payload, dict) and payload.get(OVERVIEW_NOT_ACQUIRED_KEY) is True
+

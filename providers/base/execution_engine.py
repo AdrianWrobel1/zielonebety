@@ -35,9 +35,52 @@ from providers.base.observability.performance_profiler import PerformanceProfile
 from providers.base.recovery.retry_engine import RetryEngine
 from providers.base.quality_report import QualityReportBuilder
 from providers.base.rate_limiter import RateLimiter
-from providers.base.exceptions import ProviderDisabledError
+from providers.base.exceptions import ProviderDisabledError, ProviderTimeoutError
 
 logger = logging.getLogger("framework.execution_engine")
+
+
+def _execute_stage_with_timeout(retry_engine, fn, stage, diagnostics, metrics, timeout_seconds):
+    """Runs one provider stage bounded by ``timeout_seconds`` (P1-NEW-006).
+
+    TimeoutConfig previously existed but was never enforced, so a hung
+    stage (deadlocked semaphore, infinite parse loop below the HTTP layer)
+    could stall the scan worker indefinitely. On expiry raises
+    ProviderTimeoutError, which the caller's existing isolation converts to
+    a FAILED ProviderResult with diagnostics (never a hang, never success).
+    The abandoned worker thread is bounded (one per timed-out stage) and
+    daemon-neutral: executors shut down without waiting.
+    """
+    import concurrent.futures
+
+    try:
+        timeout_value = float(timeout_seconds)
+    except (TypeError, ValueError):
+        timeout_value = 0.0
+    if not timeout_value or timeout_value <= 0:
+        return retry_engine.execute(fn=fn, stage=stage, diagnostics=diagnostics, metrics=metrics)
+    # NOTE: plain constructor (not `with`) on purpose — the context
+    # manager's exit would block until a hung worker finishes. Shutdown is
+    # wait=False below so expiry returns immediately; the abandoned worker
+    # is bounded to one thread per timed-out stage.
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        fut = pool.submit(retry_engine.execute, fn, stage, diagnostics, metrics)
+        try:
+            return fut.result(timeout=timeout_value)
+        except concurrent.futures.TimeoutError as te:
+            fut.cancel()
+            try:
+                diagnostics.error(f"Stage '{stage}' exceeded {timeout_value}s timeout")
+            except Exception:
+                pass
+            raise ProviderTimeoutError(
+                f"Stage '{stage}' exceeded {timeout_value}s timeout",
+                stage=stage,
+                timeout_seconds=float(timeout_value),
+            ) from te
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 class ExecutionEngine:
@@ -65,6 +108,18 @@ class ExecutionEngine:
         metrics = MetricsCollector()
         profiler = PerformanceProfiler(ctx.execution_id, provider.metadata.name)
 
+        # P1-NEW-006: TimeoutConfig was defined but never enforced. Resolve
+        # per-stage budgets defensively (hand-rolled contexts may lack it).
+        _timeout_cfg = getattr(ctx, "timeout_config", None)
+
+        def _stage_timeout(stage_name):
+            try:
+                if _timeout_cfg is not None and hasattr(_timeout_cfg, "for_stage"):
+                    return float(_timeout_cfg.for_stage(stage_name))
+            except (TypeError, ValueError, AttributeError):
+                pass
+            return 0.0
+
         if not provider.metadata.enabled:
             return ProviderResult.disabled(provider.metadata.name, ctx.execution_id)
 
@@ -77,11 +132,13 @@ class ExecutionEngine:
             with profiler.measure("initialize"):
                 stage_t = diagnostics.start_stage("initialize")
                 try:
-                    self.retry_engine.execute(
+                    _execute_stage_with_timeout(
+                        self.retry_engine,
                         fn=provider.initialize,
                         stage="initialize",
                         diagnostics=diagnostics,
                         metrics=metrics,
+                        timeout_seconds=_stage_timeout("initialize"),
                     )
                     diagnostics.finish_stage(stage_t, succeeded=True)
                 except Exception as e:
@@ -95,11 +152,13 @@ class ExecutionEngine:
             with profiler.measure("discovery"):
                 stage_t = diagnostics.start_stage("discovery")
                 try:
-                    discovered_items = self.retry_engine.execute(
+                    discovered_items = _execute_stage_with_timeout(
+                        self.retry_engine,
                         fn=provider.discover,
                         stage="discovery",
                         diagnostics=diagnostics,
                         metrics=metrics,
+                        timeout_seconds=_stage_timeout("discovery"),
                     )
                     metrics.count_events_discovered(len(discovered_items))
                     diagnostics.finish_stage(stage_t, succeeded=True)
@@ -111,11 +170,13 @@ class ExecutionEngine:
             with profiler.measure("fetch"):
                 stage_t = diagnostics.start_stage("fetch")
                 try:
-                    raw_data = self.retry_engine.execute(
+                    raw_data = _execute_stage_with_timeout(
+                        self.retry_engine,
                         fn=lambda: provider.fetch(discovered_items),
                         stage="fetch",
                         diagnostics=diagnostics,
                         metrics=metrics,
+                        timeout_seconds=_stage_timeout("fetch"),
                     )
                     metrics.count_events_fetched(len(raw_data))
                     diagnostics.finish_stage(stage_t, succeeded=True)
@@ -127,11 +188,13 @@ class ExecutionEngine:
             with profiler.measure("parse"):
                 stage_t = diagnostics.start_stage("parse")
                 try:
-                    parsed_items = self.retry_engine.execute(
+                    parsed_items = _execute_stage_with_timeout(
+                        self.retry_engine,
                         fn=lambda: provider.parse(raw_data),
                         stage="parse",
                         diagnostics=diagnostics,
                         metrics=metrics,
+                        timeout_seconds=_stage_timeout("parse"),
                     )
                     metrics.count_parsed(len(parsed_items))
 
@@ -192,6 +255,13 @@ class ExecutionEngine:
             else:
                 self.health_monitor.record_failure(provider.metadata.name)
 
+            acct = None
+            if hasattr(provider, "get_accounting") and callable(provider.get_accounting):
+                try:
+                    acct = provider.get_accounting()
+                except Exception as e:
+                    logger.debug(f"Failed to retrieve acquisition accounting from {provider.metadata.name}: {e}")
+
             try:
                 provider.shutdown()
             except Exception as e:
@@ -208,6 +278,7 @@ class ExecutionEngine:
             diagnostics=diag_report,
             quality_report=quality_report,
             metrics=final_metrics,
+            accounting=acct,
             warnings=list(diag_report.warnings),
             errors=list(diag_report.errors),
         )

@@ -34,7 +34,7 @@ import concurrent.futures
 import logging
 import time
 import tracemalloc
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import uuid
 
 from database.connection import DatabaseManager
@@ -116,156 +116,58 @@ from providers.superbet.provider import SuperbetProvider
 logger = logging.getLogger("zielonebety.orchestration.scanner")
 
 
+from normalization.market_identity import classify_market_category
+from orchestration.detail_planning import CoordinatedDetailSelectionPlanner
+
+
 def _categorize_market_type(mkt_type_or_name: Any, key_or_mkt: Any = None) -> str:
-    """Categorizes raw market name, canonical market type, or CanonicalMarketKey into target market families."""
-    # Check if a CanonicalMarketKey or Market model with metadata was passed
-    if hasattr(mkt_type_or_name, "metric") and hasattr(mkt_type_or_name, "scope"):
-        metric = getattr(mkt_type_or_name, "metric", "GOALS") or "GOALS"
-        scope = getattr(mkt_type_or_name, "scope", "MATCH") or "MATCH"
-        m_type = getattr(mkt_type_or_name, "market_type", "") or ""
-        if scope == "TEAM":
-            if metric == "CARD_POINTS":
-                return "TEAM_CARD_POINTS"
-            if metric == "CARDS":
-                return "TEAM_CARDS"
-            if metric == "CORNERS":
-                return "TEAM_CORNERS"
-            if metric == "SHOTS":
-                return "TEAM_SHOTS"
-            if metric == "SHOTS_ON_TARGET":
-                return "TEAM_SHOTS_ON_TARGET"
-            if metric == "FOULS":
-                return "TEAM_FOULS"
-            if metric == "OFFSIDES":
-                return "TEAM_OFFSIDES"
-            if metric == "GOALS":
-                return "TEAM_GOALS"
-        if metric == "CARD_POINTS":
-            return "CARD_POINTS"
-        if metric == "CARDS":
-            return "CARDS"
-        if metric == "CORNERS":
-            return "CORNERS"
-        if metric == "SHOTS":
-            return "SHOTS"
-        if metric == "SHOTS_ON_TARGET":
-            return "SHOTS_ON_TARGET"
-        if metric == "FOULS":
-            return "FOULS"
-        if metric == "OFFSIDES":
-            return "OFFSIDES"
-        if m_type == "TOTALS":
-            return "TOTALS"
-        mkt_type_or_name = m_type
+    """Categorizes raw market name, canonical market type, or CanonicalMarketKey into target market families.
 
-    if isinstance(key_or_mkt, dict):
-        metric = key_or_mkt.get("metric", "GOALS")
-        scope = key_or_mkt.get("scope", "MATCH")
-        if scope == "TEAM":
-            if metric == "CARD_POINTS":
-                return "TEAM_CARD_POINTS"
-            if metric == "CARDS":
-                return "TEAM_CARDS"
-            if metric == "CORNERS":
-                return "TEAM_CORNERS"
-            if metric == "SHOTS":
-                return "TEAM_SHOTS"
-            if metric == "SHOTS_ON_TARGET":
-                return "TEAM_SHOTS_ON_TARGET"
-            if metric == "FOULS":
-                return "TEAM_FOULS"
-            if metric == "OFFSIDES":
-                return "TEAM_OFFSIDES"
-            if metric == "GOALS":
-                return "TEAM_GOALS"
-        if metric == "CARD_POINTS":
-            return "CARD_POINTS"
-        if metric == "CARDS":
-            return "CARDS"
-        if metric == "CORNERS":
-            return "CORNERS"
-        if metric == "SHOTS":
-            return "SHOTS"
-        if metric == "SHOTS_ON_TARGET":
-            return "SHOTS_ON_TARGET"
-        if metric == "FOULS":
-            return "FOULS"
-        if metric == "OFFSIDES":
-            return "OFFSIDES"
+    Delegates authoritatively to normalization.market_identity.classify_market_category.
+    """
+    return classify_market_category(mkt_type_or_name, key_or_mkt)
 
-    if hasattr(key_or_mkt, "metadata") and isinstance(key_or_mkt.metadata, dict):
-        metric = key_or_mkt.metadata.get("metric", "GOALS")
-        scope = key_or_mkt.metadata.get("scope", "MATCH")
-        if scope == "TEAM":
-            if metric == "CARD_POINTS":
-                return "TEAM_CARD_POINTS"
-            if metric == "CARDS":
-                return "TEAM_CARDS"
-            if metric == "CORNERS":
-                return "TEAM_CORNERS"
-            if metric == "SHOTS":
-                return "TEAM_SHOTS"
-            if metric == "SHOTS_ON_TARGET":
-                return "TEAM_SHOTS_ON_TARGET"
-            if metric == "FOULS":
-                return "TEAM_FOULS"
-            if metric == "OFFSIDES":
-                return "TEAM_OFFSIDES"
-            if metric == "GOALS":
-                return "TEAM_GOALS"
-        if metric == "CARD_POINTS":
-            return "CARD_POINTS"
-        if metric == "CARDS":
-            return "CARDS"
-        if metric == "CORNERS":
-            return "CORNERS"
-        if metric == "SHOTS":
-            return "SHOTS"
-        if metric == "SHOTS_ON_TARGET":
-            return "SHOTS_ON_TARGET"
-        if metric == "FOULS":
-            return "FOULS"
-        if metric == "OFFSIDES":
-            return "OFFSIDES"
 
-    m = (str(mkt_type_or_name) if mkt_type_or_name else "").upper().strip()
+MARKET_FAMILY_TELEMETRY_FAMILIES: Tuple[str, ...] = (
+    "1X2",
+    "BTTS",
+    "TOTALS",
+    "DOUBLE_CHANCE",
+    "DRAW_NO_BET",
+    "HALF_TIME_RESULT",
+    "HANDICAP",
+    "PLAYER_PROPS",
+)
 
-    # Player Props must take precedence before general shot/card/foul substring checks
-    if any(k in m for k in ("PLAYER_", "STRZELEC", "ZAWODNIK", "GRACZ", "GOALSCORER", "ASYSTY ZAWODNIKA", "CELNE STRZAŁY", "CELNE STRZALY")):
-        return "PLAYER_PROPS"
 
-    # Raw name heuristics
-    is_team_hint = any(k in m for k in ("GOSPODARZ", "GOŚC", "GOSC", "DRUŻYN", "DRUZYN", "TEAM"))
-    if any(k in m for k in ("RZUTÓW ROŻNYCH", "RZUTOW ROZNYCH", "RZ.ROŻNYCH", "RZ.ROZNYCH", "ROŻNE", "ROZNE", "CORNER")):
-        return "TEAM_CORNERS" if is_team_hint else "CORNERS"
-    if any(k in m for k in ("KARTK", "KARTKI", "KARTEK", "CARD", "ŻÓŁTYCH KARTEK", "ZOLTYCH KARTEK")):
-        return "TEAM_CARDS" if is_team_hint else "CARDS"
-    if any(k in m for k in ("CELNYCH STRZAL", "CELNYCH STRZAŁ", "CELNE STRZAŁY", "CELNE STRZALY", "SHOTS ON TARGET")):
-        return "TEAM_SHOTS_ON_TARGET" if is_team_hint else "SHOTS_ON_TARGET"
-    if any(k in m for k in ("STRZAŁ", "STRZAL", "SHOT")):
-        return "TEAM_SHOTS" if is_team_hint else "SHOTS"
-    if any(k in m for k in ("FAUL", "FOUL")):
-        return "TEAM_FOULS" if is_team_hint else "FOULS"
-    if any(k in m for k in ("SPALON", "OFFSIDE")):
-        return "TEAM_OFFSIDES" if is_team_hint else "OFFSIDES"
+def count_market_families(graphs: Sequence[NormalizedGraph]) -> Dict[str, int]:
+    """Single-pass census of normalized markets per telemetry family.
 
-    if any(k in m for k in ("1X2", "MATCH_RESULT", "WYNIK MECZU", "WYNIK_MECZU", "MECZ", "WYNIK MECZU (Z WYŁĄCZENIEM DOGRYWKI)", "WYNIK MECZU (Z WYLACZENIEM DOGRYWKI)")):
-        return "1X2"
-    if any(k in m for k in ("BTTS", "BOTH_TEAMS_TO_SCORE", "OBIE DRUŻYNY STRZELĄ", "OBIE DRUZYNY STRZELA", "OBIE_DRUŻYNY_STRZELĄ", "OBIE_DRUZYNY_STRZELA", "OBA ZESPOŁY STRZELĄ", "OBA ZESPOLY STRZELA", "OBA ZESPOŁY STRZELĄ GOLA", "OBA ZESPOLY STRZELA GOLA")):
-        return "BTTS"
-    if any(k in m for k in ("TOTALS", "TOTAL_GOALS", "OVER_UNDER", "LICZBA GOLI", "LICZBA_GOLI", "OVER/UNDER", "POWYŻEJ/PONIŻEJ", "POWYZEJ/PONIZEJ", "GOLE POWYŻEJ/PONIŻEJ", "GOLE POWYZEJ/PONIZEJ", "GOLE POWYŻEJ", "GOLE POWYZEJ")):
-        return "TEAM_GOALS" if is_team_hint else "TOTALS"
-    if any(k in m for k in ("DOUBLE_CHANCE", "DOUBLE CHANCE", "PODWÓJNA SZANSA", "PODWOJNA SZANSA", "PODWÓJNA_SZANSA", "PODWOJNA_SZANSA")):
-        return "DOUBLE_CHANCE"
-    if any(k in m for k in ("DRAW_NO_BET", "DRAW NO BET", "DNB", "ZAKŁAD BEZ REMISU", "ZAKLAD BEZ REMISU", "REMIS BEZ ZAKŁADU", "REMIS BEZ ZAKLADU", "555")):
-        return "DRAW_NO_BET"
-    if any(k in m for k in ("HALF_TIME_RESULT", "HALF TIME RESULT", "HT_RESULT", "WYNIK 1. POŁOWY", "WYNIK 1. POLOWY", "WYNIK_1._POŁOWY", "WYNIK_1._POLOWY", "1. POŁOWA - WYNIK", "1. POLOWA - WYNIK")):
-        return "HALF_TIME_RESULT"
-    if any(k in m for k in ("HANDICAP", "ASIAN_HANDICAP", "SPREAD", "HANDICAP 1X2", "HANDICAP EUROPEJSKI", "HANDICAP AZJATYCKI")):
-        return "HANDICAP"
-    if any(k in m for k in ("PLAYER_", "STRZELEC", "ZAWODNIK", "GRACZ", "GOALSCORER", "ASYSTY ZAWODNIKA", "CELNE STRZAŁY", "CELNE STRZALY")):
-        return "PLAYER_PROPS"
-    return "OTHER"
+    Replaces N full scans (one per family) with exactly one categorization
+    call per market. Output is bit-for-bit identical to the legacy per-family
+    comprehension: families outside MARKET_FAMILY_TELEMETRY_FAMILIES are ignored.
+    """
+    counts: Dict[str, int] = {fam: 0 for fam in MARKET_FAMILY_TELEMETRY_FAMILIES}
+    for g in graphs or []:
+        for m in getattr(g, "markets", None) or []:
+            fam = _categorize_market_type(getattr(m, "market_type", ""))
+            if fam in counts:
+                counts[fam] += 1
+    return counts
+
+
+def index_parsed_by_provider_id(parsed_objects: Sequence[Any], id_attr: str = "provider_event_id") -> Dict[str, Any]:
+    """Builds a first-wins index of parsed provider objects by provider event id.
+
+    Replaces O(C x P) linear scans (next(...)) per canonical event with a
+    single O(P) indexing pass. First duplicate wins, matching next() semantics.
+    """
+    index: Dict[str, Any] = {}
+    for obj in parsed_objects or []:
+        eid = str(getattr(obj, id_attr, "") or "")
+        if eid and eid not in index:
+            index[eid] = obj
+    return index
 
 
 class ProductionScanOrchestrator:
@@ -330,6 +232,11 @@ class ProductionScanOrchestrator:
         )
         self.ranking_engine = OpportunityRankingEngine(quality_policy=self.quality_policy)
         self.dispatcher = dispatcher or OpportunityDispatcher()
+        self.detail_planner = CoordinatedDetailSelectionPlanner(
+            event_selection_policy=self.event_selection_policy,
+            normalization_engine=self.normalization_engine,
+            validation_pipeline=self.validation_pipeline,
+        )
 
         # Surebet Lifecycle Manager
         if lifecycle_manager is not None:
@@ -534,155 +441,64 @@ class ProductionScanOrchestrator:
             if sb_inst and bc_inst and isinstance(sb_inst, SuperbetProvider) and isinstance(bc_inst, BetclicProvider):
                 sb_cfg = getattr(sb_inst, "superbet_config", None)
                 bc_cfg = getattr(bc_inst, "betclic_config", None)
-                sb_sel = getattr(sb_cfg, "selected_event_ids", []) if sb_cfg else []
-                bc_sel = getattr(bc_cfg, "selected_event_ids", []) if bc_cfg else []
-                # If neither provider has manually fixed event IDs:
-                if not sb_sel and not bc_sel:
-                    try:
-                        with profiler.trace_phase("pre_discovery", counters={"providers": ["superbet", "betclic"]}):
-                            # 1. Run Superbet & Betclic discovery concurrently
-                            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as disc_pool:
-                                sb_future = disc_pool.submit(sb_inst.discover)
-                                bc_future = disc_pool.submit(bc_inst.discover)
-                                disc_timeout = min(self.config.effective_provider_timeout, 45.0)
-                                sb_discovered = sb_future.result(timeout=disc_timeout)
-                                bc_discovered = bc_future.result(timeout=disc_timeout)
+                try:
+                    with profiler.trace_phase("pre_discovery", counters={"providers": ["superbet", "betclic"]}):
+                        # 1. Run Superbet & Betclic discovery concurrently
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as disc_pool:
+                            sb_future = disc_pool.submit(sb_inst.discover)
+                            bc_future = disc_pool.submit(bc_inst.discover)
+                            disc_timeout = min(self.config.effective_provider_timeout, 45.0)
+                            sb_discovered = sb_future.result(timeout=disc_timeout)
+                            bc_discovered = bc_future.result(timeout=disc_timeout)
 
-                            # 2. Extract overview payloads
-                            sb_overview_payloads: List[Dict[str, Any]] = []
-                            for it in sb_discovered:
-                                if isinstance(getattr(it, "metadata", None), dict) and "raw" in it.metadata:
-                                    sb_overview_payloads.append(it.metadata["raw"])
+                    with profiler.trace_phase("detail_selection", counters={"budget": self.config.effective_max_detail_requests}):
+                        plan = self.detail_planner.create_plan(
+                            sb_discovered=sb_discovered,
+                            bc_discovered=bc_discovered,
+                            sb_parser=getattr(sb_inst, "parser", None),
+                            bc_parser=getattr(bc_inst, "parser", None),
+                            config=self.config,
+                            evaluation_time=now_dt,
+                        )
 
-                            bc_overview_payloads: List[Dict[str, Any]] = []
-                            for it in bc_discovered:
-                                if isinstance(getattr(it, "metadata", None), dict) and "raw" in it.metadata:
-                                    bc_overview_payloads.append(it.metadata["raw"])
-                                else:
-                                    bc_overview_payloads.append({
-                                        "id": getattr(it, "provider_event_id", ""),
-                                        "name": getattr(it, "name", ""),
-                                        "competition": getattr(it, "competition_name", ""),
-                                        "start_date": getattr(it, "start_time", ""),
-                                        "markets": [],
-                                        })
+                        bc_inst.configure_full_market_acquisition(event_ids=plan.selected_event_ids_betclic)
+                        sb_inst.configure_full_market_acquisition(event_ids=plan.selected_event_ids_superbet)
 
-                            sb_overview_parsed = sb_inst.parser.parse_payloads(sb_overview_payloads)
-                            bc_overview_parsed = bc_inst.parser.parse_payloads(bc_overview_payloads)
+                        sb_inst.set_discovered_items(sb_discovered)
+                        bc_inst.set_discovered_items(bc_discovered)
 
-                            sb_overview_norm = self.normalization_engine.normalize("superbet", sb_overview_parsed)
-                            bc_overview_norm = self.normalization_engine.normalize("betclic", bc_overview_parsed)
+                    overlap_sb_ids = plan.overlap_event_ids_superbet
+                    overlap_bc_ids = plan.overlap_event_ids_betclic
 
-                            sb_graphs = sb_overview_norm.graphs
-                            bc_graphs = bc_overview_norm.graphs
+                    for k, v in plan.resource_metrics_patch.items():
+                        setattr(resource_metrics, k, v)
 
-                            if sb_graphs and bc_graphs:
-                                cand_res = self.validation_pipeline.candidate_generator.generate_candidates(
-                                    source_items=sb_graphs,
-                                    target_items=bc_graphs,
-                                )
-                                src_map = {g.event.internal_id: g.event for g in sb_graphs}
-                                tgt_map = {g.event.internal_id: g.event for g in bc_graphs}
-                                comp_map = {
-                                    g.event.competition_id: g.competition
-                                    for g in list(sb_graphs) + list(bc_graphs)
-                                    if g.competition
-                                }
-                                match_res = self.validation_pipeline.event_matcher.match_candidates(
-                                    candidates=cand_res.candidates,
-                                    source_events_map=src_map,
-                                    target_events_map=tgt_map,
-                                    comp_map=comp_map,
-                                )
-                            else:
-                                from domain.models import DecisionBatch
-                                match_res = DecisionBatch(decisions=[])
-                                src_map = {}
-                                tgt_map = {}
-                                comp_map = {}
-                        # 2. Extract matched pairs from pre-discovery decisions
-                        matched_pair_items: List[Tuple[int, float, int, float, str, str, str]] = []
-                        for d in match_res.decisions:
-                            if d.decision.value == "MATCHED":
-                                src_ev = src_map.get(d.source_event_id)
-                                tgt_ev = tgt_map.get(d.target_event_id)
-                                if src_ev and tgt_ev:
-                                    sb_eid = src_ev.provider_ids.get("superbet")
-                                    bc_eid = tgt_ev.provider_ids.get("betclic")
-                                    if sb_eid and bc_eid:
-                                        sb_eid_str = str(sb_eid).strip()
-                                        bc_eid_str = str(bc_eid).strip()
-                                        overlap_sb_ids.add(sb_eid_str)
-                                        overlap_bc_ids.add(bc_eid_str)
+                    diagnostics["detail_prioritization"] = plan.diagnostics
 
-                                        # Compute joint pair ranking key
-                                        comp_sb = comp_map.get(src_ev.competition_id)
-                                        comp_bc = comp_map.get(tgt_ev.competition_id)
-                                        tier_sb = self.event_selection_policy.calculate_competition_tier(
-                                            comp_sb.name if comp_sb else "", self.config.preferred_competitions
-                                        )
-                                        tier_bc = self.event_selection_policy.calculate_competition_tier(
-                                            comp_bc.name if comp_bc else "", self.config.preferred_competitions
-                                        )
-                                        pair_tier = min(tier_sb, tier_bc)
+                    # Stage 22C: Discovery diagnostics
+                    discovery_diag: Dict[str, Any] = {
+                        "requested_hours_ahead": self.config.hours_ahead,
+                        "superbet": {
+                            "hours_ahead": getattr(sb_inst.superbet_config, 'hours_ahead', None),
+                            "events_discovered": len(sb_discovered),
+                        },
+                    }
+                    if hasattr(bc_inst, 'discovery') and bc_inst.discovery is not None and hasattr(bc_inst.discovery, 'stats'):
+                        discovery_diag["betclic"] = dict(bc_inst.discovery.stats)
+                    else:
+                        discovery_diag["betclic"] = {
+                            "hours_ahead": getattr(bc_inst.betclic_config, 'hours_ahead', None),
+                            "events_discovered": len(bc_discovered),
+                        }
+                    diagnostics["discovery"] = discovery_diag
 
-                                        # Match confidence score
-                                        confidence = float(getattr(d, "total_score", 1.0) or 1.0)
-
-                                        # Market count / richness hint
-                                        mkt_count = len(getattr(src_ev, "markets", [])) + len(getattr(tgt_ev, "markets", []))
-
-                                        ko_sb = self.event_selection_policy._extract_item_kickoff(src_ev.scheduled_start)
-                                        ko_bc = self.event_selection_policy._extract_item_kickoff(tgt_ev.scheduled_start)
-                                        ko_ts = min(
-                                            ko_sb.timestamp() if ko_sb else 9999999999.0,
-                                            ko_bc.timestamp() if ko_bc else 9999999999.0,
-                                        )
-                                        pair_name = f"{src_ev.home_participant} vs {src_ev.away_participant}"
-                                        # Priority: Tier 0 UEFA/Qualifiers -> Tier 1 Big 5/Ekstraklasa -> Higher Confidence -> Richer Markets -> Earlier Kickoff -> Tiebreaker
-                                        matched_pair_items.append((pair_tier, -confidence, -mkt_count, ko_ts, pair_name, sb_eid_str, bc_eid_str))
-
-                        # Deterministic sort for pairs
-                        matched_pair_items.sort(key=lambda x: (x[0], x[1], x[2], x[3], x[4], x[5], x[6]))
-                        ordered_paired_sb_ids = [p[5] for p in matched_pair_items]
-                        ordered_paired_bc_ids = [p[6] for p in matched_pair_items]
-
-                        # 3. Prioritize detail acquisition strictly favoring matched overlap for BOTH providers
-                        max_reqs = self.config.effective_max_detail_requests
-                        scan_mode_str = str(getattr(self.config, "scan_mode", "NORMAL")).upper()
-
-                        with profiler.trace_phase("detail_selection", counters={"budget": max_reqs, "overlap": len(overlap_bc_ids)}):
-                            prio_bc = self.event_selection_policy.prioritize_detail_events(
-                                discovered_items=bc_discovered,
-                                overlap_event_ids=overlap_bc_ids,
-                                max_detail_requests=max_reqs,
-                                preferred_competitions=self.config.preferred_competitions,
-                                hours_ahead=self.config.hours_ahead,
-                                current_time=now_dt,
-                                forced_ranked_ids=ordered_paired_bc_ids,
-                            )
-                            prio_sb = self.event_selection_policy.prioritize_detail_events(
-                                discovered_items=sb_discovered,
-                                overlap_event_ids=overlap_sb_ids,
-                                max_detail_requests=max_reqs,
-                                preferred_competitions=self.config.preferred_competitions,
-                                hours_ahead=self.config.hours_ahead,
-                                current_time=now_dt,
-                                forced_ranked_ids=ordered_paired_sb_ids,
-                            )
-
-                            bc_inst.configure_full_market_acquisition(event_ids=prio_bc.selected_event_ids)
-                            sb_inst.configure_full_market_acquisition(event_ids=prio_sb.selected_event_ids)
-
-                            # Pass discovered items directly so provider execution doesn't re-run discovery
-                            sb_inst._discovered_items_cache = sb_discovered
-                            bc_inst._discovered_items_cache = bc_discovered
-
+                    prio_bc = plan.prioritization_result_betclic
+                    if prio_bc:
                         logger.info(
                             "Stage 25 Matched Detail Prioritization [%s]: Matched Overlap=%d, Budget=%d | Tier 0 (Sel/Avail): %d/%d | Tier 1 (Sel/Avail): %d/%d | Tier 2 (Sel/Avail): %d/%d | Samples: %s",
-                            scan_mode_str,
+                            plan.diagnostics.get("scan_mode"),
                             len(overlap_bc_ids),
-                            max_reqs,
+                            self.config.effective_max_detail_requests,
                             prio_bc.tier_0_selected,
                             prio_bc.tier_0_available,
                             prio_bc.tier_1_selected,
@@ -691,96 +507,8 @@ class ProductionScanOrchestrator:
                             prio_bc.tier_2_available,
                             prio_bc.tier_samples,
                         )
-
-                        # Record Stage 10.11, 10.12 & Stage 25 Provider Overlap & Detail Telemetry
-                        sb_cnt = len(sb_discovered)
-                        bc_cnt = len(bc_discovered)
-                        raw_ovr = len(overlap_bc_ids)
-                        sel_ovr = prio_bc.events_overlap_selected
-                        ovr_rate = round(raw_ovr / min(sb_cnt, bc_cnt), 4) if min(sb_cnt, bc_cnt) > 0 else 0.0
-
-                        resource_metrics.superbet_events_count = sb_cnt
-                        resource_metrics.betclic_events_count = bc_cnt
-                        resource_metrics.raw_overlap_count = raw_ovr
-                        resource_metrics.selected_overlap_count = sel_ovr
-                        resource_metrics.overlap_rate = ovr_rate
-                        resource_metrics.cross_bookmaker_overlap_rate = ovr_rate
-                        resource_metrics.provider_overlap_summary = {
-                            "superbet_events": sb_cnt,
-                            "betclic_events": bc_cnt,
-                            "raw_overlap": raw_ovr,
-                            "selected_overlap": sel_ovr,
-                            "overlap_rate": f"{ovr_rate * 100:.1f}%",
-                        }
-
-                        resource_metrics.detail_candidates_available = prio_bc.candidates_available
-                        resource_metrics.detail_candidates_overlap = len(overlap_bc_ids)
-                        resource_metrics.detail_events_selected = prio_bc.events_selected
-                        resource_metrics.detail_events_overlap_selected = prio_bc.events_overlap_selected
-                        resource_metrics.detail_overlap_selection_rate = prio_bc.overlap_selection_rate
-                        resource_metrics.multi_market_expected_events = prio_bc.multi_market_expected_events
-
-                        # Stage 25 Explicit Metrics
-                        resource_metrics.matched_events_eligible_for_detail = raw_ovr
-                        resource_metrics.matched_events_selected_for_detail = sel_ovr
-                        resource_metrics.overview_only_matched_events = max(0, raw_ovr - sel_ovr)
-                        resource_metrics.full_detail_matched_events = sel_ovr
-                        resource_metrics.detail_budget_allocated = max_reqs
-                        resource_metrics.scan_mode = scan_mode_str
-
-                        diagnostics["detail_prioritization"] = {
-                            "scan_mode": scan_mode_str,
-                            "detail_budget": max_reqs,
-                            "matched_events_eligible": raw_ovr,
-                            "matched_events_selected": sel_ovr,
-                            "overview_only_matched_events": max(0, raw_ovr - sel_ovr),
-                            "full_detail_matched_events": sel_ovr,
-                            "candidates_available": prio_bc.candidates_available,
-                            "candidates_overlap": len(overlap_bc_ids),
-                            "events_selected": prio_bc.events_selected,
-                            "events_overlap_selected": prio_bc.events_overlap_selected,
-                            "overlap_selection_rate": prio_bc.overlap_selection_rate,
-                            "multi_market_expected_events": prio_bc.multi_market_expected_events,
-                            "selected_event_ids": prio_bc.selected_event_ids,
-                            "selected_event_ids_betclic": prio_bc.selected_event_ids,
-                            "selected_event_ids_superbet": prio_sb.selected_event_ids,
-                            "tier_0_available": prio_bc.tier_0_available,
-                            "tier_0_selected": prio_bc.tier_0_selected,
-                            "tier_1_available": prio_bc.tier_1_available,
-                            "tier_1_selected": prio_bc.tier_1_selected,
-                            "tier_2_available": prio_bc.tier_2_available,
-                            "tier_2_selected": prio_bc.tier_2_selected,
-                            "tier_samples": prio_bc.tier_samples,
-                        }
-
-                        # Stage 22C: Discovery diagnostics
-                        discovery_diag: Dict[str, Any] = {
-                            "requested_hours_ahead": self.config.hours_ahead,
-                        }
-                        # Superbet discovery diagnostics
-                        discovery_diag["superbet"] = {
-                            "hours_ahead": getattr(sb_inst.superbet_config, 'hours_ahead', None),
-                            "events_discovered": sb_cnt,
-                        }
-                        # Betclic discovery diagnostics
-                        if hasattr(bc_inst, 'discovery') and bc_inst.discovery is not None:
-                            bc_disc = bc_inst.discovery
-                            if hasattr(bc_disc, 'stats'):
-                                discovery_diag["betclic"] = dict(bc_disc.stats)
-                        else:
-                            discovery_diag["betclic"] = {
-                                "hours_ahead": getattr(bc_inst.betclic_config, 'hours_ahead', None),
-                                "events_discovered": bc_cnt,
-                            }
-                        diagnostics["discovery"] = discovery_diag
-                        logger.info(
-                            f"Stage 22C discovery diagnostics: "
-                            f"hours_ahead={self.config.hours_ahead} "
-                            f"superbet_events={sb_cnt} betclic_events={bc_cnt} "
-                            f"overlap={raw_ovr} overlap_rate={ovr_rate*100:.1f}%"
-                        )
-                    except Exception as exc:
-                        logger.warning("Error during coordinated Superbet & Betclic detail pre-discovery: %s", exc, exc_info=True)
+                except Exception as exc:
+                    logger.warning("Error during coordinated Superbet & Betclic detail pre-discovery: %s", exc, exc_info=True)
 
             # Fallback single provider detail configuration if either provider lacks selected_event_ids
             for p_name in ordered_names:
@@ -913,7 +641,9 @@ class ProductionScanOrchestrator:
                             errors=[err_msg],
                         )
 
-            # Stage 50 Telemetry Counters
+            # Stage 50 Telemetry Counters (profiled separately: runs after the
+            # provider wait, over all parsed markets, on the scan critical path)
+            profiler.start_phase("acquisition_telemetry")
             raw_markets_received_total = 0
             allowed_markets_total = 0
             discarded_markets_total = 0
@@ -989,6 +719,18 @@ class ProductionScanOrchestrator:
                     "discarded_markets": prov_discarded_mkts,
                 }
 
+                # Extract Acquisition 2.0 explicit accounting object
+                if getattr(p_result, "accounting", None) is not None:
+                    acct_dict = p_result.accounting.to_dict()
+                    resource_metrics.per_provider_accounting[p_name] = acct_dict
+                elif p_inst and hasattr(p_inst, "get_accounting") and callable(p_inst.get_accounting):
+                    try:
+                        acct_obj = p_inst.get_accounting()
+                        if acct_obj:
+                            resource_metrics.per_provider_accounting[p_name] = acct_obj.to_dict()
+                    except Exception:
+                        pass
+
                 # Extract provider HTTP and detail acquisition telemetry
                 if p_inst and hasattr(p_inst, "fetcher") and hasattr(p_inst.fetcher, "stats"):
                     f_stats = p_inst.fetcher.stats
@@ -1031,6 +773,7 @@ class ProductionScanOrchestrator:
                 if p_result.warnings:
                     warnings.extend([f"[{p_name}] {w}" for w in p_result.warnings])
 
+            profiler.finish_phase("acquisition_telemetry")
             stage_timings.acquisition_seconds = time.perf_counter() - t_acq_0
 
             # ──────────────────────────────────────────────────────────────────
@@ -1383,10 +1126,14 @@ class ProductionScanOrchestrator:
                                     reason = EvaluationExclusionReason.INCOMPLETE_EVENT_IDENTITY
                                 elif code == "INVALID_ODDS":
                                     reason = EvaluationExclusionReason.INVALID_ODDS
+                                elif code == "INVALID_MARKET_IDENTITY":
+                                    reason = EvaluationExclusionReason.INVALID_MARKET_IDENTITY
+                                elif code == "CROSS_MARKET_CONTAMINATION":
+                                    reason = EvaluationExclusionReason.CROSS_MARKET_CONTAMINATION
                                 else:
                                     reason = EvaluationExclusionReason.LINE_INVALID
                                 opp_id = None
-                                details = {"rejection_reason": cand_eval.rejection_reason}
+                                details = {"rejection_reason": cand_eval.rejection_reason, "exclusion_reason_code": code}
                             elif cand_eval.status == SurebetStatus.UNSUPPORTED_MARKET:
                                 state = MarketEvaluationState.NOT_EVALUATED
                                 reason = EvaluationExclusionReason.UNSUPPORTED_MARKET
@@ -1616,6 +1363,34 @@ class ProductionScanOrchestrator:
                                 if expired_recs:
                                     valuebet_lifecycle_batch.expired_count = len(expired_recs)
 
+                            # Extract Valuebet rejection breakdown
+                            if valuebet_result and hasattr(valuebet_result, "metrics"):
+                                vm = valuebet_result.metrics
+                                val_rej_breakdown: Dict[str, int] = {}
+                                if getattr(vm, "markets_rejected_incomplete", 0) > 0:
+                                    val_rej_breakdown["INCOMPLETE_REFERENCE_MARKET"] = vm.markets_rejected_incomplete
+                                if getattr(vm, "markets_rejected_stale", 0) > 0:
+                                    val_rej_breakdown["STALE_REFERENCE_DATA"] = vm.markets_rejected_stale
+                                if getattr(vm, "markets_rejected_invalid_odds", 0) > 0:
+                                    val_rej_breakdown["INVALID_ODDS"] = vm.markets_rejected_invalid_odds
+                                if getattr(vm, "markets_rejected_unsupported", 0) > 0:
+                                    val_rej_breakdown["UNSUPPORTED_MARKET_TYPE"] = vm.markets_rejected_unsupported
+                                # P1-004: previously silent exits, now counted.
+                                if getattr(vm, "markets_rejected_market_key", 0) > 0:
+                                    val_rej_breakdown["UNSUPPORTED_MARKET_KEY"] = vm.markets_rejected_market_key
+                                if getattr(vm, "markets_rejected_reference_missing", 0) > 0:
+                                    val_rej_breakdown["REFERENCE_MARKET_MISSING"] = vm.markets_rejected_reference_missing
+                                if getattr(vm, "selections_rejected_key_missing", 0) > 0:
+                                    val_rej_breakdown["SELECTION_KEY_MISSING"] = vm.selections_rejected_key_missing
+                                if getattr(vm, "selections_rejected_reference_missing", 0) > 0:
+                                    val_rej_breakdown["REFERENCE_SELECTION_MISSING"] = vm.selections_rejected_reference_missing
+                                if getattr(vm, "selections_rejected_invalid_odds", 0) > 0:
+                                    val_rej_breakdown["INVALID_EXECUTION_ODDS"] = vm.selections_rejected_invalid_odds
+                                if getattr(vm, "events_unmatched", 0) > 0:
+                                    val_rej_breakdown["UNMATCHED_EVENT"] = vm.events_unmatched
+                                resource_metrics.valuebet_rejection_reasons_breakdown = val_rej_breakdown
+                                diagnostics["valuebet_rejection_breakdown"] = val_rej_breakdown
+
                 except Exception as exc:
                     err_msg = f"Unexpected exception in valuebet subsystem: {exc}"
                     logger.warning(err_msg, exc_info=True)
@@ -1651,6 +1426,17 @@ class ProductionScanOrchestrator:
                 raise CriticalPipelineFailure(err_msg) from fatal_exc
 
         finally:
+            # Cleanly commit and release any repository sessions held during the cycle
+            for repo in (self.opportunity_repository, self.delivery_repository):
+                if repo is not None and hasattr(repo, "session") and repo.session is not None:
+                    try:
+                        repo.session.commit()
+                    except Exception:
+                        try:
+                            repo.session.rollback()
+                        except Exception:
+                            pass
+
             cycle_duration = time.perf_counter() - cycle_t0
             stage_timings.total_duration_seconds = cycle_duration
             completed_at = datetime.now(timezone.utc).isoformat()
@@ -1659,14 +1445,9 @@ class ProductionScanOrchestrator:
             _, peak_mem = tracemalloc.get_traced_memory()
             resource_metrics.peak_memory_mb = peak_mem / (1024 * 1024)
 
-            # Update aggregated telemetry (Actionable matches: Superbet <-> Betclic)
+            # Update aggregated telemetry
             if validation_result:
-                actionable_cnt = sum(
-                    1 for ce in validation_result.canonical_events
-                    if ("superbet" in ce.sources and "betclic" in ce.sources)
-                    or (not any(b in ce.sources for b in ("superbet", "betclic", "bet365", "unibet")) and len(ce.sources) >= 2)
-                )
-                resource_metrics.matched_events = actionable_cnt
+                resource_metrics.matched_events = len(validation_result.canonical_events)
             if detection_result:
                 resource_metrics.selections_evaluated = sum(len(e.best_legs) for e in detection_result.evaluations)
 
@@ -1704,11 +1485,7 @@ class ProductionScanOrchestrator:
         # ──────────────────────────────────────────────────────────────────────
         # 9. STRUCTURED SCAN CYCLE RESULT ASSEMBLY
         # ──────────────────────────────────────────────────────────────────────
-        matched_events = sum(
-            1 for ce in validation_result.canonical_events
-            if ("superbet" in ce.sources and "betclic" in ce.sources)
-            or (not any(b in ce.sources for b in ("superbet", "betclic", "bet365", "unibet")) and len(ce.sources) >= 2)
-        ) if validation_result else 0
+        matched_events = len(validation_result.canonical_events) if validation_result else 0
         unmatched_events = len(validation_result.unmatched_events) if validation_result else 0
 
         # Calculate cross-bookmaker overlap if available
@@ -1732,12 +1509,15 @@ class ProductionScanOrchestrator:
                 "candidate_pairs": len(validation_result.event_candidates) if validation_result else 0,
             }
 
-        # Collect Betclic Detail Diagnostics
+        # Collect Betclic Detail Diagnostics (profiled: full market scans + lookups
+        # run on the scan critical path after reconciliation)
+        profiler.start_phase("result_assembly")
         bc_inst = provider_instances.get("betclic")
         bc_raw_metrics = getattr(bc_inst, "acquisition_metrics", {}) if bc_inst else {}
         bc_metrics = bc_raw_metrics if isinstance(bc_raw_metrics, dict) else {}
         bc_res = provider_results.get("betclic")
         bc_parsed_list = bc_res.parsed_objects if bc_res else []
+        bc_parsed_index = index_parsed_by_provider_id(bc_parsed_list, "provider_event_id")
 
         bc_matched_cnt = 0
         bc_detailed_matched_cnt = 0
@@ -1748,7 +1528,7 @@ class ProductionScanOrchestrator:
                     bc_matched_cnt += 1
                     src = sources["betclic"]
                     bc_id = getattr(src, "provider_event_id", None) or getattr(src, "event_id", None)
-                    bc_obj = next((ev for ev in bc_parsed_list if getattr(ev, "provider_event_id", "") == str(bc_id)), None)
+                    bc_obj = bc_parsed_index.get(str(bc_id)) if bc_id is not None else None
                     if bc_obj and len(getattr(bc_obj, "markets", [])) > 1:
                         bc_detailed_matched_cnt += 1
 
@@ -1767,14 +1547,7 @@ class ProductionScanOrchestrator:
             "overview_payloads_used": bc_metrics.get("overview_payloads_used", 0) if isinstance(bc_metrics.get("overview_payloads_used", 0), (int, float)) else 0,
             "markets_acquired": bc_metrics.get("markets_acquired", 0) if isinstance(bc_metrics.get("markets_acquired", 0), (int, float)) else 0,
             "selections_acquired": bc_metrics.get("selections_acquired", 0) if isinstance(bc_metrics.get("selections_acquired", 0), (int, float)) else 0,
-            "market_families": {
-                fam: sum(
-                    1 for g in provider_graphs.get("betclic", [])
-                    for m in g.markets
-                    if _categorize_market_type(m.market_type) == fam
-                )
-                for fam in ("1X2", "BTTS", "TOTALS", "DOUBLE_CHANCE", "DRAW_NO_BET", "HALF_TIME_RESULT", "HANDICAP", "PLAYER_PROPS")
-            },
+            "market_families": count_market_families(provider_graphs.get("betclic", [])),
         }
 
         # Collect Superbet Telemetry
@@ -1790,14 +1563,7 @@ class ProductionScanOrchestrator:
             "overview_payloads_used": sb_metrics.get("overview_payloads_used", 0) if isinstance(sb_metrics.get("overview_payloads_used", 0), (int, float)) else 0,
             "markets_acquired": sb_metrics.get("markets_acquired", 0) if isinstance(sb_metrics.get("markets_acquired", 0), (int, float)) else 0,
             "selections_acquired": sb_metrics.get("selections_acquired", 0) if isinstance(sb_metrics.get("selections_acquired", 0), (int, float)) else 0,
-            "market_families": {
-                fam: sum(
-                    1 for g in provider_graphs.get("superbet", [])
-                    for m in g.markets
-                    if _categorize_market_type(m.market_type) == fam
-                )
-                for fam in ("1X2", "BTTS", "TOTALS", "DOUBLE_CHANCE", "DRAW_NO_BET", "HALF_TIME_RESULT", "HANDICAP", "PLAYER_PROPS")
-            },
+            "market_families": count_market_families(provider_graphs.get("superbet", [])),
         }
 
         # Collect Odds API Telemetry
@@ -1850,6 +1616,7 @@ class ProductionScanOrchestrator:
                 "cache_hits": cache_hits,
                 "cache_misses": cache_misses,
                 "fetch_errors": oapi_metrics.get("fetch_errors", len(oapi_res.errors) if oapi_res else 0),
+                "quota_blocked": oapi_metrics.get("quota_blocked", 0),
                 "bookmaker_event_models": len(parsed_list),
                 "bet365_count": len(b365_models),
                 "unibet_count": len(unibet_models),
@@ -1869,6 +1636,7 @@ class ProductionScanOrchestrator:
                 "cache_hits": 0,
                 "cache_misses": 0,
                 "fetch_errors": 0,
+                "quota_blocked": 0,
                 "bookmaker_event_models": 0,
                 "bet365_count": 0,
                 "unibet_count": 0,
@@ -1892,6 +1660,7 @@ class ProductionScanOrchestrator:
 
         val_quota = getattr(self.reference_provider, "quota_metrics", None)
 
+        profiler.finish_phase("result_assembly")
         scan_trace_report = profiler.finish_scan()
         diagnostics["scan_trace"] = scan_trace_report
 
@@ -1976,6 +1745,7 @@ class ProductionScanOrchestrator:
                 valuebet_reference_requests=val_quota.total_requests if val_quota else 0,
                 valuebet_reference_cache_hits=val_quota.cache_hits if val_quota else 0,
                 valuebet_reference_cache_misses=val_quota.cache_misses if val_quota else 0,
+                valuebet_rejection_reasons_breakdown=resource_metrics.valuebet_rejection_reasons_breakdown,
                 market_coverage_breakdown=market_breakdown,
                 nearest_opportunity=nearest_opp_dict,
                 errors=errors,

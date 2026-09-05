@@ -109,7 +109,7 @@ class SuperbetExecutionProvider(ExecutionMarketProvider):
 
     def get_player_prop_markets(
         self,
-        fixture_name: str,
+        fixture_name: Optional[str] = None,
         kickoff: Optional[str] = None,
         player_name: Optional[str] = None,
         stat_type: Optional[str] = None,
@@ -120,7 +120,7 @@ class SuperbetExecutionProvider(ExecutionMarketProvider):
         if not normalized_events:
             return quotes
 
-        norm_fix, _ = normalize_team_name(fixture_name)
+        norm_fix, _ = normalize_team_name(fixture_name) if fixture_name else (None, None)
         target_player_norm = normalize_player_name(player_name) if player_name else None
 
         for graph in normalized_events:
@@ -162,6 +162,10 @@ class SuperbetExecutionProvider(ExecutionMarketProvider):
                     p_name = sel.participant or mkt_player or sel.metadata.get("player_name")
                     if not p_name:
                         continue
+                    if "," in p_name:
+                        parts = [p.strip() for p in p_name.split(",") if p.strip()]
+                        if len(parts) == 2:
+                            p_name = f"{parts[1]} {parts[0]}"
 
                     sel_raw_name = (sel.metadata.get("raw_name") or getattr(sel, "name", "") or sel.selection_type or "").lower()
                     if any(k in sel_raw_name for k in ("1. gola", "pierwszego gola", "ostatniego gola", "w 1. połowie", "w 1. polowie", "w 2. połowie", "w 2. polowie", "czerwona", "czerwoną")):
@@ -169,23 +173,32 @@ class SuperbetExecutionProvider(ExecutionMarketProvider):
 
                     sel_line = sel.line if sel.line is not None else mkt_line
                     if sel_line is None:
+                        is_binary_market = (
+                            sel.selection_type.upper() in ("TAK", "NIE", "YES", "NO")
+                            or any(k in mkt_raw_name for k in ("strzeli gola", "otrzyma kartkę", "otrzyma kartke", "zaliczy asystę", "zaliczy asyste", "popełni faul", "popelni faul", "zaliczy odbiór", "zaliczy odbior"))
+                        )
                         if canonical_stat == "GOALS":
                             if "2+" in (mkt_raw_name + " " + sel_raw_name) or "2 lub więcej" in (mkt_raw_name + " " + sel_raw_name):
                                 sel_line = 1.5
                             elif "3+" in (mkt_raw_name + " " + sel_raw_name) or "3 lub więcej" in (mkt_raw_name + " " + sel_raw_name):
                                 sel_line = 2.5
-                            else:
+                            elif is_binary_market or "strzel" in mkt_raw_name:
                                 sel_line = 0.5
                         elif canonical_stat in ("CARDS", "ASSISTS"):
-                            sel_line = 0.5
+                            if is_binary_market or "kartk" in mkt_raw_name or "asyst" in mkt_raw_name:
+                                sel_line = 0.5
+                        elif canonical_stat in ("FOULS", "TACKLES"):
+                            # Strictly require verified binary proposition; do not fabricate 0.5 on unparsed totals
+                            if is_binary_market:
+                                sel_line = 0.5
 
                     if sel_line is None:
                         continue
 
                     sel_side = sel.selection_type.upper()
-                    if sel_side in ("TAK", "YES", "OVER", "POWYŻEJ", "POWYZEJ"):
+                    if sel_side in ("TAK", "YES", "OVER", "POWYŻEJ", "POWYZEJ") or any(k in sel_raw_name for k in ("powyżej", "powyzej", "over")):
                         side = "OVER"
-                    elif sel_side in ("NIE", "NO", "UNDER", "PONIŻEJ", "PONIZEJ"):
+                    elif sel_side in ("NIE", "NO", "UNDER", "PONIŻEJ", "PONIZEJ") or any(k in sel_raw_name for k in ("poniżej", "ponizej", "under")):
                         side = "UNDER"
                     else:
                         side = sel_side
@@ -311,7 +324,7 @@ class BetclicExecutionProvider(ExecutionMarketProvider):
 
     def get_player_prop_markets(
         self,
-        fixture_name: str,
+        fixture_name: Optional[str] = None,
         kickoff: Optional[str] = None,
         player_name: Optional[str] = None,
         stat_type: Optional[str] = None,
@@ -322,7 +335,7 @@ class BetclicExecutionProvider(ExecutionMarketProvider):
         if not normalized_events:
             return quotes
 
-        norm_fix, _ = normalize_team_name(fixture_name)
+        norm_fix, _ = normalize_team_name(fixture_name) if fixture_name else (None, None)
         target_player_norm = normalize_player_name(player_name) if player_name else None
 
         for graph in normalized_events:
@@ -361,6 +374,10 @@ class BetclicExecutionProvider(ExecutionMarketProvider):
                     p_name = sel.participant or mkt_player
                     if not p_name:
                         continue
+                    if "," in p_name:
+                        parts = [p.strip() for p in p_name.split(",") if p.strip()]
+                        if len(parts) == 2:
+                            p_name = f"{parts[1]} {parts[0]}"
 
                     sel_raw_name = (sel.metadata.get("raw_name") or getattr(sel, "name", "") or sel.selection_type or "").lower()
                     if any(k in sel_raw_name for k in ("1. gola", "pierwszego gola", "ostatniego gola", "w 1. połowie", "w 1. polowie", "w 2. połowie", "w 2. polowie", "czerwona", "czerwoną")):
@@ -368,23 +385,32 @@ class BetclicExecutionProvider(ExecutionMarketProvider):
 
                     sel_line = sel.line if sel.line is not None else mkt_line
                     if sel_line is None:
+                        is_binary_market = (
+                            sel.selection_type.upper() in ("TAK", "NIE", "YES", "NO")
+                            or any(k in mkt_raw_name for k in ("strzeli gola", "otrzyma kartkę", "otrzyma kartke", "zaliczy asystę", "zaliczy asyste", "popełni faul", "popelni faul", "zaliczy odbiór", "zaliczy odbior"))
+                        )
                         if canonical_stat == "GOALS":
                             if "2+" in (mkt_raw_name + " " + sel_raw_name) or "2 lub więcej" in (mkt_raw_name + " " + sel_raw_name):
                                 sel_line = 1.5
                             elif "3+" in (mkt_raw_name + " " + sel_raw_name) or "3 lub więcej" in (mkt_raw_name + " " + sel_raw_name):
                                 sel_line = 2.5
-                            else:
+                            elif is_binary_market or "strzel" in mkt_raw_name:
                                 sel_line = 0.5
                         elif canonical_stat in ("CARDS", "ASSISTS"):
-                            sel_line = 0.5
+                            if is_binary_market or "kartk" in mkt_raw_name or "asyst" in mkt_raw_name:
+                                sel_line = 0.5
+                        elif canonical_stat in ("FOULS", "TACKLES"):
+                            # Strictly require verified binary proposition; do not fabricate 0.5 on unparsed totals
+                            if is_binary_market:
+                                sel_line = 0.5
 
                     if sel_line is None:
                         continue
 
                     sel_side = sel.selection_type.upper()
-                    if sel_side in ("TAK", "YES", "OVER", "POWYŻEJ", "POWYZEJ"):
+                    if sel_side in ("TAK", "YES", "OVER", "POWYŻEJ", "POWYZEJ") or any(k in sel_raw_name for k in ("powyżej", "powyzej", "over")):
                         side = "OVER"
-                    elif sel_side in ("NIE", "NO", "UNDER", "PONIŻEJ", "PONIZEJ"):
+                    elif sel_side in ("NIE", "NO", "UNDER", "PONIŻEJ", "PONIZEJ") or any(k in sel_raw_name for k in ("poniżej", "ponizej", "under")):
                         side = "UNDER"
                     else:
                         side = sel_side

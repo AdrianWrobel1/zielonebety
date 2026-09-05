@@ -187,7 +187,154 @@ class TestStatsHubParser(unittest.TestCase):
         self.assertIn("over_3.5", prop.best_odds_by_line)
         self.assertAlmostEqual(prop.best_odds_by_line["over_3.5"].decimal_odds, 1.90)
 
+    def test_parse_player_trends_endpoint_payload(self):
+        trends_payload = {
+            "data": [
+                {
+                    "playerId": 1042784,
+                    "playerName": "Iago Aspas",
+                    "playerSlug": "iago-aspas",
+                    "position": "F",
+                    "marketName": "Player Shots",
+                    "statType": "shots",
+                    "line": 1.5,
+                    "oddsType": "over",
+                    "trendHits": 8,
+                    "trendWindow": 10,
+                    "trendTotal": 24,
+                    "trendAvg": 2.4,
+                    "opponentRank": 14,
+                    "totalRanks": 20,
+                    "leagueAverage": 1.8,
+                    "opponentAverage": 2.1,
+                    "eventId": 16416308,
+                    "eventInternalId": 362992,
+                    "slug": "celta-vigo-vs-athletic-club",
+                    "eventTimestamp": 1787616000,
+                    "teamId": 2821,
+                    "teamName": "Celta Vigo",
+                    "teamSlug": "celta-vigo",
+                    "opponentTeamId": 2825,
+                    "opponentTeamName": "Athletic Club",
+                    "opponentTeamSlug": "athletic-club",
+                    "bookmakers": [
+                        {"bookmakerId": 2, "bookmakerName": "Bet365", "oddsValue": 1.615},
+                        {"bookmakerId": 7, "bookmakerName": "Unibet", "oddsValue": 1.70},
+                    ],
+                    "recentGames": [
+                        {
+                            "eventId": 16416300,
+                            "statValue": 3,
+                            "minutesPlayed": 82,
+                            "isHome": True,
+                            "isHit": True,
+                            "opponentName": "Getafe",
+                            "eventTimestamp": 1786800000,
+                        }
+                    ]
+                }
+            ]
+        }
+
+        results = self.parser.parse_payload(trends_payload)
+        self.assertEqual(len(results), 1)
+
+        prop = results[0]
+        ps = prop.player_stat
+        self.assertEqual(ps.player_id, 1042784)
+        self.assertEqual(ps.player_name, "Iago Aspas")
+        self.assertEqual(ps.team, "Celta Vigo")
+        self.assertEqual(ps.opponent, "Athletic Club")
+        self.assertEqual(ps.stat_type, "shots")
+        self.assertEqual(ps.line, 1.5)
+        self.assertEqual(ps.odds_type, "over")
+        self.assertEqual(ps.trend_hits, 8)
+        self.assertEqual(ps.trend_window, 10)
+        self.assertEqual(ps.trend_avg, 2.4)
+        self.assertEqual(ps.fixture.fixture_id, "16416308")
+        self.assertEqual(ps.fixture.event_internal_id, 362992)
+        self.assertEqual(ps.fixture.slug, "celta-vigo-vs-athletic-club")
+        self.assertEqual(ps.fixture.get_fixture_url(), "https://www.statshub.com/fixture/celta-vigo-vs-athletic-club/362992")
+
+        # Multi-bookmaker odds preservation
+        self.assertEqual(len(ps.bookmaker_odds), 2)
+        self.assertEqual(prop.best_odds_by_line["over_1.5"].decimal_odds, 1.70)
+        self.assertEqual(prop.best_odds_by_line["over_1.5"].bookmaker, "Unibet")
+
+        # Recent games
+        self.assertEqual(len(ps.historical_matches), 1)
+        self.assertTrue(ps.historical_matches[0].is_hit)
+        self.assertEqual(ps.historical_matches[0].stat_value, 3)
+
+    def test_parse_team_trends_endpoint_payload(self):
+        from providers.statshub.team_parser import StatsHubTeamParser
+        team_parser = StatsHubTeamParser()
+        team_payload = {
+            "data": [
+                {
+                    "teamId": 2821,
+                    "teamName": "Celta Vigo",
+                    "teamSlug": "celta-vigo",
+                    "statType": "shots",
+                    "statDisplay": "Shots",
+                    "line": 12.5,
+                    "oddsType": "over",
+                    "eventId": 16416308,
+                    "eventInternalId": 362992,
+                    "eventTimestamp": 1787616000,
+                    "homeTeamId": 2821,
+                    "homeTeamName": "Celta Vigo",
+                    "homeTeamSlug": "celta-vigo",
+                    "awayTeamId": 2825,
+                    "awayTeamName": "Athletic Club",
+                    "awayTeamSlug": "athletic-club",
+                    "opponentTeamId": 2825,
+                    "opponentTeamName": "Athletic Club",
+                    "opponentTeamSlug": "athletic-club",
+                    "opponentHitRate": 60.0,
+                    "leagueName": "LaLiga",
+                    "trendHits": 7,
+                    "trendWindow": 10,
+                    "trendTotal": 135,
+                    "trendAvg": 13.5,
+                    "bookmakers": [
+                        {"bookmakerId": 2, "bookmakerName": "Bet365", "oddsValue": 1.80},
+                        {"bookmakerId": 4, "bookmakerName": "Skybet", "oddsValue": 1.85},
+                    ],
+                    "recentGames": [
+                        {
+                            "eventId": 16416300,
+                            "statValue": 14,
+                            "isHome": True,
+                            "isHit": True,
+                            "opponentName": "Getafe",
+                            "eventTimestamp": 1786800000,
+                        }
+                    ]
+                }
+            ]
+        }
+
+        results = team_parser.parse_payload(team_payload)
+        self.assertEqual(len(results), 1)
+
+        prop = results[0]
+        ts = prop.team_stat
+        self.assertEqual(ts.team_id, 2821)
+        self.assertEqual(ts.team_name, "Celta Vigo")
+        self.assertEqual(ts.opponent_name, "Athletic Club")
+        self.assertEqual(ts.stat_type, "shots")
+        self.assertEqual(ts.line, 12.5)
+        self.assertEqual(ts.trend_hits, 7)
+        self.assertEqual(ts.trend_window, 10)
+        self.assertEqual(ts.fixture.fixture_id, "16416308")
+        self.assertEqual(ts.fixture.event_internal_id, 362992)
+        self.assertEqual(ts.fixture.get_fixture_url(), "https://www.statshub.com/fixture/celta-vigo-vs-athletic-club/362992")
+        self.assertEqual(len(ts.bookmaker_odds), 2)
+        self.assertEqual(prop.best_odds_by_line["over_12.5"].decimal_odds, 1.85)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

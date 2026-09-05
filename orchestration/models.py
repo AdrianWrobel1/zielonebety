@@ -26,6 +26,13 @@ class CycleStatus(str, Enum):
     FAILED = "FAILED"      # Critical infrastructure failure or total provider unavailability
 
 
+class TelemetryMode(str, Enum):
+    """Telemetry collection and diagnostic detail fidelity mode."""
+    MINIMAL = "MINIMAL"        # Core counters, cycle status, timing summary
+    STANDARD = "STANDARD"      # Full stage diagnostics, cardinality tracking, timing breakdown
+    FULL_DEBUG = "FULL_DEBUG"  # Full stage diagnostics, object sample breakdowns, complete trace logging
+
+
 class MarketEvaluationState(str, Enum):
     """Authoritative explicit terminal evaluation state for a matched canonical market."""
     EVALUATED = "EVALUATED"          # Evaluated completely with valid odds; no arbitrage opportunity
@@ -40,6 +47,8 @@ class EvaluationExclusionReason(str, Enum):
     INVALID_ODDS = "INVALID_ODDS"                          # Odds <= 1.0, non-numeric, inactive, or suspended
     UNSUPPORTED_MARKET = "UNSUPPORTED_MARKET"              # Market type or scope not supported for arbitrage
     LINE_INVALID = "LINE_INVALID"                          # Line is None or malformed on a line-dependent market
+    INVALID_MARKET_IDENTITY = "INVALID_MARKET_IDENTITY"    # Scope/period/participant role/player identity malformed on canonical key
+    CROSS_MARKET_CONTAMINATION = "CROSS_MARKET_CONTAMINATION" # Legs originate from multiple distinct source market IDs
     SELECTION_MISMATCH = "SELECTION_MISMATCH"              # Selections could not be aligned between providers
     PROVIDER_DEGRADED = "PROVIDER_DEGRADED"                # Provider returned degraded / partial payload
     EVALUATOR_POLICY = "EVALUATOR_POLICY"                  # Rejection due to evaluation quality constraints
@@ -129,6 +138,7 @@ class ResourceMetrics:
     rejected_markets_total: int = 0
     not_evaluated_markets_total: int = 0
     rejection_reasons_breakdown: Dict[str, int] = field(default_factory=dict)
+    valuebet_rejection_reasons_breakdown: Dict[str, int] = field(default_factory=dict)
     market_evaluation_records: List[MatchedMarketEvaluationRecord] = field(default_factory=list)
     # Stage 10.12 Provider Overlap Telemetry
     superbet_events_count: int = 0
@@ -167,6 +177,8 @@ class ResourceMetrics:
     normalized_allowed_markets: int = 0
     discarded_market_families_top_20: List[Tuple[str, int]] = field(default_factory=list)
     per_provider_counts: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # Acquisition 2.0 Explicit Funnel Accounting
+    per_provider_accounting: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 
@@ -199,6 +211,7 @@ class ScanConfig:
     max_provider_workers: int = 4
     provider_timeout: float = 60.0
     detail_workers: int = 6
+    telemetry_mode: str = "STANDARD"  # "MINIMAL", "STANDARD", or "FULL_DEBUG"
 
     @property
     def effective_max_detail_requests(self) -> int:
@@ -317,6 +330,7 @@ class ScanCycleResult:
     rejected_markets_count: int = 0
     not_evaluated_markets_count: int = 0
     rejection_reasons_breakdown: Dict[str, int] = field(default_factory=dict)
+    valuebet_rejection_reasons_breakdown: Dict[str, int] = field(default_factory=dict)
     market_evaluation_records: List[MatchedMarketEvaluationRecord] = field(default_factory=list)
 
     # Diagnostics & Nearest Opportunity

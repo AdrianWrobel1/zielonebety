@@ -16,6 +16,7 @@ for the complete Main Scan lifecycle:
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import ctypes
 from ctypes import wintypes
 from dataclasses import asdict, dataclass, field
@@ -318,12 +319,13 @@ class ScanExecutionProfiler:
     Thread-safe, high-precision, sub-2% target overhead.
     """
 
-    def __init__(self, execution_id: Optional[str] = None, scan_mode: str = "NORMAL") -> None:
+    def __init__(self, execution_id: Optional[str] = None, scan_mode: str = "NORMAL", scan_type: str = "main") -> None:
         self._lock = threading.Lock()
         now_dt = datetime.now(timezone.utc)
         self.execution_id = execution_id or f"scan_{now_dt.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
         self.trace_id = f"trace_{now_dt.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
         self.scan_mode = scan_mode
+        self.scan_type = scan_type
         self.started_at_iso = now_dt.isoformat()
         self.completed_at_iso: Optional[str] = None
 
@@ -352,6 +354,7 @@ class ScanExecutionProfiler:
 
         # Overhead measurement
         self._profiler_overhead_perf_accumulator: float = 0.0
+        self._is_finished: bool = False
 
     @property
     def elapsed_seconds(self) -> float:
@@ -397,6 +400,46 @@ class ScanExecutionProfiler:
             with self._lock:
                 self._profiler_overhead_perf_accumulator += (time.perf_counter() - t1)
 
+    def start_phase(self, phase_name: str, counters: Optional[Dict[str, Any]] = None) -> PhaseMeasurement:
+        """Starts timing a discrete pipeline phase manually."""
+        t0 = time.perf_counter()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        rss_curr, _ = sample_process_memory()
+
+        measurement = PhaseMeasurement(
+            name=phase_name,
+            start_time_iso=now_iso,
+            start_perf=t0,
+            start_cpu=sample_process_cpu_seconds(),
+            start_rss_mb=rss_curr,
+            counters=counters or {},
+        )
+
+        with self._lock:
+            self._phases[phase_name] = measurement
+            if phase_name not in self._phase_order:
+                self._phase_order.append(phase_name)
+        return measurement
+
+    def finish_phase(
+        self,
+        phase_name: str,
+        succeeded: bool = True,
+        error: Optional[str] = None,
+        counters: Optional[Dict[str, Any]] = None,
+    ) -> Optional[PhaseMeasurement]:
+        """Finishes timing a discrete pipeline phase manually."""
+        with self._lock:
+            measurement = self._phases.get(phase_name)
+        if measurement:
+            if counters:
+                measurement.counters.update(counters)
+            t1 = time.perf_counter()
+            measurement.finish(succeeded=succeeded, error=error)
+            with self._lock:
+                self._profiler_overhead_perf_accumulator += (time.perf_counter() - t1)
+        return measurement
+
     # ──────────────────────────────────────────────────────────────────────────
     # Worker Instrumentation
     # ──────────────────────────────────────────────────────────────────────────
@@ -437,6 +480,8 @@ class ScanExecutionProfiler:
         )
 
         with self._lock:
+            if self._is_finished:
+                return
             if worker_id not in self._workers:
                 self._workers[worker_id] = WorkerTelemetryRecord(
                     worker_id=worker_id,
@@ -531,6 +576,8 @@ class ScanExecutionProfiler:
         )
 
         with self._lock:
+            if self._is_finished:
+                return record
             self._requests.append(record)
         return record
 
@@ -609,9 +656,17 @@ class ScanExecutionProfiler:
         acq_wall_s = acq_phase.wall_clock_seconds if acq_phase else 0.0
 
         provider_forensics: Dict[str, Any] = {}
-        for prov in ("superbet", "betclic", "odds_api"):
+        observed_providers = list(dict.fromkeys(
+            ["superbet", "betclic", "odds_api"] +
+            [w.provider for w in self._workers.values() if w.provider] +
+            [r.provider for r in self._requests if r.provider]
+        ))
+        for prov in observed_providers:
             p_workers = [w for w in self._workers.values() if w.provider == prov]
             p_requests = [r for r in self._requests if r.provider == prov]
+
+            if not p_workers and not p_requests and prov not in ("superbet", "betclic", "odds_api"):
+                continue
 
             total_network_ms = sum(r.duration_ms for r in p_requests)
             total_rate_wait_ms = sum(w.total_rate_limit_wait_ms for w in p_workers) + sum(r.rate_limit_wait_ms for r in p_requests if not p_workers)
@@ -684,16 +739,25 @@ class ScanExecutionProfiler:
                 "description": f"Execution of pipeline phase '{p['name']}'",
             })
 
-        # Add provider detail acquisitions if measured
+        # Add provider detail acquisitions if measured (normalized by worker count to represent wall-clock critical path)
+        acq_wall_s = next((p["wall_clock_seconds"] for p in phases_list if p["name"] in ("acquisition", "execution_acquisition")), total_wall_clock_s)
+        if acq_wall_s <= 0.0:
+            acq_wall_s = total_wall_clock_s
         for prov, p_stats in req_stats_by_provider.items():
             prov_total_ms = sum(r.duration_ms for r in self._requests if r.provider == prov)
+            prov_workers = [w for w in self._workers.values() if w.provider == prov]
+            w_count = max(1, len(prov_workers))
+            # Wall-clock duration cannot exceed the acquisition phase wall clock or total wall clock
+            prov_wall_clock_s = round(min(acq_wall_s, prov_total_ms / (1000.0 * w_count)), 4)
+            pct_wall = min(100.0, round((prov_wall_clock_s / total_wall_clock_s) * 100.0, 1)) if total_wall_clock_s > 0 else 0.0
+
             bottleneck_candidates.append({
                 "type": "PROVIDER_NETWORK",
                 "name": f"Network: {prov} Requests",
-                "duration_seconds": round(prov_total_ms / 1000.0, 4),
-                "duration_ms": round(prov_total_ms, 2),
-                "pct_total": round((prov_total_ms / (total_wall_clock_s * 1000.0)) * 100.0, 1),
-                "description": f"Total HTTP/gRPC requests executed for {prov} (Count: {p_stats['count']}, p95: {p_stats['p95']}ms)",
+                "duration_seconds": prov_wall_clock_s,
+                "duration_ms": round(prov_wall_clock_s * 1000.0, 2),
+                "pct_total": pct_wall,
+                "description": f"HTTP/gRPC acquisition for {prov} (Count: {p_stats['count']}, p95: {p_stats['p95']}ms, cumulative: {round(prov_total_ms/1000.0, 1)}s across {w_count} workers)",
             })
 
         # Add Rate Limit Waits if significant
@@ -719,6 +783,7 @@ class ScanExecutionProfiler:
             "trace_id": self.trace_id,
             "execution_id": self.execution_id,
             "scan_mode": self.scan_mode,
+            "scan_type": self.scan_type,
             "started_at": self.started_at_iso,
             "completed_at": self.completed_at_iso,
             "total_duration_wall_s": total_wall_clock_s,
@@ -796,6 +861,15 @@ class ScanExecutionProfiler:
             "workers": workers_list,
             "requests": requests_list,
         }
+
+        with self._lock:
+            self._is_finished = True
+
+        global _global_active_profiler
+        with _global_profiler_lock:
+            if _global_active_profiler is self:
+                _global_active_profiler = None
+
         return report
 
     def export_json(self) -> str:
@@ -803,24 +877,55 @@ class ScanExecutionProfiler:
         return json.dumps(self.finish_scan(), indent=2, ensure_ascii=False)
 
 
-# Global helper to create or retrieve active profiler
+# Global & thread/context-aware helper to create or retrieve active profiler
 _active_profiler_tls = threading.local()
+_active_profiler_cv: contextvars.ContextVar[Optional[ScanExecutionProfiler]] = contextvars.ContextVar(
+    "_active_profiler_cv", default=None
+)
 _global_active_profiler: Optional[ScanExecutionProfiler] = None
 _global_profiler_lock = threading.Lock()
 
 
 def get_current_scan_profiler() -> Optional[ScanExecutionProfiler]:
-    """Retrieves active ScanExecutionProfiler from thread-local context or global scan context."""
-    p = getattr(_active_profiler_tls, "profiler", None)
-    if p is not None:
-        return p
+    """Retrieves active ScanExecutionProfiler from contextvar, thread-local context or global scan context."""
+    p_cv = _active_profiler_cv.get()
+    if p_cv is not None and not getattr(p_cv, "_is_finished", False):
+        return p_cv
+    p_tls = getattr(_active_profiler_tls, "profiler", None)
+    if p_tls is not None and not getattr(p_tls, "_is_finished", False):
+        return p_tls
     with _global_profiler_lock:
-        return _global_active_profiler
+        if _global_active_profiler is not None and not getattr(_global_active_profiler, "_is_finished", False):
+            return _global_active_profiler
+    return None
 
 
-def set_current_scan_profiler(profiler: Optional[ScanExecutionProfiler]) -> None:
-    """Sets active ScanExecutionProfiler in thread-local and global scan context."""
+def set_current_scan_profiler(profiler: Optional[ScanExecutionProfiler], set_global: bool = True) -> None:
+    """Sets active ScanExecutionProfiler in contextvar, thread-local and global scan context."""
+    _active_profiler_cv.set(profiler)
     _active_profiler_tls.profiler = profiler
-    global _global_active_profiler
-    with _global_profiler_lock:
-        _global_active_profiler = profiler
+    if set_global:
+        global _global_active_profiler
+        with _global_profiler_lock:
+            _global_active_profiler = profiler
+
+
+@contextlib.contextmanager
+def active_scan_profiler(profiler: Optional[ScanExecutionProfiler], set_global: bool = False):
+    """Context manager to scope a profiler to the current context without global cross-talk."""
+    token = _active_profiler_cv.set(profiler)
+    prev_tls = getattr(_active_profiler_tls, "profiler", None)
+    _active_profiler_tls.profiler = profiler
+    if set_global:
+        global _global_active_profiler
+        with _global_profiler_lock:
+            _global_active_profiler = profiler
+    try:
+        yield profiler
+    finally:
+        _active_profiler_cv.reset(token)
+        _active_profiler_tls.profiler = prev_tls
+        if set_global:
+            with _global_profiler_lock:
+                if _global_active_profiler is profiler:
+                    _global_active_profiler = None

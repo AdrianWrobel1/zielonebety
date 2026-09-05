@@ -47,6 +47,7 @@ from normalization.market_identity import (
     CanonicalMarketType,
     MarketPeriod,
     MarketScope,
+    MarketCompletenessStatus,
 )
 from normalization.selection_identity import (
     CanonicalSelectionKey,
@@ -71,14 +72,6 @@ class SurebetStatus(str, Enum):
     INCOMPLETE_MARKET = "INCOMPLETE_MARKET"  # Missing one or more required canonical selections
     UNSUPPORTED_MARKET = "UNSUPPORTED_MARKET"# Market type or scope not supported for arbitrage
     INVALID_MARKET = "INVALID_MARKET"        # Malformed market parameters (e.g. missing line for totals)
-
-
-class MarketCompletenessStatus(str, Enum):
-    """Semantic completeness status of a betting market outcome set."""
-    COMPLETE = "COMPLETE"        # All required mutually exclusive outcomes are present with valid odds
-    INCOMPLETE = "INCOMPLETE"    # One or more required outcomes are missing or lack valid odds
-    UNSUPPORTED = "UNSUPPORTED"  # Market semantics do not establish a proven complete partition
-    INVALID = "INVALID"          # Missing necessary market dimensions (e.g. line, scope)
 
 
 # Explicit required canonical selection sets for supported canonical market types.

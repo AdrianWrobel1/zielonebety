@@ -406,6 +406,102 @@ class TestPropExecutionMatcherStage17(unittest.TestCase):
         self.assertEqual(eval_res.classification, "OPPORTUNITY")
         self.assertGreaterEqual(eval_res.score, 75.0)
 
+    def test_l_multi_bookmaker_events_same_fixture_not_ambiguous(self):
+        """L. Coexistence of Superbet and Betclic events for same fixture does not trigger false EVENT_AMBIGUOUS."""
+        from domain.models import Competition, Event
+        from normalization.base_normalizer import NormalizedGraph
+
+        # Two distinct graphs for the same fixture: one from Superbet, one from Betclic
+        sb_graph = NormalizedGraph(
+            competition=Competition(name="Premier League", sport="football"),
+            event=Event(
+                competition_id="pl-1",
+                home_participant="Arsenal",
+                away_participant="Chelsea",
+                provider_ids={"superbet": "sb-123"},
+            ),
+            markets=[],
+            selections=[],
+            odds_list=[],
+        )
+        bc_graph = NormalizedGraph(
+            competition=Competition(name="Premier League", sport="football"),
+            event=Event(
+                competition_id="pl-1",
+                home_participant="Arsenal",
+                away_participant="Chelsea",
+                provider_ids={"betclic": "bc-456"},
+            ),
+            markets=[],
+            selections=[],
+            odds_list=[],
+        )
+
+        matcher = PropExecutionMatcher(canonical_events=[sb_graph, bc_graph])
+        comp = matcher.match_execution_odds(
+            player_name="Bukayo Saka",
+            team="Arsenal",
+            opponent="Chelsea",
+            stat_type="SHOTS",
+            line=1.5,
+            side="OVER",
+            reference_odds=[{"bookmaker": "Bet365", "line": 1.5, "side": "OVER", "decimal_odds": 1.50}],
+        )
+
+        # Must be REFERENCE_ONLY with PLAYER_UNMATCHED/MARKET_UNMATCHED, NOT MATCH_UNCERTAIN!
+        self.assertEqual(comp.execution_status, "REFERENCE_ONLY")
+        self.assertNotEqual(comp.execution_status, "MATCH_UNCERTAIN")
+        self.assertNotEqual(comp.primary_reason_code, "EVENT_AMBIGUOUS")
+        self.assertEqual(comp.execution_odds["Superbet"].status, "UNAVAILABLE")
+        self.assertEqual(comp.execution_odds["Betclic"].status, "UNAVAILABLE")
+
+    def test_m_same_bookmaker_multiple_events_ambiguous_safe_rejection(self):
+        """M. Multiple conflicting events within the same bookmaker safely triggers EVENT_AMBIGUOUS / UNCERTAIN."""
+        from domain.models import Competition, Event
+        from normalization.base_normalizer import NormalizedGraph
+
+        # Two distinct graphs from Superbet for Arsenal vs Chelsea
+        sb_graph1 = NormalizedGraph(
+            competition=Competition(name="Premier League", sport="football"),
+            event=Event(
+                competition_id="pl-1",
+                home_participant="Arsenal",
+                away_participant="Chelsea",
+                provider_ids={"superbet": "sb-123"},
+            ),
+            markets=[],
+            selections=[],
+            odds_list=[],
+        )
+        sb_graph2 = NormalizedGraph(
+            competition=Competition(name="Premier League", sport="football"),
+            event=Event(
+                competition_id="pl-1",
+                home_participant="Arsenal",
+                away_participant="Chelsea",
+                provider_ids={"superbet": "sb-789"},
+            ),
+            markets=[],
+            selections=[],
+            odds_list=[],
+        )
+
+        matcher = PropExecutionMatcher(canonical_events=[sb_graph1, sb_graph2])
+        comp = matcher.match_execution_odds(
+            player_name="Bukayo Saka",
+            team="Arsenal",
+            opponent="Chelsea",
+            stat_type="SHOTS",
+            line=1.5,
+            side="OVER",
+            reference_odds=[{"bookmaker": "Bet365", "line": 1.5, "side": "OVER", "decimal_odds": 1.50}],
+        )
+
+        # Genuinely ambiguous within Superbet -> MATCH_UNCERTAIN
+        self.assertEqual(comp.execution_status, "MATCH_UNCERTAIN")
+        self.assertEqual(comp.primary_reason_code, "EVENT_AMBIGUOUS")
+        self.assertEqual(comp.execution_odds["Superbet"].status, "UNCERTAIN")
+
 
 if __name__ == "__main__":
     unittest.main()

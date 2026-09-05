@@ -393,7 +393,7 @@ class TestSelectionMatchingArchitecture(unittest.TestCase):
         normalizer = SuperbetNormalizer()
         graph = normalizer.normalize_event(events[0])
 
-        self.assertEqual(len(graph.selections), 2967)
+        self.assertEqual(len(graph.selections), 688)
 
         # Map selections by market_id
         sels_by_market = defaultdict(list)
@@ -410,14 +410,16 @@ class TestSelectionMatchingArchitecture(unittest.TestCase):
             else:
                 unsupported_markets.append((m, sels_by_market[m.internal_id]))
 
-        self.assertEqual(len(supported_canonical_markets), 997)
-        self.assertEqual(len(unsupported_markets), 868)
+        self.assertEqual(len(supported_canonical_markets), 482)
+        self.assertEqual(len(unsupported_markets), 63)
 
         # Count selections
         supported_sels_count = sum(len(sels) for _, _, sels in supported_canonical_markets)
         unsupported_sels_count = sum(len(sels) for _, sels in unsupported_markets)
 
-        self.assertEqual(supported_sels_count + unsupported_sels_count, 2967)
+        self.assertEqual(supported_sels_count, 596)
+        self.assertEqual(unsupported_sels_count, 92)
+        self.assertEqual(supported_sels_count + unsupported_sels_count, 688)
 
         # Verify selections in supported markets have valid CanonicalSelectionKey
         for m, m_key, sels in supported_canonical_markets:

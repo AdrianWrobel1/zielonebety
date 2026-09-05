@@ -1,4 +1,4 @@
-﻿"""
+"""
 API & Opportunity Explorer Tests for Team Props (Stage 30).
 """
 

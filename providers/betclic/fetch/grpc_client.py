@@ -11,9 +11,10 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Tuple, Union
 from providers.base.scraping.http.session_manager import SessionManager
 from providers.betclic.exceptions import BetclicFetchError, BetclicParsingError
+from providers.base.exceptions import http_status_error
 
 DEFAULT_GRPC_ENDPOINT = "https://offering.begmedia.com/web/offering.access.api/offering.access.api.MatchService/GetMatchWithNotification"
-DEFAULT_CATEGORIES = ("", "ca_ftb_top", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_cshcp", "ca_ftb_prp", "ca_ftb_gsc")
+DEFAULT_CATEGORIES = ("", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_prp", "ca_ftb_gsc")
 
 DEFAULT_GRPC_HEADERS = {
     "appversion": "10.2.0-3",
@@ -467,12 +468,20 @@ class BetclicGrpcClient:
         headers: Optional[Dict[str, str]] = None,
         timeout_seconds: float = 10.0,
     ):
+        import threading
+        self._stats_lock = threading.Lock()
         self.endpoint_url = endpoint_url
         self._session_manager = session_manager
         self.headers = dict(DEFAULT_GRPC_HEADERS)
         if headers:
             self.headers.update(headers)
         self.timeout_seconds = timeout_seconds
+        self.stats: Dict[str, Any] = {
+            "grpc_requests_attempted": 0,
+            "grpc_requests_successful": 0,
+            "grpc_requests_failed": 0,
+            "grpc_network_bytes": 0,
+        }
 
     def _send_request(self, payload_body: bytes) -> bytes:
         """Sends gRPC-Web request and reads frame stream without blocking on server push notifications."""
@@ -484,7 +493,14 @@ class BetclicGrpcClient:
                 timeout_seconds=self.timeout_seconds,
             )
             if not resp.is_success:
-                raise BetclicFetchError(f"Betclic gRPC request failed with status {resp.status_code}")
+                # P1-NEW-006: permanent statuses are non-retryable.
+                raise http_status_error(
+                    resp.status_code,
+                    f"Betclic gRPC request failed with status {resp.status_code}",
+                    lambda: BetclicFetchError(
+                        f"Betclic gRPC request failed with status {resp.status_code}"
+                    ),
+                )
             return resp.body if hasattr(resp, "body") and resp.body is not None else getattr(resp, "content", b"")
 
         # Use SessionManager requests.Session for Keep-Alive connection pooling if available
@@ -561,6 +577,9 @@ class BetclicGrpcClient:
         q_end_rel = profiler.elapsed_seconds if profiler else 0.0
         q_wait_ms = (t_q1 - t_q0) * 1000.0
 
+        with self._stats_lock:
+            self.stats["grpc_requests_attempted"] += 1
+
         if profiler and q_wait_ms > 0.5 and worker_id:
             profiler.record_worker_interval(
                 worker_id=worker_id,
@@ -577,11 +596,41 @@ class BetclicGrpcClient:
         )
 
         req_start_rel = profiler.elapsed_seconds if profiler else 0.0
-        raw_bytes = self._send_request(payload_body)
-        req_end_rel = profiler.elapsed_seconds if profiler else 0.0
+        raw_bytes = b""
+        req_success = False
+        try:
+            raw_bytes = self._send_request(payload_body)
+            req_success = bool(raw_bytes)
+        except Exception:
+            req_success = False
+            with self._stats_lock:
+                self.stats["grpc_requests_failed"] += 1
+            raise
+        finally:
+            req_end_rel = profiler.elapsed_seconds if profiler else 0.0
+            if profiler:
+                profiler.record_request(
+                    provider="betclic",
+                    endpoint_category=f"grpc_{category_id or 'main'}",
+                    worker_id=worker_id or "betclic-worker",
+                    start_rel_s=req_start_rel,
+                    end_rel_s=req_end_rel,
+                    http_status=200 if req_success else 500,
+                    rate_limit_wait_ms=q_wait_ms,
+                    queue_wait_ms=0.0,
+                    parse_ms=0.0,
+                    success=req_success,
+                    bytes_received=len(raw_bytes) if raw_bytes else 0,
+                )
 
         if not raw_bytes:
+            with self._stats_lock:
+                self.stats["grpc_requests_failed"] += 1
             return None
+
+        with self._stats_lock:
+            self.stats["grpc_requests_successful"] += 1
+            self.stats["grpc_network_bytes"] += len(raw_bytes)
 
         frames = parse_grpc_web_frames(raw_bytes)
         if not frames:

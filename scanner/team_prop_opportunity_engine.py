@@ -1,4 +1,4 @@
-﻿"""
+"""
 Team Prop Opportunity Ranking & Decision Engine (Stage 30 + Stage 29 Value Bet Engine)
 
 Provides explainable, deterministic scoring, classification, actionability, and reasoning

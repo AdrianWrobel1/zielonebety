@@ -25,11 +25,22 @@ class TestPlayerPropsAPI(unittest.TestCase):
         self.service = PlatformAPIService(db_manager=db_mgr)
         self.router = APIRouter(service=self.service)
 
-        # Clear cache before each test
+        # Clear cache before each test (both the cross-stat union and the
+        # per-stat partitions — partitions otherwise leak across tests now
+        # that the global cache is their union, not the last scan alone).
         PlatformAPIService._cached_props_results = []
+        PlatformAPIService._cached_props_by_stat = {}
         PlatformAPIService._last_props_scan_metadata = {}
+        PlatformAPIService._last_props_scan_metadata_by_stat = {}
+
+        self._patch_sb = patch("providers.superbet.provider.SuperbetProvider.discover", return_value=[])
+        self._patch_bc = patch("providers.betclic.provider.BetclicProvider.discover", return_value=[])
+        self._patch_sb.start()
+        self._patch_bc.start()
 
     def tearDown(self):
+        self._patch_sb.stop()
+        self._patch_bc.stop()
         ProviderRegistry.clear()
 
     def test_get_props_health(self):
@@ -299,8 +310,10 @@ class TestPlayerPropsAPI(unittest.TestCase):
         self.assertIsNone(not_found_res.data)
         self.assertTrue(len(not_found_res.errors) > 0)
 
+    @patch("providers.betclic.provider.BetclicProvider.discover", return_value=[])
+    @patch("providers.superbet.provider.SuperbetProvider.discover", return_value=[])
     @patch("providers.statshub.client.StatsHubClient.fetch_props")
-    def test_decision_engine_consistency_tai_abed_contract(self, mock_fetch):
+    def test_decision_engine_consistency_tai_abed_contract(self, mock_fetch, _mock_sb, _mock_bc):
         """Verify Tai Abed-like prop maintains exact single-source-of-truth Decision Engine consistency."""
         mock_fetch.return_value = {
             "players": [
@@ -360,8 +373,10 @@ class TestPlayerPropsAPI(unittest.TestCase):
         self.assertEqual(prop_summary["execution_status"], detail["execution_status"])
         self.assertIn("data_quality_flags", detail)
 
+    @patch("providers.betclic.provider.BetclicProvider.discover", return_value=[])
+    @patch("providers.superbet.provider.SuperbetProvider.discover", return_value=[])
     @patch("providers.statshub.client.StatsHubClient.fetch_props")
-    def test_stage18_decision_workspace_filtering_sorting_and_telemetry(self, mock_fetch):
+    def test_stage18_decision_workspace_filtering_sorting_and_telemetry(self, mock_fetch, _mock_sb, _mock_bc):
         """Test complete filtering across categories, bookmakers, and sorting dimensions."""
         mock_fetch.return_value = {
             "players": [

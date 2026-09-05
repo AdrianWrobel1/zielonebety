@@ -361,8 +361,9 @@ def test_market_matching_strict_line_equality():
 
 def test_multi_market_surebet_detection():
     # Setup matching pipeline
+    from core.tax_engine import TaxEngine, BookmakerTaxConfig
     pipeline = CrossBookmakerValidationPipeline()
-    detector = SurebetDetectorEngine()
+    detector = SurebetDetectorEngine(tax_engine=TaxEngine(custom_configs={"superbet": BookmakerTaxConfig(tax_enabled=False)}))
 
     # Source Graph (Superbet)
     sb_comp = Competition(name="Premier League", sport="Football")

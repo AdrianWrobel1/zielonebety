@@ -44,6 +44,7 @@ class DispatchStatus(str, Enum):
     """Overall dispatch outcome status for an opportunity."""
     DELIVERED = "DELIVERED"                  # Dispatched and successfully accepted by all active consumers
     REJECTED = "REJECTED"                    # Dispatcher rejected the opportunity at the boundary
+    SKIPPED = "SKIPPED"                      # All consumers intentionally skipped (no delivery attempted/succeeded)
     SKIPPED_DUPLICATE = "SKIPPED_DUPLICATE"  # Duplicate opportunity ID encountered within the same run
     PARTIAL_FAILURE = "PARTIAL_FAILURE"      # Delivered to some consumers, but failed on others
     FAILED = "FAILED"                        # Failed across all registered consumers
@@ -617,9 +618,9 @@ class OpportunityDispatcher:
             elif delivered_cnt > 0 and failed_cnt > 0:
                 overall_status = DispatchStatus.PARTIAL_FAILURE
             elif skipped_cnt == len(self._consumers):
-                overall_status = DispatchStatus.DELIVERED
+                overall_status = DispatchStatus.SKIPPED
             else:
-                overall_status = DispatchStatus.DELIVERED
+                overall_status = DispatchStatus.SKIPPED
 
             results.append(
                 DispatchResult(

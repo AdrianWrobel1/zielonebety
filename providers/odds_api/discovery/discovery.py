@@ -149,6 +149,12 @@ class OddsApiDiscovery:
                     f"Odds API.io 400 Bad Request during discovery: {resp.text()[:200]}",
                     details={"url": url, "status": 400},
                 )
+            if resp.status_code == 404:
+                from providers.base.exceptions import NonRetryableError
+                raise NonRetryableError(
+                    f"Odds API.io 404 Not Found during discovery: {resp.text()[:200]}",
+                    details={"url": url, "status": 404},
+                )
 
             if not resp.is_success:
                 raise OddsApiDiscoveryError(

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for Team Prop Execution Matcher (Stage 30).
 
 Verifies strict invariants:

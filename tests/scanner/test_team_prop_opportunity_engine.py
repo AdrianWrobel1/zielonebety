@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for Team Prop Opportunity Engine & Value Bet Engine (Stage 30).
 
 Verifies strict mathematical invariants:

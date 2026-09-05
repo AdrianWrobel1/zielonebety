@@ -2,13 +2,17 @@
 Superbet Payload Fetcher Module (Tier 1 Overview & Tier 2 Full Market Acquisition)
 """
 
-from typing import List, Dict, Any, Optional, Callable
+import threading
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from providers.base.scraping.http.session_manager import SessionManager
 from providers.base.recovery.retry_engine import RetryEngine
 from providers.base.rate_limiter import RateLimiter
-from providers.base.models import RetryConfig, RateLimitConfig
+from providers.base.models import RetryConfig, RateLimitConfig, ProviderAcquisitionAccounting
+from providers.base.models import build_detail_fetch_failure_payload
+from providers.base.models import build_overview_not_acquired_payload
 from providers.superbet.models import SuperbetDiscoveredItem
 from providers.superbet.exceptions import SuperbetFetchError
+from providers.base.exceptions import NonRetryableError, http_status_error
 from providers.superbet.config import SuperbetConfig, EventSelectionMode
 
 
@@ -23,6 +27,7 @@ class SuperbetFetcher:
         rate_limiter: Optional[RateLimiter] = None,
     ):
         self.config = config
+        self._stats_lock = threading.Lock()
         self._session_manager = session_manager or config.session_manager or SessionManager(headers=config.headers)
         self._retry_engine = retry_engine or RetryEngine(
             config=RetryConfig(max_retries=config.max_retries)
@@ -42,10 +47,14 @@ class SuperbetFetcher:
             )
         )
 
-        # Acquisition statistics
+        # Acquisition statistics (Acquisition 2.0 explicit accounting)
         self.stats = {
             "events_considered": 0,
             "events_selected_for_detail": 0,
+            "detail_events_planned": 0,
+            "detail_tasks_submitted": 0,
+            "detail_tasks_started": 0,
+            "detail_network_requests": 0,
             "detail_requests_attempted": 0,
             "detail_requests_successful": 0,
             "detail_requests_failed": 0,
@@ -56,6 +65,7 @@ class SuperbetFetcher:
             "detail_network_ms": 0.0,
             "detail_total_ms": 0.0,
             "max_concurrent_details": 1,
+            "failure_reasons": {},
         }
 
     @property
@@ -70,7 +80,9 @@ class SuperbetFetcher:
     ) -> List[Dict[str, Any]]:
         """Extracts overview or downloads full detail raw payloads according to selection policy."""
         raw_responses: List[Dict[str, Any]] = []
-        self.stats["events_considered"] = len(discovered_items)
+        with self._stats_lock:
+            self.stats["events_considered"] = len(discovered_items)
+            self.stats["detail_events_planned"] = len(self.config.selected_event_ids or [])
 
         # In SELECTED mode, if specific event IDs were not pre-configured, dynamically rank and select top popular events
         mode_str = self.config.selection_mode
@@ -88,6 +100,8 @@ class SuperbetFetcher:
                     max_detail_requests=max_reqs,
                     preferred_competitions=pref_comps,
                 )
+                with self._stats_lock:
+                    self.stats["detail_events_planned"] = len(self.config.selected_event_ids or [])
             except Exception:
                 pass
 
@@ -119,30 +133,37 @@ class SuperbetFetcher:
         # 1. Process overview items instantly
         for idx, item in overview_items_indices:
             if item.metadata and isinstance(item.metadata, dict) and "raw" in item.metadata:
-                self.stats["overview_payloads_used"] += 1
+                with self._stats_lock:
+                    self.stats["overview_payloads_used"] += 1
                 results_by_index[idx] = item.metadata["raw"]
             elif mode_str == EventSelectionMode.SELECTED.value:
-                self.stats["overview_payloads_used"] += 1
-                results_by_index[idx] = {
-                    "id": getattr(item, "event_id", getattr(item, "id", "")),
-                    "name": getattr(item, "match_name", getattr(item, "name", "")),
-                    "competition": getattr(item, "competition_name", ""),
-                    "start_date": getattr(item, "start_time", ""),
-                    "markets": []
-                }
+                with self._stats_lock:
+                    self.stats["overview_payloads_used"] += 1
+                # P1-NEW-010: Tier-1 overview items not selected for detail
+                # have unknown (not acquired) market state. Emit an explicit
+                # NOT_ACQUIRED placeholder, never a bare empty result.
+                results_by_index[idx] = build_overview_not_acquired_payload(
+                    provider="superbet",
+                    event_id=getattr(item, "event_id", getattr(item, "id", "")),
+                    name=getattr(item, "match_name", getattr(item, "name", "")),
+                    competition=getattr(item, "competition_name", ""),
+                    start_date=getattr(item, "start_time", ""),
+                )
             else:
                 results_by_index[idx] = self._fetch_single_event(item)
 
         # 2. Process detail items (concurrently if workers > 1 with adaptive throttling)
         if detail_items_indices:
-            self.stats["events_selected_for_detail"] += len(detail_items_indices)
+            with self._stats_lock:
+                self.stats["events_selected_for_detail"] += len(detail_items_indices)
+                self.stats["detail_tasks_submitted"] += len(detail_items_indices)
             configured_workers = max(1, workers)
             actual_workers = min(configured_workers, len(detail_items_indices))
-            self.stats["max_concurrent_details"] = max(self.stats.get("max_concurrent_details", 1), actual_workers)
+            with self._stats_lock:
+                self.stats["max_concurrent_details"] = max(self.stats.get("max_concurrent_details", 1), actual_workers)
 
             if actual_workers > 1:
                 import concurrent.futures
-                import threading
                 import logging
                 _log = logging.getLogger("provider.superbet.fetcher")
                 from orchestration.profiler import get_current_scan_profiler
@@ -155,7 +176,11 @@ class SuperbetFetcher:
                 def _worker_task_wrapper(event_id: str, worker_index: int):
                     worker_id = f"superbet-worker-{worker_index+1}"
                     if profiler:
+                        from orchestration.profiler import set_current_scan_profiler
+                        set_current_scan_profiler(profiler, set_global=False)
                         profiler.worker_enter()
+                    with self._stats_lock:
+                        self.stats["detail_tasks_started"] += 1
                     try:
                         return self._fetch_detail_event(event_id, worker_id=worker_id)
                     finally:
@@ -184,32 +209,45 @@ class SuperbetFetcher:
                                         f"Superbet detail fetcher adaptive worker step-down to {active_workers} due to {consecutive_failures} failures ({e})"
                                     )
 
+                            # P1-003: a failed detail request must NOT be fabricated into a
+                            # bare {"markets": []} response (indistinguishable from a
+                            # legitimate empty response). When genuine Tier-1 overview
+                            # data was captured at discovery it is reused as-is (graceful
+                            # Tier-1 degradation); otherwise emit an explicit FETCH_FAILED
+                            # placeholder (identity + failure reason) so downstream never
+                            # interprets unknown market state as zero markets.
                             if item.metadata and isinstance(item.metadata, dict) and "raw" in item.metadata:
                                 results_by_index[idx] = item.metadata["raw"]
                             else:
-                                results_by_index[idx] = {
-                                    "id": item.event_id,
-                                    "name": item.match_name,
-                                    "competition": item.competition_name,
-                                    "start_date": item.start_time,
-                                    "markets": []
-                                }
+                                results_by_index[idx] = build_detail_fetch_failure_payload(
+                                    provider="superbet",
+                                    event_id=item.event_id,
+                                    name=item.match_name,
+                                    competition=item.competition_name,
+                                    start_date=item.start_time,
+                                    exc=e,
+                                )
             else:
                 for idx, item in detail_items_indices:
+                    with self._stats_lock:
+                        self.stats["detail_tasks_started"] += 1
                     try:
                         payload = self._fetch_detail_event(item.event_id, worker_id="superbet-worker-1")
                         results_by_index[idx] = payload
                     except Exception as e:
+                        # P1-003: explicit FETCH_FAILED placeholder only when no genuine
+                        # Tier-1 overview data exists (see parallel path above).
                         if item.metadata and isinstance(item.metadata, dict) and "raw" in item.metadata:
                             results_by_index[idx] = item.metadata["raw"]
                         else:
-                            results_by_index[idx] = {
-                                "id": item.event_id,
-                                "name": item.match_name,
-                                "competition": item.competition_name,
-                                "start_date": item.start_time,
-                                "markets": []
-                            }
+                            results_by_index[idx] = build_detail_fetch_failure_payload(
+                                provider="superbet",
+                                event_id=item.event_id,
+                                name=item.match_name,
+                                competition=item.competition_name,
+                                start_date=item.start_time,
+                                exc=e,
+                            )
 
         # 3. Assemble final response in exact discovered order
         for idx in range(len(discovered_items)):
@@ -239,7 +277,8 @@ class SuperbetFetcher:
 
         profiler = get_current_scan_profiler()
         url = f"{self.config.detail_base_url}/events/{event_id}"
-        self.stats["detail_requests_attempted"] += 1
+        with self._stats_lock:
+            self.stats["detail_requests_attempted"] += 1
         t_event_start = _time.perf_counter()
         rel_start_s = profiler.elapsed_seconds if profiler else 0.0
 
@@ -253,9 +292,15 @@ class SuperbetFetcher:
         q_wait_ms = 0.0
         net_dur_ms = 0.0
         parse_dur_ms = 0.0
+        attempt_count = 0
 
         def _do_fetch():
-            nonlocal req_status, req_bytes, q_wait_ms, net_dur_ms, parse_dur_ms
+            nonlocal req_status, req_bytes, q_wait_ms, net_dur_ms, parse_dur_ms, attempt_count
+            attempt_count += 1
+            if attempt_count > 1:
+                with self._stats_lock:
+                    self.stats["detail_requests_retried"] += 1
+
             t_q0 = _time.perf_counter()
             q_start_rel = profiler.elapsed_seconds if profiler else 0.0
             # Acquire from dedicated detail rate limiter
@@ -264,7 +309,9 @@ class SuperbetFetcher:
             t_q1 = _time.perf_counter()
             q_end_rel = profiler.elapsed_seconds if profiler else 0.0
             q_wait_ms = (t_q1 - t_q0) * 1000.0
-            self.stats["detail_queue_wait_ms"] += q_wait_ms
+            with self._stats_lock:
+                self.stats["detail_queue_wait_ms"] += q_wait_ms
+                self.stats["detail_network_requests"] += 1
 
             if profiler and q_wait_ms > 0.5:
                 profiler.record_worker_interval(
@@ -284,13 +331,20 @@ class SuperbetFetcher:
             )
             t_net1 = _time.perf_counter()
             net_dur_ms = (t_net1 - t_net0) * 1000.0
-            self.stats["detail_network_ms"] += net_dur_ms
+            with self._stats_lock:
+                self.stats["detail_network_ms"] += net_dur_ms
             req_status = resp.status_code
             req_bytes = len(resp.body) if hasattr(resp, "body") and resp.body else 0
 
             if not resp.is_success:
-                raise SuperbetFetchError(
-                    f"Superbet Tier 2 detail fetch failed with status {resp.status_code} for URL {url}"
+                # P1-NEW-006: 400/401/403/404 are permanent for this request —
+                # raise non-retryable so nested retry layers do not multiply them.
+                raise http_status_error(
+                    resp.status_code,
+                    f"Superbet Tier 2 detail fetch failed with status {resp.status_code} for URL {url}",
+                    lambda: SuperbetFetchError(
+                        f"Superbet Tier 2 detail fetch failed with status {resp.status_code} for URL {url}"
+                    ),
                 )
 
             t_parse0 = _time.perf_counter()
@@ -315,10 +369,12 @@ class SuperbetFetcher:
                 fn=_do_fetch,
                 stage=f"superbet_fetch_detail_{event_id}",
             )
-            self.stats["detail_requests_successful"] += 1
+            with self._stats_lock:
+                self.stats["detail_requests_successful"] += 1
             t_event_end = _time.perf_counter()
             tot_dur_ms = (t_event_end - t_event_start) * 1000.0
-            self.stats["detail_total_ms"] += tot_dur_ms
+            with self._stats_lock:
+                self.stats["detail_total_ms"] += tot_dur_ms
             rel_end_s = profiler.elapsed_seconds if profiler else 0.0
 
             if profiler:
@@ -345,12 +401,15 @@ class SuperbetFetcher:
         except Exception as exc:
             req_success = False
             req_err_type = type(exc).__name__
-            self.stats["detail_requests_failed"] += 1
-            if "timeout" in str(exc).lower() or isinstance(exc, (TimeoutError,)):
-                self.stats["detail_requests_timeout"] += 1
+            with self._stats_lock:
+                self.stats["detail_requests_failed"] += 1
+                if "timeout" in str(exc).lower() or isinstance(exc, (TimeoutError,)):
+                    self.stats["detail_requests_timeout"] += 1
+                self.stats["failure_reasons"][req_err_type] = self.stats["failure_reasons"].get(req_err_type, 0) + 1
             t_event_end = _time.perf_counter()
             tot_dur_ms = (t_event_end - t_event_start) * 1000.0
-            self.stats["detail_total_ms"] += tot_dur_ms
+            with self._stats_lock:
+                self.stats["detail_total_ms"] += tot_dur_ms
             rel_end_s = profiler.elapsed_seconds if profiler else 0.0
 
             if profiler:
@@ -375,7 +434,7 @@ class SuperbetFetcher:
                     error_type=req_err_type,
                 )
 
-            if isinstance(exc, SuperbetFetchError):
+            if isinstance(exc, (SuperbetFetchError, NonRetryableError)):
                 raise
             raise SuperbetFetchError(f"Failed fetching detail for event '{event_id}' from {url}: {exc}") from exc
 
@@ -385,14 +444,21 @@ class SuperbetFetcher:
 
         def _do_fetch():
             self._rate_limiter.acquire(1)
+            with self._stats_lock:
+                self.stats["detail_network_requests"] += 1
             resp = self._session_manager.get(
                 url=url,
                 headers=self.config.headers,
                 timeout_seconds=self.config.request_timeout,
             )
             if not resp.is_success:
-                raise SuperbetFetchError(
-                    f"Superbet HTTP fetch failed with status {resp.status_code} for URL {url}"
+                # P1-NEW-006: permanent statuses are non-retryable (see above).
+                raise http_status_error(
+                    resp.status_code,
+                    f"Superbet HTTP fetch failed with status {resp.status_code} for URL {url}",
+                    lambda: SuperbetFetchError(
+                        f"Superbet HTTP fetch failed with status {resp.status_code} for URL {url}"
+                    ),
                 )
             return resp.json()
 
@@ -402,6 +468,40 @@ class SuperbetFetcher:
                 stage=f"superbet_fetch_event_{item.event_id}",
             )
         except Exception as exc:
-            if isinstance(exc, SuperbetFetchError):
+            if isinstance(exc, (SuperbetFetchError, NonRetryableError)):
                 raise
             raise SuperbetFetchError(f"Failed fetching event '{item.event_id}' from {url}: {exc}") from exc
+
+    def get_accounting(
+        self,
+        discovery_stats: Optional[Dict[str, Any]] = None,
+        discovery_cache_hits: int = 0,
+        parsed_events_count: int = 0,
+        markets_acquired: int = 0,
+        selections_acquired: int = 0,
+    ) -> ProviderAcquisitionAccounting:
+        """Constructs an authoritative Acquisition 2.0 accounting record for Superbet."""
+        disc = discovery_stats or {}
+        with self._stats_lock:
+            return ProviderAcquisitionAccounting(
+                provider_name="superbet",
+                discovery_planned=int(disc.get("discovery_planned", 1)),
+                discovery_executed=int(disc.get("discovery_executed", 0)),
+                discovery_network_requests=int(disc.get("discovery_network_requests", 0)),
+                discovery_cache_hits=discovery_cache_hits,
+                events_discovered=int(self.stats.get("events_considered", 0)),
+                detail_events_planned=int(self.stats.get("detail_events_planned", 0)),
+                detail_tasks_submitted=int(self.stats.get("detail_tasks_submitted", 0)),
+                detail_tasks_started=int(self.stats.get("detail_tasks_started", 0)),
+                detail_network_requests=int(self.stats.get("detail_network_requests", 0)),
+                overview_payloads_reused=int(self.stats.get("overview_payloads_used", 0)),
+                detail_tasks_successful=int(self.stats.get("detail_requests_successful", 0)),
+                detail_tasks_failed=int(self.stats.get("detail_requests_failed", 0)),
+                detail_retries=int(self.stats.get("detail_requests_retried", 0)),
+                detail_timeouts=int(self.stats.get("detail_requests_timeout", 0)),
+                events_parsed=parsed_events_count,
+                markets_parsed=markets_acquired,
+                selections_parsed=selections_acquired,
+                failure_reasons=dict(self.stats.get("failure_reasons", {})),
+            )
+

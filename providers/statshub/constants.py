@@ -6,6 +6,10 @@ STATSHUB_PROVIDER_NAME = "statshub"
 STATSHUB_PROVIDER_CODE = "SH"
 
 STATSHUB_BASE_URL = "https://www.statshub.com/api/props/hunter"
+STATSHUB_HUNTER_ENDPOINT = "https://www.statshub.com/api/props/hunter"
+STATSHUB_PLAYER_TRENDS_ENDPOINT = "https://www.statshub.com/api/props/player-trends"
+STATSHUB_TEAM_TRENDS_ENDPOINT = "https://www.statshub.com/api/props/team-trends"
+STATSHUB_FIXTURE_BASE_URL = "https://www.statshub.com/fixture"
 
 DEFAULT_STATSHUB_HEADERS = {
     "Accept": "application/json, text/plain, */*",
@@ -23,11 +27,13 @@ DEFAULT_STATSHUB_HEADERS = {
 KNOWN_STAT_TYPES = [
     "shots",
     "shotsOnTarget",
+    "shotsOnGoal",
     "goals",
     "assists",
     "passes",
     "tackles",
     "fouls",
+    "wasFouled",
     "cards",
     "corners",
     "offsides",
@@ -35,3 +41,4 @@ KNOWN_STAT_TYPES = [
 
 # Known position codes
 KNOWN_POSITIONS = ["G", "D", "M", "F"]
+

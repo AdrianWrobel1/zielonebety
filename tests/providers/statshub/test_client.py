@@ -132,6 +132,71 @@ class TestStatsHubClient(unittest.TestCase):
         res = client.fetch_props()
         self.assertEqual(res, {})
 
+    @patch("requests.Session.get")
+    def test_fetch_player_trends_success(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = '{"data": [{"playerId": 101, "statType": "shots", "line": 2.5, "trendHits": 8, "trendWindow": 10}]}'
+        mock_resp.json.return_value = {"data": [{"playerId": 101, "statType": "shots", "line": 2.5, "trendHits": 8, "trendWindow": 10}]}
+        mock_get.return_value = mock_resp
+
+        client = StatsHubClient(config=self.config)
+        res = client.fetch_player_trends(games="16416308", stat_type="shots")
+
+        self.assertIn("data", res)
+        self.assertEqual(res["data"][0]["trendHits"], 8)
+        mock_get.assert_called_once()
+        call_url = mock_get.call_args[0][0]
+        call_params = mock_get.call_args[1]["params"]
+        self.assertIn("/api/props/player-trends", call_url)
+        self.assertEqual(call_params.get("games"), "16416308")
+
+    def test_fetch_player_trends_validation(self):
+        client = StatsHubClient(config=StatsHubConfig(games="", player_id=None, unique_tournament_id=None))
+        with self.assertRaises(StatsHubClientError):
+            client.fetch_player_trends()
+
+    @patch("requests.Session.get")
+    def test_fetch_team_trends_success(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = '{"data": [{"teamId": 501, "statType": "corners", "line": 4.5, "trendHits": 7}]}'
+        mock_resp.json.return_value = {"data": [{"teamId": 501, "statType": "corners", "line": 4.5, "trendHits": 7}]}
+        mock_get.return_value = mock_resp
+
+        client = StatsHubClient(config=self.config)
+        res = client.fetch_team_trends(games=["16416308", "16416309"], stat_type="corners")
+
+        self.assertIn("data", res)
+        self.assertEqual(res["data"][0]["trendHits"], 7)
+        mock_get.assert_called_once()
+        call_url = mock_get.call_args[0][0]
+        call_params = mock_get.call_args[1]["params"]
+        self.assertIn("/api/props/team-trends", call_url)
+        self.assertEqual(call_params.get("games"), "16416308,16416309")
+
+    def test_fetch_team_trends_validation(self):
+        client = StatsHubClient(config=StatsHubConfig(games=""))
+        with self.assertRaises(StatsHubClientError):
+            client.fetch_team_trends()
+
+    def test_cache_keys_isolation(self):
+        cfg_hunter = StatsHubConfig(mode="hunter", stat="shots")
+        cfg_ptrends = StatsHubConfig(mode="player_trends", games="16416308", stat="shots")
+        cfg_ttrends = StatsHubConfig(mode="team_trends", games="16416308", stat="shots")
+
+        key1 = cfg_hunter.build_cache_key()
+        key2 = cfg_ptrends.build_cache_key()
+        key3 = cfg_ttrends.build_cache_key()
+
+        self.assertNotEqual(key1, key2)
+        self.assertNotEqual(key2, key3)
+        self.assertNotEqual(key1, key3)
+        self.assertTrue(key1.startswith("statshub:global:hunter:"))
+        self.assertTrue(key2.startswith("statshub:event:player_trends:"))
+        self.assertTrue(key3.startswith("statshub:event:team_trends:"))
+
 
 if __name__ == "__main__":
     unittest.main()
+

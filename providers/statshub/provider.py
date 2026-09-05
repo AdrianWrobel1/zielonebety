@@ -72,12 +72,26 @@ class StatsHubProvider(BaseProvider):
         self.context.logger.info("StatsHub discovery initiated.")
         return [{"stat": self.statshub_config.stat, "page": self.statshub_config.page}]
 
-    def fetch(self, discovery_items: List[Any]) -> List[Any]:
+    def fetch(self, discovery_items: Optional[List[Any]] = None) -> List[Any]:
         """Fetch raw JSON payloads from StatsHub props API, automatically paginating if configured."""
-        self.context.logger.info(f"StatsHub fetching player props (stat={self.statshub_config.stat}, auto_paginate={self.statshub_config.auto_paginate})")
+        self.context.logger.info(f"StatsHub fetching player props (mode={self.statshub_config.mode}, stat={self.statshub_config.stat}, auto_paginate={self.statshub_config.auto_paginate})")
         if self._raw_mock_payload is not None:
             self.context.logger.info("Using mock payload for StatsHub fetch.")
             return [self._raw_mock_payload] if isinstance(self._raw_mock_payload, dict) else self._raw_mock_payload
+
+        if self.statshub_config.mode == "player_trends":
+            try:
+                raw_data = self.client.fetch_player_trends(
+                    games=self.statshub_config.games,
+                    player_id=self.statshub_config.player_id,
+                    unique_tournament_id=self.statshub_config.unique_tournament_id,
+                    config_override=self.statshub_config,
+                )
+                return [raw_data] if isinstance(raw_data, dict) else raw_data
+            except Exception as e:
+                self.context.logger.error(f"StatsHub player trends fetch failed: {e}")
+                self.errors.append(str(e))
+                return []
 
         if not self.statshub_config.auto_paginate:
             try:
@@ -144,22 +158,23 @@ class StatsHubProvider(BaseProvider):
         raw_discovered_count = 0
 
         for item in raw_data:
-            results = self.parser.parse_payload(item)
+            results = self.parser.parse_payload(item, default_stat=self.statshub_config.stat_type or self.statshub_config.stat)
             raw_discovered_count += len(results)
             parsed_results.extend(results)
 
-        # Deduplicate deterministically by (player_name, fixture_id, stat_type)
+        # Deduplicate deterministically by (player_name, fixture_id, stat_type, odds_type, line)
         deduped_dict: Dict[str, StatsHubPropResult] = {}
         for r in parsed_results:
             ps = r.player_stat
-            dedup_key = f"{ps.player_name.strip().lower()}::{ps.fixture.fixture_id}::{ps.stat_type.lower()}"
+            dedup_key = f"{ps.player_name.strip().lower()}::{ps.fixture.fixture_id}::{ps.stat_type.lower()}::{ps.odds_type.lower()}::{ps.line}"
             if dedup_key not in deduped_dict:
                 deduped_dict[dedup_key] = r
             else:
-                # Merge bookmaker odds if existing has fewer odds
+                # Merge bookmaker odds if new has more odds
                 existing = deduped_dict[dedup_key]
                 if len(r.player_stat.bookmaker_odds) > len(existing.player_stat.bookmaker_odds):
                     deduped_dict[dedup_key] = r
+
 
         final_results = list(deduped_dict.values())
         duplicates_removed = raw_discovered_count - len(final_results)

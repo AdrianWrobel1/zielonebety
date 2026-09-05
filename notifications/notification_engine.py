@@ -1,7 +1,17 @@
 """
 Notification Engine Main Orchestrator
+
+.. deprecated::
+    Legacy notification stack. Not used by any production runtime path.
+    The authoritative production path is ``normalization.dispatcher`` /
+    ``normalization.lifecycle`` / ``notifications.telegram_consumer`` /
+    ``notifications.telegram_client.HttpTelegramClient`` (via
+    ``notifications.props_notification_manager``). This module is kept only
+    for backward compatibility with existing tests and must not be imported
+    by production code.
 """
 
+import logging
 from typing import List, Optional, Dict, Any
 from scanner.models import Opportunity
 from notifications.models import (
@@ -13,6 +23,8 @@ from notifications.models import (
 from notifications.rule_engine import RuleEngine
 from notifications.queue import NotificationQueue
 from notifications.telegram_provider import TelegramNotificationProvider
+
+logger = logging.getLogger("zielonebety.notifications.legacy")
 
 
 class NotificationEngine:
@@ -51,7 +63,12 @@ class NotificationEngine:
         return queued_count
 
     def flush_queue(self, mock_dispatch=None) -> List[NotificationMessage]:
-        """Flushes all queued messages in priority order."""
+        """Flushes all queued messages in priority order.
+
+        P1-005: delivery failures are never swallowed. A failed message keeps
+        FAILED status with an explicit reason, is recorded in history, and
+        the failure is logged with its cause.
+        """
         processed: List[NotificationMessage] = []
 
         while not self.queue.is_empty():
@@ -60,8 +77,16 @@ class NotificationEngine:
                 break
             try:
                 self.telegram_provider.send_message(msg, mock_dispatch=mock_dispatch)
-            except Exception:
-                pass
+            except Exception as e:
+                if msg.status != NotificationStatus.FAILED:
+                    msg.status = NotificationStatus.FAILED
+                if not getattr(msg, "failure_reason", None):
+                    msg.failure_reason = str(e)
+                logger.warning(
+                    "Legacy notification delivery failed for opportunity '%s': %s",
+                    getattr(msg, "opportunity_id", "?"),
+                    msg.failure_reason,
+                )
             self.delivery_history.append(msg)
             processed.append(msg)
 

@@ -22,9 +22,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 import json
+import logging
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
-
 
 from database.models import DeliveryRecordORM, OpportunityRecordORM
 from database.repositories.delivery_repository import DeliveryRepository
@@ -69,6 +69,9 @@ from normalization.surebet import (
     SurebetOpportunity,
     SurebetStatus,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class OpportunityStatus(str, Enum):
@@ -493,8 +496,9 @@ class OpportunityLifecycleManager:
         are processed. Scanner exceptions or un-scanned markets are never treated as absence.
         """
         now = evaluation_time or datetime.now(timezone.utc)
-        expired_records: List[OpportunityRecordORM] = []
 
+        # Build in-memory index of valid completed market scans in this cycle
+        scanned_markets: Dict[Tuple[str, str], Set[str]] = {}
         for eval_mkt in evaluations:
             # Guard: Only evaluate valid completed market scans (not unsupported/invalid)
             if eval_mkt.status not in (SurebetStatus.SUREBET, SurebetStatus.NO_SUREBET, SurebetStatus.INCOMPLETE_MARKET):
@@ -502,8 +506,11 @@ class OpportunityLifecycleManager:
 
             event_id = eval_mkt.canonical_event_id
             mkt_key_str = eval_mkt.canonical_market_key.to_key_string()
+            mkt_tuple = (event_id, mkt_key_str)
 
-            active_fps: Set[str] = set()
+            if mkt_tuple not in scanned_markets:
+                scanned_markets[mkt_tuple] = set()
+
             if eval_mkt.opportunity is not None and eval_mkt.status == SurebetStatus.SUREBET:
                 fp = generate_opportunity_fingerprint(
                     opportunity_type="SUREBET",
@@ -511,8 +518,19 @@ class OpportunityLifecycleManager:
                     canonical_market_key=eval_mkt.canonical_market_key,
                     legs=eval_mkt.opportunity.legs,
                 )
-                active_fps.add(fp)
+                scanned_markets[mkt_tuple].add(fp)
 
+        # Fast path: use repository batch method if available (avoids N+1 queries/flushes)
+        if hasattr(self.repository, "batch_process_market_misses"):
+            return self.repository.batch_process_market_misses(
+                scanned_markets=scanned_markets,
+                max_misses=max_misses,
+                miss_time=now,
+            )
+
+        # Fallback for custom or mock repositories
+        expired_records: List[OpportunityRecordORM] = []
+        for (event_id, mkt_key_str), active_fps in scanned_markets.items():
             exp = self.repository.increment_misses_for_market(
                 canonical_event_id=event_id,
                 market_key=mkt_key_str,
@@ -608,6 +626,30 @@ class OpportunityLifecycleManager:
                         )
                         self.delivery_repository.save_or_update(del_record)
 
+        # Explicit transaction boundary: commit records before external I/O (dispatch) so network calls do not hold DB locks
+        if self.repository is not None and hasattr(self.repository, "session") and self.repository.session is not None:
+            try:
+                self.repository.session.commit()
+            except Exception as c_err:
+                # P1-NEW-008: roll back the failed transaction so the session
+                # stays usable for dispatch feedback below. Log-and-continue
+                # durability semantics (P1-006) are preserved: dispatch still
+                # proceeds and reconciliation can recover PENDING intents.
+                try:
+                    self.repository.session.rollback()
+                except Exception:
+                    pass
+                logger.warning(f"Could not commit opportunity state before dispatch: {c_err}")
+        if self.delivery_repository is not None and hasattr(self.delivery_repository, "session") and self.delivery_repository.session is not None:
+            try:
+                self.delivery_repository.session.commit()
+            except Exception as c_err:
+                try:
+                    self.delivery_repository.session.rollback()
+                except Exception:
+                    pass
+                logger.warning(f"Could not commit delivery state before dispatch: {c_err}")
+
         # 5. Dispatch eligible (NEW and UPDATED) opportunities downstream
         dispatch_batch_result = dispatcher.dispatch_batch(eval_batch.to_dispatch)
 
@@ -697,7 +739,7 @@ class OpportunityLifecycleManager:
                     alert_time=now,
                 )
                 failed_cnt += 1
-            else:  # SKIPPED_DUPLICATE, NO_CONSUMERS, REJECTED
+            else:  # SKIPPED, SKIPPED_DUPLICATE, NO_CONSUMERS, REJECTED -> never ALERTED
                 self.repository.record_delivery_result(
                     fingerprint=fp,
                     success=False,
@@ -705,6 +747,26 @@ class OpportunityLifecycleManager:
                     alert_time=now,
                 )
                 skipped_cnt += 1
+
+        # Explicit transaction boundary: commit delivery feedback updates and expired records
+        if self.repository is not None and hasattr(self.repository, "session") and self.repository.session is not None:
+            try:
+                self.repository.session.commit()
+            except Exception as c_err:
+                try:
+                    self.repository.session.rollback()
+                except Exception:
+                    pass
+                logger.warning(f"Could not commit opportunity state after dispatch feedback: {c_err}")
+        if self.delivery_repository is not None and hasattr(self.delivery_repository, "session") and self.delivery_repository.session is not None:
+            try:
+                self.delivery_repository.session.commit()
+            except Exception as c_err:
+                try:
+                    self.delivery_repository.session.rollback()
+                except Exception:
+                    pass
+                logger.warning(f"Could not commit delivery state after dispatch feedback: {c_err}")
 
         return LifecycleDispatchSummary(
             evaluation_batch=eval_batch,

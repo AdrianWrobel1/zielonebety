@@ -18,7 +18,8 @@ from database.connection import DatabaseManager
 from database.models import OpportunityRecordORM
 from database.repositories.event_repository import EventRepository
 from database.repositories.opportunity_repository import OpportunityRepository
-from scanner.scanner_engine import ScannerEngine
+# P2 quarantine: legacy ScannerEngine must not be wired into production.
+# (Injectable explicitly for tests/scripts via the constructor parameter.)
 from scanner.models import Opportunity
 from normalization.surebet import SurebetOpportunity, SurebetLeg
 from normalization.quality_policy import (
@@ -26,6 +27,10 @@ from normalization.quality_policy import (
     OpportunityQualityConfig,
     OpportunityQualityEvaluation,
     OpportunityRankingEngine,
+)
+from normalization.market_identity import (
+    SUPPORTED_MARKET_REQUIRED_SELECTIONS,
+    normalize_player_name,
 )
 from orchestration.scan_orchestrator import ProductionScanOrchestrator
 from orchestration.models import ScanConfig, ScanCycleResult, CycleStatus
@@ -1086,7 +1091,7 @@ def _serialize_events_from_scan_result(result: ScanCycleResult) -> Tuple[List[Di
                             obj_eid = getattr(p_obj, "event_id", None) or getattr(p_obj, "provider_event_id", None)
                             obj_home = getattr(p_obj, "home_team", None)
                             obj_away = getattr(p_obj, "away_team", None)
-                            if (prov_ev_id and str(obj_eid) == str(prov_ev_id)) or (obj_home == home_team and obj_away == away_team):
+                            if (prov_ev_id and str(obj_eid) == str(prov_ev_id)) or (obj_home == home_team and obj_away == away_team) or (src and getattr(p_obj, "internal_event_id", None) == src.internal_event_id):
                                 raw_mkt_cnt = len(getattr(p_obj, "markets", []))
                                 break
 
@@ -1098,7 +1103,11 @@ def _serialize_events_from_scan_result(result: ScanCycleResult) -> Tuple[List[Di
                             g_bm = getattr(g.event, "metadata", {}).get("odds_api", {}).get("bookmaker") or p_name
                             if p_name in ("bet365", "unibet") and g_bm != p_name:
                                 continue
-                            if (g.event.home_participant == home_team and g.event.away_participant == away_team) or (src and g.event.internal_id == src.internal_event_id):
+                            if (
+                                (prov_ev_id and g.event.provider_ids.get(p_name) == str(prov_ev_id))
+                                or (src and g.event.internal_id == src.internal_event_id)
+                                or (g.event.home_participant == home_team and g.event.away_participant == away_team)
+                            ):
                                 norm_mkt_cnt = len(g.markets)
                                 break
 
@@ -1170,13 +1179,34 @@ def _serialize_events_from_scan_result(result: ScanCycleResult) -> Tuple[List[Di
 
                 mkt_books = sorted(list(set(b for s in selections for b in s.get("odds", {}).keys()))) or participating_bookmakers
 
+                mkt_comp_status = getattr(m_lineage, "completeness_status", None)
+                if mkt_comp_status is not None:
+                    comp_status_str = mkt_comp_status.value if hasattr(mkt_comp_status, "value") else str(mkt_comp_status)
+                else:
+                    comp_status_str = "COMPLETE" if len(selections) > 0 else "INCOMPLETE"
+
+                # Backend Truth: only emit markets with at least one comparable selection in comparison view
+                if len(selections) == 0:
+                    continue
+
+                if comp_status_str == "PARTIAL":
+                    status_label = "PARTIAL"
+                else:
+                    status_label = "MATCHED"
+
+                excl_reasons = getattr(m_lineage, "exclusion_reasons", ())
+                is_eval_eligible = getattr(m_lineage, "is_evaluation_eligible", len(selections) > 0)
+
                 markets.append({
                     "canonical_market_key": key_str,
                     "market_type": m_type,
                     "period": m_period,
                     "scope": m_scope,
                     "line": line_val,
-                    "status": "MATCHED",
+                    "status": status_label,
+                    "completeness_status": comp_status_str,
+                    "is_evaluation_eligible": is_eval_eligible,
+                    "exclusion_reasons": list(excl_reasons),
                     "participating_bookmakers": mkt_books,
                     "selections": selections,
                 })
@@ -1321,7 +1351,16 @@ def _serialize_events_from_scan_result(result: ScanCycleResult) -> Tuple[List[Di
                 for mkt in graph.markets:
                     mkt_type = mkt.market_type
                     line_val = float(mkt.line) if mkt.line is not None else None
-                    key_str = f"{mkt_type}:FULL_TIME:MATCH:{line_val or 'no_line'}"
+                    mkt_meta = mkt.metadata if hasattr(mkt, "metadata") and isinstance(mkt.metadata, dict) else {}
+                    mkt_scope = mkt_meta.get("scope", "MATCH")
+                    mkt_period = mkt_meta.get("period", "FULL_TIME")
+                    p_name = mkt_meta.get("player_name")
+                    p_norm = p_name.strip().lower().replace(" ", "_") if p_name else None
+                    metric = mkt_meta.get("metric", "GOALS")
+                    if p_norm and mkt_scope == "PLAYER":
+                        key_str = f"football:{mkt_type}:{metric}:PLAYER:none:{p_norm}:{mkt_period}:{line_val or 'none'}"
+                    else:
+                        key_str = f"football:{mkt_type}:{metric}:{mkt_scope}:all:{mkt_period}:{line_val or 'none'}"
 
                     mkt_sels = []
                     for sel in graph.selections:
@@ -1351,13 +1390,28 @@ def _serialize_events_from_scan_result(result: ScanCycleResult) -> Tuple[List[Di
                                 "source_selection_id": sel.internal_id,
                             })
 
+                    if len(mkt_sels) == 0:
+                        continue
+
+                    mkt_req_types = SUPPORTED_MARKET_REQUIRED_SELECTIONS.get(mkt_type.upper(), ())
+                    mkt_matched_types = tuple(sorted(set(s["selection_type"].upper() for s in mkt_sels)))
+                    if not mkt_req_types:
+                        mkt_comp_status = "UNSUPPORTED"
+                    elif all(t in mkt_matched_types for t in mkt_req_types):
+                        mkt_comp_status = "COMPLETE"
+                    else:
+                        mkt_comp_status = "PARTIAL"
+
                     unmatched_markets.append({
                         "canonical_market_key": key_str,
                         "market_type": mkt_type,
-                        "period": "FULL_TIME",
-                        "scope": "MATCH",
+                        "period": mkt_period,
+                        "scope": mkt_scope,
                         "line": line_val,
                         "status": "UNMATCHED",
+                        "completeness_status": mkt_comp_status,
+                        "is_evaluation_eligible": False,
+                        "exclusion_reasons": ["SINGLE_PROVIDER_UNMATCHED_EVENT"],
                         "participating_bookmakers": [actual_bm],
                         "selections": mkt_sels,
                     })
@@ -1461,6 +1515,461 @@ def _serialize_events_from_scan_result(result: ScanCycleResult) -> Tuple[List[Di
                     "max_surebet_margin": None,
                     "max_valuebet_ev": max([v.get("value_percent", 0) for v in ev_val], default=None),
                 })
+
+    return summaries, details_map
+
+
+def _serialize_events_from_ultra_result(
+    result: Any,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    """Extracts standardized summaries and deep detail structures for all canonical and normalized events from an ULTRA SCAN."""
+    summaries: List[Dict[str, Any]] = []
+    details_map: Dict[str, Dict[str, Any]] = {}
+    seen_event_ids: Set[str] = set()
+
+    # Pre-index opportunities by canonical event ID
+    surebets_by_event: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    valuebets_by_event: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+    all_opps = []
+    if hasattr(result, "top_opportunities") and result.top_opportunities:
+        all_opps.extend(result.top_opportunities)
+    if hasattr(result, "surebets") and result.surebets:
+        all_opps.extend(result.surebets)
+    if hasattr(result, "valuebets") and result.valuebets:
+        all_opps.extend(result.valuebets)
+    if hasattr(result, "player_props") and result.player_props:
+        all_opps.extend(result.player_props)
+    if hasattr(result, "team_props") and result.team_props:
+        all_opps.extend(result.team_props)
+
+    seen_opp_ids: Set[str] = set()
+    for opp in all_opps:
+        opp_id = getattr(opp, "opportunity_id", None) or (opp.get("opportunity_id") if isinstance(opp, dict) else None)
+        if not opp_id or opp_id in seen_opp_ids:
+            continue
+        seen_opp_ids.add(opp_id)
+
+        details = getattr(opp, "details", {}) or (opp.get("details", {}) if isinstance(opp, dict) else {})
+        cat = getattr(opp, "category", "") or (opp.get("category", "") if isinstance(opp, dict) else "")
+        ce_id = details.get("canonical_event_id") or details.get("event_id")
+        edge = getattr(opp, "edge_pct", 0.0) if hasattr(opp, "edge_pct") else opp.get("edge_pct", 0.0)
+        mkt_disp = getattr(opp, "market_display", "") if hasattr(opp, "market_display") else opp.get("market_display", "")
+        sel_disp = getattr(opp, "selection_display", "") if hasattr(opp, "selection_display") else opp.get("selection_display", "")
+        bm = getattr(opp, "bookmaker", "") if hasattr(opp, "bookmaker") else opp.get("bookmaker", "")
+        r_score = getattr(opp, "ultra_rank_score", 0.0) if hasattr(opp, "ultra_rank_score") else opp.get("ultra_rank_score", 0.0)
+
+        serialized_opp = {
+            "id": opp_id,
+            "opportunity_id": opp_id,
+            "opportunity_type": cat,
+            "market_type": mkt_disp,
+            "selection": sel_disp,
+            "margin_pct": edge,
+            "value_percent": edge,
+            "arbitrage_margin_pct": edge if cat == "SUREBET" else None,
+            "bookmaker": bm,
+            "bookmakers": [bm],
+            "odds": getattr(opp, "raw_odds", None) if hasattr(opp, "raw_odds") else opp.get("raw_odds"),
+            "effective_odds": getattr(opp, "effective_odds", None) if hasattr(opp, "effective_odds") else opp.get("effective_odds"),
+            "quality_score": r_score,
+            "status": "ACTIVE",
+            "details": details,
+        }
+        if ce_id:
+            if cat == "SUREBET":
+                surebets_by_event[str(ce_id)].append(serialized_opp)
+            elif cat == "VALUEBET":
+                valuebets_by_event[str(ce_id)].append(serialized_opp)
+
+    val_result = getattr(result, "validation_result", None)
+    all_graphs: List[Any] = getattr(result, "all_graphs", None) or []
+    graphs_by_event_id: Dict[str, Any] = {}
+    graphs_by_team_pair: Dict[Tuple[str, str], Any] = {}
+    for g in all_graphs:
+        if getattr(g, "event", None):
+            graphs_by_event_id[str(g.event.internal_id)] = g
+            for prov_name, prov_eid in getattr(g.event, "provider_ids", {}).items():
+                graphs_by_event_id[f"{prov_name}:{prov_eid}"] = g
+            h = getattr(g.event, "home_participant", "") or ""
+            a = getattr(g.event, "away_participant", "") or ""
+            if h and a:
+                graphs_by_team_pair[(h.lower(), a.lower())] = g
+
+    # 1. Matched Canonical Events from CrossBookmakerValidationResult
+    if val_result and getattr(val_result, "event_validation_records", None):
+        for record in val_result.event_validation_records:
+            ce = record.canonical_event
+            ev_id = ce.canonical_event_id
+            if ev_id in seen_event_ids:
+                continue
+            seen_event_ids.add(ev_id)
+
+            home_team = ce.home_team
+            away_team = ce.away_team
+            comp_name = ce.competition.name if ce.competition else "Football Competition"
+            sport = ce.sport or "football"
+            kickoff = ce.scheduled_start
+            status = ce.status or "SCHEDULED"
+
+            participating_bookmakers = sorted(list(ce.sources.keys())) if ce.sources else ["superbet", "betclic"]
+
+            # Confidence score
+            match_confidence = 1.0
+            if ce.match_evidence:
+                match_confidence = float(ce.match_evidence[0].total_score)
+            elif getattr(val_result, "event_decisions", None):
+                for dec in val_result.event_decisions:
+                    if hasattr(dec, "total_score"):
+                        match_confidence = float(dec.total_score)
+                        break
+
+            # Providers
+            providers = []
+            for p_name in participating_bookmakers:
+                src = ce.sources.get(p_name)
+                prov_ev_id = src.provider_event_id if src else None
+                mkt_cnt = 0
+                g_match = None
+                if prov_ev_id and f"{p_name}:{prov_ev_id}" in graphs_by_event_id:
+                    g_match = graphs_by_event_id[f"{p_name}:{prov_ev_id}"]
+                elif src and str(src.internal_event_id) in graphs_by_event_id:
+                    g_match = graphs_by_event_id[str(src.internal_event_id)]
+                elif (home_team.lower(), away_team.lower()) in graphs_by_team_pair:
+                    g_match = graphs_by_team_pair[(home_team.lower(), away_team.lower())]
+
+                if g_match and getattr(g_match, "markets", None):
+                    mkt_cnt = len(g_match.markets)
+                if mkt_cnt == 0:
+                    mkt_cnt = len(record.matched_markets)
+
+                providers.append({
+                    "provider": p_name,
+                    "status": "Available",
+                    "market_count": mkt_cnt,
+                    "raw_market_count": mkt_cnt,
+                    "normalized_market_count": mkt_cnt,
+                    "matched_market_count": len(record.matched_markets),
+                    "provider_event_id": prov_ev_id,
+                })
+
+            # Markets and Selection Comparison Matrix
+            markets = []
+            for m_lineage in record.matched_markets:
+                m_key = m_lineage.canonical_market_key
+                m_type = m_key.market_type
+                m_period = m_key.period
+                m_scope = m_key.scope
+                line_val = float(m_key.line) if m_key.line is not None else None
+                key_str = m_key.to_key_string() if hasattr(m_key, "to_key_string") else str(m_key)
+
+                selections = []
+                for pair in m_lineage.comparable_selections:
+                    sel_key = pair.canonical_selection_key
+                    sel_type = getattr(sel_key, "selection_type", str(sel_key))
+                    sel_line = None
+                    raw_l = getattr(sel_key, "selection_line", getattr(sel_key, "line", None))
+                    if raw_l is not None:
+                        try:
+                            sel_line = float(raw_l)
+                        except (ValueError, TypeError):
+                            sel_line = None
+                    elif line_val is not None:
+                        sel_line = line_val
+
+                    odds_dict: Dict[str, float] = {}
+                    if pair.source_odds and pair.source_provider:
+                        odds_dict[pair.source_provider] = float(pair.source_odds.decimal_odds)
+                    if pair.target_odds and pair.target_provider:
+                        odds_dict[pair.target_provider] = float(pair.target_odds.decimal_odds)
+
+                    best_odds_dict = None
+                    if odds_dict:
+                        best_p = max(odds_dict.keys(), key=lambda p: odds_dict[p])
+                        best_val = odds_dict[best_p]
+                        best_imp = round(1.0 / best_val, 4) if best_val > 0 else 0.0
+                        best_odds_dict = {
+                            "bookmaker": best_p,
+                            "odds": best_val,
+                            "implied_probability": best_imp,
+                        }
+
+                    selections.append({
+                        "selection_type": sel_type,
+                        "line": sel_line,
+                        "participant": getattr(pair.source_selection, "participant", None) or getattr(pair.target_selection, "participant", None),
+                        "odds": odds_dict,
+                        "best_odds": best_odds_dict,
+                        "source_selection_id": pair.source_selection_id,
+                        "target_selection_id": pair.target_selection_id,
+                    })
+
+                if len(selections) == 0:
+                    continue
+
+                mkt_books = sorted(list(set(b for s in selections for b in s.get("odds", {}).keys()))) or participating_bookmakers
+                mkt_comp_status = getattr(m_lineage, "completeness_status", None)
+                if mkt_comp_status is not None:
+                    comp_status_str = mkt_comp_status.value if hasattr(mkt_comp_status, "value") else str(mkt_comp_status)
+                else:
+                    comp_status_str = "COMPLETE" if len(selections) > 0 else "INCOMPLETE"
+
+                status_label = "PARTIAL" if comp_status_str == "PARTIAL" else "MATCHED"
+                excl_reasons = getattr(m_lineage, "exclusion_reasons", ())
+                is_eval_eligible = getattr(m_lineage, "is_evaluation_eligible", len(selections) > 0)
+
+                markets.append({
+                    "canonical_market_key": key_str,
+                    "market_type": m_type,
+                    "period": m_period,
+                    "scope": m_scope,
+                    "line": line_val,
+                    "status": status_label,
+                    "completeness_status": comp_status_str,
+                    "is_evaluation_eligible": is_eval_eligible,
+                    "exclusion_reasons": list(excl_reasons),
+                    "participating_bookmakers": mkt_books,
+                    "selections": selections,
+                })
+
+            ev_surebets = surebets_by_event.get(ev_id, [])
+            ev_valuebets = valuebets_by_event.get(ev_id, [])
+            total_norm_mkts = sum(p["market_count"] for p in providers) if providers else len(markets)
+            is_actionable_match = (
+                ("superbet" in ce.sources and "betclic" in ce.sources)
+                or (not any(b in ce.sources for b in ("superbet", "betclic", "bet365", "unibet")) and len(ce.sources) >= 2)
+            )
+            matching_status_val = "MATCHED" if is_actionable_match else "UNMATCHED"
+
+            comp_obj = ce.competition
+            comp_id_val = getattr(comp_obj, "competition_id", None) if comp_obj else None
+            comp_country_val = getattr(comp_obj, "country", None) if comp_obj else None
+            comp_type_val = getattr(comp_obj, "competition_type", None) if comp_obj else None
+            comp_tier_val = getattr(comp_obj, "tier", 2) if comp_obj else 2
+            comp_prov_val = getattr(comp_obj, "provenance", "PROVIDER_METADATA") if comp_obj else "FALLBACK"
+            comp_conf_val = getattr(comp_obj, "confidence", 1.0) if comp_obj else 1.0
+
+            detail_dict = {
+                "id": ev_id,
+                "event_id": ev_id,
+                "canonical_event_id": ev_id,
+                "home": home_team,
+                "away": away_team,
+                "home_team": home_team,
+                "away_team": away_team,
+                "competition": comp_name,
+                "competition_name": comp_name,
+                "competition_id": comp_id_val,
+                "competition_country": comp_country_val,
+                "competition_type": comp_type_val,
+                "competition_tier": comp_tier_val,
+                "competition_source": comp_prov_val,
+                "competition_confidence": comp_conf_val,
+                "sport": sport,
+                "kickoff": kickoff,
+                "status": status,
+                "matching_status": matching_status_val,
+                "is_actionable_match": is_actionable_match,
+                "is_reference_match": not is_actionable_match,
+                "matching_confidence": match_confidence,
+                "participating_bookmakers": participating_bookmakers,
+                "providers": providers,
+                "markets": markets,
+                "opportunities": {
+                    "surebets": ev_surebets,
+                    "valuebets": ev_valuebets,
+                    "nearest_opportunity": None,
+                },
+                "surebets_count": len(ev_surebets),
+                "valuebets_count": len(ev_valuebets),
+                "has_surebet": len(ev_surebets) > 0,
+                "has_valuebet": len(ev_valuebets) > 0,
+            }
+            details_map[ev_id] = detail_dict
+            for p_info in providers:
+                if p_info.get("provider_event_id"):
+                    details_map[str(p_info["provider_event_id"])] = detail_dict
+
+            max_surebet = max([s.get("margin_pct") or s.get("arbitrage_margin_pct", 0) for s in ev_surebets], default=None)
+            max_val = max([v.get("value_percent") or v.get("margin_pct", 0) for v in ev_valuebets], default=None)
+
+            summary_dict = {
+                "id": ev_id,
+                "event_id": ev_id,
+                "canonical_event_id": ev_id,
+                "home_team": home_team,
+                "away_team": away_team,
+                "competition": comp_name,
+                "competition_name": comp_name,
+                "competition_id": comp_id_val,
+                "competition_country": comp_country_val,
+                "competition_type": comp_type_val,
+                "competition_tier": comp_tier_val,
+                "competition_source": comp_prov_val,
+                "competition_confidence": comp_conf_val,
+                "sport": sport,
+                "kickoff": kickoff,
+                "status": status,
+                "matching_status": matching_status_val,
+                "is_actionable_match": is_actionable_match,
+                "is_reference_match": not is_actionable_match,
+                "match_confidence": match_confidence,
+                "participating_bookmakers": participating_bookmakers,
+                "normalized_markets_count": total_norm_mkts,
+                "matched_markets_count": len(markets),
+                "has_surebet": len(ev_surebets) > 0,
+                "has_valuebet": len(ev_valuebets) > 0,
+                "opportunities_count": len(ev_surebets) + len(ev_valuebets),
+                "max_surebet_margin": max_surebet,
+                "max_valuebet_ev": max_val,
+            }
+            summaries.append(summary_dict)
+
+    # 2. Unmatched Events (Single Provider Coverage)
+    for graph in all_graphs:
+        ev = getattr(graph, "event", None)
+        if not ev:
+            continue
+        ev_id = ev.internal_id
+        if ev_id in seen_event_ids:
+            continue
+
+        already_matched = False
+        if val_result and getattr(val_result, "canonical_events", None):
+            for ce in val_result.canonical_events:
+                for src in ce.sources.values():
+                    if src.internal_event_id == ev_id or (src.home_participant == ev.home_participant and src.away_participant == ev.away_participant):
+                        already_matched = True
+                        break
+                if already_matched:
+                    break
+        if already_matched:
+            continue
+
+        seen_event_ids.add(ev_id)
+        comp_name = graph.competition.name if graph.competition else "Football Competition"
+        home_team = ev.home_participant
+        away_team = ev.away_participant
+        kickoff = ev.scheduled_start
+        sport = graph.competition.sport if graph.competition else "Football"
+
+        actual_bm = next(iter(ev.provider_ids.keys())) if hasattr(ev, "provider_ids") and ev.provider_ids else "superbet"
+        prov_id = ev.provider_ids.get(actual_bm) if hasattr(ev, "provider_ids") else None
+
+        unmatched_markets = []
+        for mkt in graph.markets:
+            mkt_type = mkt.market_type
+            line_val = float(mkt.line) if mkt.line is not None else None
+            mkt_meta = mkt.metadata if hasattr(mkt, "metadata") and isinstance(mkt.metadata, dict) else {}
+            mkt_scope = mkt_meta.get("scope", "MATCH")
+            mkt_period = mkt_meta.get("period", "FULL_TIME")
+            key_str = f"football:{mkt_type}:GOALS:{mkt_scope}:all:{mkt_period}:{line_val or 'none'}"
+
+            mkt_sels = []
+            for sel in graph.selections:
+                if sel.market_id == mkt.internal_id:
+                    sel_odds = {}
+                    for od in getattr(graph, "odds_list", []):
+                        if od.selection_id == sel.internal_id:
+                            od_bm = getattr(od, "bookmaker", None) or actual_bm
+                            sel_odds[od_bm] = float(od.decimal_odds)
+
+                    best_d = None
+                    if sel_odds:
+                        best_bm = list(sel_odds.keys())[0]
+                        best_val = sel_odds[best_bm]
+                        best_d = {
+                            "bookmaker": best_bm,
+                            "odds": best_val,
+                            "implied_probability": round(1.0 / best_val, 4) if best_val > 0 else 0.0,
+                        }
+
+                    mkt_sels.append({
+                        "selection_type": sel.selection_type,
+                        "line": float(sel.line) if sel.line is not None else line_val,
+                        "participant": sel.participant,
+                        "odds": sel_odds,
+                        "best_odds": best_d,
+                        "source_selection_id": sel.internal_id,
+                    })
+
+            if len(mkt_sels) == 0:
+                continue
+
+            unmatched_markets.append({
+                "canonical_market_key": key_str,
+                "market_type": mkt_type,
+                "period": mkt_period,
+                "scope": mkt_scope,
+                "line": line_val,
+                "status": "UNMATCHED",
+                "completeness_status": "COMPLETE" if len(mkt_sels) >= 2 else "PARTIAL",
+                "is_evaluation_eligible": False,
+                "exclusion_reasons": ["SINGLE_PROVIDER_UNMATCHED_EVENT"],
+                "participating_bookmakers": [actual_bm],
+                "selections": mkt_sels,
+            })
+
+        detail_dict = {
+            "id": ev_id,
+            "event_id": ev_id,
+            "canonical_event_id": ev_id,
+            "home": home_team,
+            "away": away_team,
+            "home_team": home_team,
+            "away_team": away_team,
+            "competition": comp_name,
+            "competition_name": comp_name,
+            "sport": sport,
+            "kickoff": kickoff,
+            "status": ev.status or "SCHEDULED",
+            "matching_status": "UNMATCHED",
+            "matching_confidence": None,
+            "participating_bookmakers": [actual_bm],
+            "providers": [{
+                "provider": actual_bm,
+                "status": "Available",
+                "market_count": len(graph.markets),
+                "raw_market_count": len(graph.markets),
+                "normalized_market_count": len(graph.markets),
+                "matched_market_count": 0,
+                "provider_event_id": prov_id,
+            }],
+            "markets": unmatched_markets,
+            "opportunities": {"surebets": [], "valuebets": [], "nearest_opportunity": None},
+            "surebets_count": 0,
+            "valuebets_count": 0,
+            "has_surebet": False,
+            "has_valuebet": False,
+        }
+        details_map[ev_id] = detail_dict
+        if prov_id:
+            details_map[str(prov_id)] = detail_dict
+
+        summaries.append({
+            "id": ev_id,
+            "event_id": ev_id,
+            "canonical_event_id": ev_id,
+            "home_team": home_team,
+            "away_team": away_team,
+            "competition": comp_name,
+            "competition_name": comp_name,
+            "sport": sport,
+            "kickoff": kickoff,
+            "status": ev.status or "SCHEDULED",
+            "matching_status": "UNMATCHED",
+            "is_actionable_match": False,
+            "is_reference_match": False,
+            "match_confidence": None,
+            "participating_bookmakers": [actual_bm],
+            "normalized_markets_count": len(graph.markets),
+            "matched_markets_count": 0,
+            "has_surebet": False,
+            "has_valuebet": False,
+            "opportunities_count": 0,
+            "max_surebet_margin": None,
+            "max_valuebet_ev": None,
+        })
 
     return summaries, details_map
 
@@ -1792,6 +2301,7 @@ def _serialize_scan_cycle_result(result: ScanCycleResult) -> Dict[str, Any]:
             "markets_evaluated": result.resource_metrics.markets_evaluated,
             "selections_evaluated": result.resource_metrics.selections_evaluated,
             "market_coverage_breakdown": getattr(result.resource_metrics, "market_coverage_breakdown", {}),
+            "valuebet_rejection_reasons_breakdown": getattr(result.resource_metrics, "valuebet_rejection_reasons_breakdown", {}),
             "peak_memory_mb": round(float(result.resource_metrics.peak_memory_mb), 2),
         },
         "counts": {
@@ -1846,6 +2356,7 @@ def _serialize_scan_cycle_result(result: ScanCycleResult) -> Dict[str, Any]:
             "rejected_markets": getattr(result, "rejected_markets_count", 0) or getattr(result.resource_metrics, "rejected_markets_total", 0),
             "not_evaluated_markets": getattr(result, "not_evaluated_markets_count", 0) or getattr(result.resource_metrics, "not_evaluated_markets_total", 0),
             "rejection_reasons_breakdown": getattr(result, "rejection_reasons_breakdown", {}) or getattr(result.resource_metrics, "rejection_reasons_breakdown", {}),
+            "valuebet_rejection_reasons_breakdown": getattr(result, "valuebet_rejection_reasons_breakdown", {}) or getattr(result.resource_metrics, "valuebet_rejection_reasons_breakdown", {}),
         },
         "market_evaluation_records": [
             {
@@ -1894,7 +2405,12 @@ def _serialize_scan_cycle_result(result: ScanCycleResult) -> Dict[str, Any]:
     }
 
 
-def _save_scan_snapshot(db_manager: DatabaseManager, execution_id: str, serialized_result: Dict[str, Any]) -> None:
+def _save_scan_snapshot(
+    db_manager: DatabaseManager,
+    execution_id: str,
+    serialized_result: Dict[str, Any],
+    snapshot_type: str = "SCAN_CYCLE_RESULT",
+) -> None:
     """Persist completed scan cycle summary into database SnapshotORM table."""
     try:
         from database.models import SnapshotORM, ProviderORM
@@ -1909,7 +2425,7 @@ def _save_scan_snapshot(db_manager: DatabaseManager, execution_id: str, serializ
                 id=f"snap_{uuid.uuid4().hex[:12]}",
                 provider_id="system",
                 execution_id=execution_id,
-                snapshot_type="SCAN_CYCLE_RESULT",
+                snapshot_type=snapshot_type,
                 payload=json.dumps(serialized_result),
                 created_at=datetime.now(timezone.utc),
             )
@@ -1944,6 +2460,24 @@ def _load_scan_snapshots(db_manager: DatabaseManager, limit: int = 20) -> List[D
     return []
 
 
+def _load_latest_ultra_scan_snapshot(db_manager: DatabaseManager) -> Optional[Dict[str, Any]]:
+    """Load latest ULTRA SCAN result snapshot from database SnapshotORM table."""
+    try:
+        from database.models import SnapshotORM
+        with db_manager.get_session() as session:
+            snap = (
+                session.query(SnapshotORM)
+                .filter(SnapshotORM.snapshot_type == "ULTRA_SCAN_RESULT")
+                .order_by(SnapshotORM.created_at.desc())
+                .first()
+            )
+            if snap and snap.payload:
+                return json.loads(snap.payload)
+    except Exception as exc:
+        logger.debug("Failed to load ultra scan snapshot: %s", exc)
+    return None
+
+
 class PlatformAPIService:
     """Application Service orchestrating provider manager, repositories, and scanner for API clients."""
 
@@ -1951,12 +2485,16 @@ class PlatformAPIService:
         self,
         provider_manager: Optional[ProviderManager] = None,
         db_manager: Optional[DatabaseManager] = None,
-        scanner_engine: Optional[ScannerEngine] = None,
+        scanner_engine: Optional[Any] = None,
         scan_orchestrator: Optional[ProductionScanOrchestrator] = None,
     ):
         self.provider_manager = provider_manager or ProviderManager()
         self.db_manager = db_manager or DatabaseManager()
-        self.scanner_engine = scanner_engine or ScannerEngine()
+        # P2 quarantine: the legacy ScannerEngine is no longer default-wired.
+        # Production scans run via ProductionScanOrchestrator below; an
+        # explicit engine can still be injected (tests/scripts), but nothing
+        # in this service may depend on it.
+        self.scanner_engine = scanner_engine
         self.scan_orchestrator = scan_orchestrator or ProductionScanOrchestrator(db_manager=self.db_manager)
 
         # Concurrency & scanner control state
@@ -1964,15 +2502,24 @@ class PlatformAPIService:
         self._is_scanning = False
         self._scanner_status = "READY"
         self._last_scan_result: Optional[Dict[str, Any]] = None
+        self._last_ultra_scan_result: Optional[Dict[str, Any]] = None
         self._scan_history: List[Dict[str, Any]] = []
         self._events_cache: Dict[str, Dict[str, Any]] = {}
         self._events_summary_cache: List[Dict[str, Any]] = []
+        self._latest_traces: Dict[str, Optional[Dict[str, Any]]] = {
+            "main": None,
+            "team_props": None,
+            "player_props": None,
+        }
 
         # Restore persisted scan history from database if available
         if self.db_manager is not None:
+            self._last_ultra_scan_result = _load_latest_ultra_scan_snapshot(self.db_manager)
             persisted_snapshots = _load_scan_snapshots(self.db_manager, limit=20)
             if persisted_snapshots:
                 self._last_scan_result = persisted_snapshots[0]
+                if self._last_scan_result.get("scan_trace"):
+                    self._latest_traces["main"] = self._last_scan_result.get("scan_trace")
                 if self._last_scan_result.get("events"):
                     self._events_summary_cache = list(self._last_scan_result["events"])
                 if self._last_scan_result.get("_events_detail_map"):
@@ -1991,6 +2538,33 @@ class PlatformAPIService:
                         "surebets_count": cnts.get("detected_opportunities", 0),
                         "scan_source": snap.get("scan_source", "AUTOMATED" if "auto" in str(snap.get("execution_id", "")).lower() else "MANUAL"),
                     })
+            if self._last_ultra_scan_result is not None:
+                u_funnel = self._last_ultra_scan_result.get("funnel", {})
+                u_counts = self._last_ultra_scan_result.get("counts", {})
+                self._scan_history.append({
+                    "execution_id": self._last_ultra_scan_result.get("execution_id"),
+                    "status": self._last_ultra_scan_result.get("status", "SUCCESS"),
+                    "started_at": self._last_ultra_scan_result.get("started_at"),
+                    "completed_at": self._last_ultra_scan_result.get("completed_at"),
+                    "duration_seconds": self._last_ultra_scan_result.get("duration_seconds"),
+                    "events_discovered": u_funnel.get("discovered_events_total", 0),
+                    "events_selected": u_funnel.get("discovered_today_events", 0),
+                    "events_matched": u_funnel.get("matched_events_today", 0),
+                    "surebets_count": u_counts.get("surebets", 0),
+                    "scan_source": "ULTRA / SNAPSHOT",
+                })
+                ultra_completed = self._last_ultra_scan_result.get("completed_at") or ""
+                normal_completed = self._last_scan_result.get("completed_at") if self._last_scan_result else ""
+                if not self._events_summary_cache or (ultra_completed and normal_completed and ultra_completed > normal_completed):
+                    if self._last_ultra_scan_result.get("events"):
+                        self._events_summary_cache = list(self._last_ultra_scan_result["events"])
+                    if self._last_ultra_scan_result.get("_events_detail_map"):
+                        self._events_cache = dict(self._last_ultra_scan_result["_events_detail_map"])
+                self._scan_history.sort(
+                    key=lambda h: h.get("completed_at") or h.get("started_at") or "",
+                    reverse=True,
+                )
+                self._scan_history = self._scan_history[:20]
 
         # Automated scanning scheduler (loads persisted state via db_manager)
         self.scheduler = ScanScheduler(service=self, interval_minutes=15, enabled=False, db_manager=self.db_manager)
@@ -2028,7 +2602,53 @@ class PlatformAPIService:
             "provider_framework": provider_health,
         }
 
+    def _get_props_notification_manager(self):
+        """Helper to obtain authoritative PropsNotificationManager via scheduler or direct instantiation."""
+        if hasattr(self, "scheduler") and self.scheduler is not None and hasattr(self.scheduler, "_get_props_notification_manager"):
+            return self.scheduler._get_props_notification_manager()
+        if not hasattr(self, "_props_notification_manager") or self._props_notification_manager is None:
+            from notifications.props_notification_manager import PropsNotificationManager
+            repo = None
+            if self.db_manager is not None:
+                try:
+                    from database.repositories.opportunity_repository import OpportunityRepository
+                    session = self.db_manager.get_session()
+                    repo = OpportunityRepository(session)
+                except Exception:
+                    pass
+            self._props_notification_manager = PropsNotificationManager(repository=repo)
+        return self._props_notification_manager
+
+    def get_telegram_health(self) -> Dict[str, Any]:
+        """Returns Telegram health telemetry, status, and digest window diagnostics."""
+        mgr = self._get_props_notification_manager()
+        return mgr.get_health_status()
+
+    def send_telegram_test_message(self) -> Dict[str, Any]:
+        """Dispatches an administrative diagnostic test alert via existing Telegram transport."""
+        mgr = self._get_props_notification_manager()
+        res = mgr.send_test_message()
+        return {
+            "delivered": res.delivered,
+            "telegram_message_id": res.telegram_message_id,
+            "error": res.error,
+            "action": res.action.value if hasattr(res.action, "value") else str(res.action),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def configure_telegram(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Updates safe administrative Telegram flags (instant alerts, evening digest)."""
+        mgr = self._get_props_notification_manager()
+        instant_alerts = payload.get("instant_alerts_enabled")
+        evening_digest = payload.get("evening_digest_enabled")
+        mgr.configure(
+            instant_alerts_enabled=instant_alerts,
+            evening_digest_enabled=evening_digest,
+        )
+        return mgr.get_health_status()
+
     def get_providers(self) -> Dict[str, Any]:
+
         """Returns list of registered providers and health status, enriched with latest scan metrics."""
         health = self.provider_manager.check_health()
         
@@ -2144,6 +2764,8 @@ class PlatformAPIService:
             raw_events = list(self._events_summary_cache)
         elif self._last_scan_result and self._last_scan_result.get("events"):
             raw_events = list(self._last_scan_result["events"])
+        elif self._last_ultra_scan_result and self._last_ultra_scan_result.get("events"):
+            raw_events = list(self._last_ultra_scan_result["events"])
         else:
             # Fallback to database repository
             try:
@@ -2216,6 +2838,35 @@ class PlatformAPIService:
 
             filtered.append(ev)
 
+        # 3. Deterministic Server-Side Prioritization before pagination
+        # Priority Order:
+        # 1. Matched status (MATCHED > UNMATCHED)
+        # 2. Matched markets count / normalized markets count descending (rich coverage first)
+        # 3. Opportunities presence (has_surebet / has_valuebet)
+        # 4. Competition tier (Tier 0 & 1 preferred leagues first)
+        # 5. Kickoff proximity (upcoming matches first)
+        # 6. Canonical ID tie-breaker
+        def _event_sort_key(e: Dict[str, Any]) -> Tuple[int, int, int, int, float, str]:
+            is_matched = 0 if e.get("matching_status") == "MATCHED" else 1
+            mkts = e.get("matched_markets_count") or e.get("normalized_markets_count") or 0
+            has_opp = 0 if (e.get("has_surebet") or e.get("has_valuebet")) else 1
+            tier = e.get("competition_tier", 2)
+            if not isinstance(tier, int):
+                tier = 2
+            kickoff_ts = 9999999999.0
+            ko = e.get("kickoff")
+            if ko:
+                try:
+                    from normalization.identity import parse_kickoff_to_utc
+                    dt = parse_kickoff_to_utc(str(ko))
+                    if dt:
+                        kickoff_ts = dt.timestamp()
+                except Exception:
+                    pass
+            cid = str(e.get("canonical_event_id") or e.get("id") or "")
+            return (is_matched, -mkts, has_opp, tier, kickoff_ts, cid)
+
+        filtered.sort(key=_event_sort_key)
         return filtered[offset : offset + limit]
 
     def trigger_provider_run(self, provider_name: str) -> Dict[str, Any]:
@@ -2269,6 +2920,8 @@ class PlatformAPIService:
             serialized = _serialize_scan_cycle_result(scan_cycle_result)
             serialized["scan_source"] = scan_source
             self._last_scan_result = serialized
+            if hasattr(self, "_latest_traces") and isinstance(self._latest_traces, dict):
+                self._latest_traces["main"] = serialized.get("scan_trace")
             self._events_summary_cache = list(serialized.get("events", []))
             self._events_cache = dict(serialized.get("_events_detail_map", {}))
 
@@ -2307,17 +2960,204 @@ class PlatformAPIService:
             self._scan_lock.release()
 
     def get_latest_scan(self) -> Optional[Dict[str, Any]]:
-        """Returns the most recent scan cycle result, or None if no scan has run yet."""
-        return self._last_scan_result
+        """Returns the most recent scan cycle result (regular or ultra), or None if no scan has run yet."""
+        ultra_res = getattr(self, "_last_ultra_scan_result", None)
+        db_mgr = getattr(self, "db_manager", None)
+        if ultra_res is None and db_mgr is not None:
+            self._last_ultra_scan_result = _load_latest_ultra_scan_snapshot(db_mgr)
+            ultra_res = self._last_ultra_scan_result
+        last_reg = getattr(self, "_last_scan_result", None)
+        if ultra_res is not None:
+            if last_reg is None:
+                return ultra_res
+            t_reg = last_reg.get("completed_at") or last_reg.get("started_at") or ""
+            t_ultra = ultra_res.get("completed_at") or ultra_res.get("started_at") or ""
+            if t_ultra >= t_reg:
+                return ultra_res
+        return last_reg
 
-    def get_latest_trace(self) -> Optional[Dict[str, Any]]:
-        """Returns the profiler execution trace of the most recent scan cycle."""
-        if not self._last_scan_result:
+    def run_ultra_scan(
+        self,
+        scope_params: Optional[Dict[str, Any]] = None,
+        manual: bool = False,
+        dispatch_telegram: bool = True,
+    ) -> Dict[str, Any]:
+        """Executes a complete ULTRA SCAN cycle with concurrency protection.
+
+        Args:
+            scope_params: Optional dict overriding target_date, min_ev_percent, etc.
+            manual: True if triggered manually via API/dashboard.
+            dispatch_telegram: True to send Telegram master report.
+
+        Raises:
+            APIError(status_code=409) if any scan is already running.
+        """
+        acquired = self._scan_lock.acquire(blocking=False)
+        if not acquired:
+            raise APIError("Scan is already in progress. Please wait for the current cycle to complete.", status_code=409)
+
+        self._is_scanning = True
+        self._scanner_status = "SCANNING_ULTRA"
+
+        try:
+            from orchestration.ultra_scan import (
+                UltraScanOrchestrator,
+                UltraScanScope,
+                UltraScanBudget,
+            )
+            params = scope_params or {}
+            target_date = params.get("target_date")
+            min_ev = float(params.get("min_ev_percent") or params.get("min_ev_threshold") or 2.0)
+
+            scope_kwargs = {
+                "target_date": target_date,
+                "min_ev_percent": min_ev,
+                "enable_props": bool(params.get("enable_props", True)),
+                "enable_surebets": bool(params.get("enable_surebets", True)),
+                "enable_valuebets": bool(params.get("enable_valuebets", True)),
+                "enable_depth_pass": bool(params.get("enable_depth_pass", True)),
+            }
+            if "evening_start_hour" in params and params["evening_start_hour"] is not None:
+                scope_kwargs["evening_start_hour"] = int(params["evening_start_hour"])
+            if "include_tomorrow" in params and params["include_tomorrow"] is not None:
+                scope_kwargs["include_tomorrow"] = bool(params["include_tomorrow"])
+            if "max_forward_hours" in params and params["max_forward_hours"] is not None:
+                scope_kwargs["max_forward_hours"] = float(params["max_forward_hours"])
+
+            scope = UltraScanScope(**scope_kwargs)
+
+            budget_kwargs = {}
+            if "max_duration_seconds" in params and params["max_duration_seconds"] is not None:
+                budget_kwargs["max_duration_seconds"] = float(params["max_duration_seconds"])
+            if "max_superbet_details" in params and params["max_superbet_details"] is not None:
+                budget_kwargs["max_superbet_details"] = int(params["max_superbet_details"])
+            if "max_betclic_details" in params and params["max_betclic_details"] is not None:
+                budget_kwargs["max_betclic_details"] = int(params["max_betclic_details"])
+            if "max_statshub_fixtures" in params and params["max_statshub_fixtures"] is not None:
+                budget_kwargs["max_statshub_fixtures"] = int(params["max_statshub_fixtures"])
+            if "max_statshub_trends" in params and params["max_statshub_trends"] is not None:
+                budget_kwargs["max_statshub_trends"] = int(params["max_statshub_trends"])
+            budget = UltraScanBudget(**budget_kwargs)
+
+            orchestrator = UltraScanOrchestrator(
+                scope=scope,
+                budget=budget,
+                db_manager=self.db_manager,
+                scan_orchestrator=self.scan_orchestrator,
+            )
+
+            scan_result = orchestrator.execute()
+            serialized = scan_result.to_dict()
+            scan_source = f"ULTRA / {'MANUAL' if manual else 'SCHEDULED'}"
+            serialized["scan_source"] = scan_source
+
+            # Serialize events from ULTRA SCAN for Event Browser and Market Intelligence Workspace
+            events_summary, events_detail_map = _serialize_events_from_ultra_result(scan_result)
+            serialized["events"] = events_summary
+            serialized["_events_detail_map"] = events_detail_map
+            self._events_summary_cache = list(events_summary)
+            self._events_cache = dict(events_detail_map)
+
+            self._last_ultra_scan_result = serialized
+
+            # Persist ULTRA SCAN result snapshot into database
+            if self.db_manager is not None:
+                _save_scan_snapshot(
+                    self.db_manager,
+                    execution_id=serialized["execution_id"],
+                    serialized_result=serialized,
+                    snapshot_type="ULTRA_SCAN_RESULT",
+                )
+
+            # Record in recent history (prepend newest, cap at 20)
+            funnel_dict = serialized.get("funnel", {})
+            counts_dict = serialized.get("counts", {})
+            history_entry = {
+                "execution_id": serialized["execution_id"],
+                "status": serialized.get("status", "SUCCESS"),
+                "started_at": serialized["started_at"],
+                "completed_at": serialized["completed_at"],
+                "duration_seconds": serialized["duration_seconds"],
+                "events_discovered": funnel_dict.get("discovered_events_total", 0),
+                "events_selected": funnel_dict.get("discovered_today_events", 0),
+                "events_matched": funnel_dict.get("matched_events_today", 0),
+                "surebets_count": counts_dict.get("surebets", 0),
+                "scan_source": scan_source,
+            }
+            self._scan_history.insert(0, history_entry)
+            if len(self._scan_history) > 20:
+                self._scan_history.pop()
+
+            # Telegram report delivery with error isolation
+            if dispatch_telegram:
+                try:
+                    from notifications.ultra_telegram_formatter import format_ultra_scan_report
+                    from notifications.telegram_client import HttpTelegramClient
+                    from notifications.telegram_consumer import TelegramConfig
+
+                    t_cfg = TelegramConfig.from_env()
+                    if t_cfg.is_configured and t_cfg.enabled:
+                        client = HttpTelegramClient(bot_token=t_cfg.bot_token)
+                        messages = format_ultra_scan_report(scan_result)
+                        delivered_cnt = 0
+                        for msg in messages:
+                            send_res = client.send_message(
+                                chat_id=t_cfg.chat_id,
+                                text=msg,
+                                parse_mode="HTML",
+                                disable_web_page_preview=True,
+                            )
+                            if send_res.success:
+                                delivered_cnt += 1
+                        serialized["telegram_dispatch"] = {
+                            "status": "DELIVERED" if delivered_cnt == len(messages) else "PARTIAL",
+                            "messages_count": delivered_cnt,
+                        }
+                    else:
+                        serialized["telegram_dispatch"] = {
+                            "status": "SKIPPED",
+                            "reason": "Telegram not configured or disabled in environment",
+                        }
+                except Exception as notif_err:
+                    logger.warning("ULTRA SCAN Telegram delivery failed (isolated): %s", notif_err)
+                    serialized["telegram_dispatch"] = {"status": "FAILED", "error": str(notif_err)}
+
+            self._scanner_status = "READY" if serialized.get("status") != "FAILED" else "ERROR"
+            return serialized
+
+        except Exception as exc:
+            self._scanner_status = "ERROR"
+            logger.error("ULTRA SCAN execution failed at application service layer", exc_info=True)
+            sanitized_msg = _sanitize_text(str(exc))
+            raise APIError(f"ULTRA SCAN execution failed: {sanitized_msg}", status_code=500)
+
+        finally:
+            self._is_scanning = False
+            self._scan_lock.release()
+
+    def get_latest_ultra_scan(self) -> Optional[Dict[str, Any]]:
+        """Returns the most recent ULTRA SCAN result, or None if no ULTRA scan has run yet."""
+        if self._last_ultra_scan_result is None and self.db_manager is not None:
+            self._last_ultra_scan_result = _load_latest_ultra_scan_snapshot(self.db_manager)
+        return self._last_ultra_scan_result
+
+    def get_latest_trace(self, mode: str = "main") -> Optional[Dict[str, Any]]:
+        """Returns the profiler execution trace of the most recent scan cycle for a given mode ('main', 'team_props', 'player_props')."""
+        mode_key = str(mode or "main").lower().strip()
+        if mode_key == "main":
+            if self._latest_traces.get("main"):
+                return self._latest_traces["main"]
+            if self._last_scan_result:
+                return self._last_scan_result.get("scan_trace")
             return None
-        return self._last_scan_result.get("scan_trace")
+        return self._latest_traces.get(mode_key)
 
     def get_trace_by_id(self, trace_id: str) -> Optional[Dict[str, Any]]:
         """Finds a scan trace by execution ID or trace ID from in-memory or persisted snapshots."""
+        for tr in self._latest_traces.values():
+            if tr and (tr.get("trace_id") == trace_id or tr.get("execution_id") == trace_id):
+                return tr
+
         if self._last_scan_result:
             tr = self._last_scan_result.get("scan_trace") or {}
             if tr.get("trace_id") == trace_id or self._last_scan_result.get("execution_id") == trace_id:
@@ -2345,13 +3185,28 @@ class PlatformAPIService:
 
     def get_scan_status(self) -> Dict[str, Any]:
         """Returns current scanner execution and readiness state."""
+        ultra_res = getattr(self, "_last_ultra_scan_result", None)
+        db_mgr = getattr(self, "db_manager", None)
+        if ultra_res is None and db_mgr is not None:
+            self._last_ultra_scan_result = _load_latest_ultra_scan_snapshot(db_mgr)
+            ultra_res = self._last_ultra_scan_result
+        latest = getattr(self, "_last_scan_result", None)
+        if ultra_res is not None:
+            if latest is None:
+                latest = ultra_res
+            else:
+                t_reg = latest.get("completed_at") or latest.get("started_at") or ""
+                t_ultra = ultra_res.get("completed_at") or ultra_res.get("started_at") or ""
+                if t_ultra >= t_reg:
+                    latest = ultra_res
+
         return {
             "status": self._scanner_status,
             "is_scanning": self._is_scanning,
-            "has_run": self._last_scan_result is not None,
-            "last_scan_id": self._last_scan_result.get("execution_id") if self._last_scan_result else None,
-            "last_scan_time": self._last_scan_result.get("completed_at") if self._last_scan_result else None,
-            "last_cycle_status": self._last_scan_result.get("cycle_status") if self._last_scan_result else "NOT_RUN",
+            "has_run": latest is not None,
+            "last_scan_id": latest.get("execution_id") if latest else None,
+            "last_scan_time": latest.get("completed_at") if latest else None,
+            "last_cycle_status": (latest.get("status") or latest.get("cycle_status") or "NOT_RUN") if latest else "NOT_RUN",
         }
 
     def get_scan_history(self, limit: int = 10) -> List[Dict[str, Any]]:
@@ -2373,6 +3228,7 @@ class PlatformAPIService:
         scan_scope: Optional[str] = None,
         hours_ahead: Optional[int] = None,
         event_limit: Optional[int] = None,
+        adaptive_mode: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Apply scheduler configuration update and return new status."""
         self.scheduler.configure(
@@ -2381,6 +3237,7 @@ class PlatformAPIService:
             scan_scope=scan_scope,
             hours_ahead=hours_ahead,
             event_limit=event_limit,
+            adaptive_mode=adaptive_mode,
         )
         return self.scheduler.get_status()
 
@@ -2442,6 +3299,43 @@ class PlatformAPIService:
         # 2. If database returned no records, fallback to in-memory detection result from last scan
         if not raw_opps and self._last_scan_result and self._last_scan_result.get("opportunities"):
             raw_opps = list(self._last_scan_result["opportunities"])
+
+        # Also include opportunities from latest ULTRA scan if present
+        if self._last_ultra_scan_result:
+            for cat_key in ("top_opportunities", "surebets", "valuebets", "player_props", "team_props"):
+                items = self._last_ultra_scan_result.get(cat_key) or []
+                for u_opp in items:
+                    if isinstance(u_opp, dict):
+                        opp_id = u_opp.get("opportunity_id")
+                        if opp_id and not any(o.get("opportunity_id") == opp_id or o.get("id") == opp_id for o in raw_opps):
+                            raw_opps.append({
+                                "opportunity_id": opp_id,
+                                "id": opp_id,
+                                "opportunity_type": u_opp.get("category"),
+                                "event_name": u_opp.get("match_name"),
+                                "event": {
+                                    "event_name": u_opp.get("match_name"),
+                                    "competition": u_opp.get("competition"),
+                                    "kickoff": u_opp.get("kickoff"),
+                                    "sport": "football",
+                                },
+                                "competition": u_opp.get("competition"),
+                                "kickoff": u_opp.get("kickoff"),
+                                "market_type": u_opp.get("market_display"),
+                                "market": {"type": u_opp.get("market_display")},
+                                "selection": u_opp.get("selection_display"),
+                                "bookmaker": u_opp.get("bookmaker"),
+                                "bookmakers": [u_opp.get("bookmaker")],
+                                "odds": u_opp.get("raw_odds"),
+                                "effective_odds": u_opp.get("effective_odds"),
+                                "margin_pct": u_opp.get("edge_pct"),
+                                "value_percent": u_opp.get("edge_pct"),
+                                "net_value_percent": u_opp.get("edge_pct"),
+                                "quality_score": u_opp.get("ultra_rank_score"),
+                                "status": "ACTIVE",
+                                "is_qualified": True,
+                                "details": u_opp.get("details", {}),
+                            })
 
         # 3. Apply filters strictly without inventing values
         results = []
@@ -2570,6 +3464,20 @@ class PlatformAPIService:
                     dto = OpportunityExplorerAdapter.from_surebet(o)
                 seen_opp_ids.add(dto.id)
                 unified_items.append(dto)
+
+        # Collect opportunities from latest ULTRA scan if present
+        if self._last_ultra_scan_result is None and self.db_manager is not None:
+            self._last_ultra_scan_result = _load_latest_ultra_scan_snapshot(self.db_manager)
+
+        if self._last_ultra_scan_result:
+            for cat_key in ("top_opportunities", "surebets", "valuebets", "player_props", "team_props", "watchlist"):
+                items = self._last_ultra_scan_result.get(cat_key) or []
+                for opp in items:
+                    opp_id = opp.get("opportunity_id") if isinstance(opp, dict) else getattr(opp, "opportunity_id", None)
+                    if opp_id and opp_id not in seen_opp_ids:
+                        seen_opp_ids.add(opp_id)
+                        dto = OpportunityExplorerAdapter.from_ultra_opportunity(opp)
+                        unified_items.append(dto)
 
         # 2. Collect Player Props from Props cache / scan state
         try:
@@ -2753,7 +3661,15 @@ class PlatformAPIService:
         total_count = len(filtered)
         paginated = filtered[offset : offset + limit]
 
-        scan_time = self._last_scan_result.get("completed_at") if self._last_scan_result else None
+        scan_time = None
+        if self._last_scan_result and self._last_ultra_scan_result:
+            s_time = self._last_scan_result.get("completed_at") or ""
+            u_time = self._last_ultra_scan_result.get("completed_at") or ""
+            scan_time = u_time if u_time > s_time else s_time
+        elif self._last_scan_result:
+            scan_time = self._last_scan_result.get("completed_at")
+        elif self._last_ultra_scan_result:
+            scan_time = self._last_ultra_scan_result.get("completed_at")
 
         return {
             "items": [dto.to_dict() for dto in paginated],
@@ -2821,9 +3737,9 @@ class PlatformAPIService:
                     return serialize_opportunity_detail(opp)
 
         # 3. Check in Team Props dedicated caches (from scan_team_props)
-        all_tp_candidates = list(PlatformAPIService._cached_team_props_results)
-        for stat_list in PlatformAPIService._cached_team_props_by_stat.values():
-            all_tp_candidates.extend(stat_list)
+        all_tp_candidates = PlatformAPIService._dedupe_props_candidates(
+            PlatformAPIService._cached_team_props_results,
+            PlatformAPIService._cached_team_props_by_stat)
 
         for p in all_tp_candidates:
             if p.get("prop_id") == opportunity_id or p.get("canonical_prop_key") == opportunity_id:
@@ -2842,16 +3758,6 @@ class PlatformAPIService:
         if events_cache and events_cache not in events_maps_to_search:
             events_maps_to_search.append(events_cache)
 
-        # Also search persisted scan snapshots in database if not found in memory
-        if opportunity_id.startswith("ctp_scan_") and not events_maps_to_search and self.db_manager is not None:
-            persisted_snaps = _load_scan_snapshots(self.db_manager, limit=5)
-            for snap in persisted_snaps:
-                snap_map = snap.get("_events_detail_map") or {}
-                if not snap_map and snap.get("events"):
-                    snap_map = {e.get("id", str(i)): e for i, e in enumerate(snap["events"])}
-                if snap_map:
-                    events_maps_to_search.append(snap_map)
-
         for events_map in events_maps_to_search:
             for ev_id, ev in events_map.items():
                 for m in ev.get("markets", []):
@@ -2864,16 +3770,285 @@ class PlatformAPIService:
                             if dto.id == opportunity_id:
                                 return self._serialize_matched_team_market_detail(ev, m, s, dto)
 
+        # Also search persisted scan snapshots in database if not found in memory
+        if opportunity_id.startswith("ctp_scan_") and self.db_manager is not None:
+            parts = opportunity_id.split("_")
+            ev_id_hint = None
+            if len(parts) >= 4 and parts[2] == "cev":
+                ev_id_hint = f"cev_{parts[3]}"
+
+            try:
+                from database.models import SnapshotORM
+                from core.opportunity_explorer import OpportunityExplorerAdapter
+                with self.db_manager.get_session() as session:
+                    query = (
+                        session.query(SnapshotORM)
+                        .filter(SnapshotORM.snapshot_type.in_(["SCAN_CYCLE_RESULT", "ULTRA_SCAN_RESULT"]))
+                    )
+                    if ev_id_hint:
+                        query = query.filter(SnapshotORM.payload.like(f"%{ev_id_hint}%"))
+                    query = query.order_by(SnapshotORM.created_at.desc()).limit(15)
+                    target_snaps = query.all()
+                    for ts in target_snaps:
+                        if not ts or not ts.payload:
+                            continue
+                        snap = json.loads(ts.payload)
+                        snap_map = snap.get("_events_detail_map") or {}
+                        if not snap_map and snap.get("events"):
+                            snap_map = {e.get("id", str(i)): e for i, e in enumerate(snap["events"])}
+                        for ev_id, ev in snap_map.items():
+                            for m in ev.get("markets", []):
+                                m_scope = str(m.get("scope", "")).upper()
+                                m_type = str(m.get("market_type", "")).upper()
+                                if m_scope == "TEAM" or m_type.startswith("TEAM_") or m_type in ("TOTALS", "HANDICAP", "1X2", "DOUBLE_CHANCE"):
+                                    for s in m.get("selections", []):
+                                        try:
+                                            dto = OpportunityExplorerAdapter.from_matched_team_market(ev, m, s)
+                                            if dto.id == opportunity_id:
+                                                return self._serialize_matched_team_market_detail(ev, m, s, dto)
+                                        except Exception:
+                                            continue
+            except Exception as ex:
+                logger.debug("Failed targeted snapshot search: %s", ex)
+
+            persisted_snaps = _load_scan_snapshots(self.db_manager, limit=20)
+            for snap in persisted_snaps:
+                snap_map = snap.get("_events_detail_map") or {}
+                if not snap_map and snap.get("events"):
+                    snap_map = {e.get("id", str(i)): e for i, e in enumerate(snap["events"])}
+                for ev_id, ev in snap_map.items():
+                    for m in ev.get("markets", []):
+                        m_scope = str(m.get("scope", "")).upper()
+                        m_type = str(m.get("market_type", "")).upper()
+                        if m_scope == "TEAM" or m_type.startswith("TEAM_") or m_type in ("TOTALS", "HANDICAP", "1X2", "DOUBLE_CHANCE"):
+                            for s in m.get("selections", []):
+                                try:
+                                    from core.opportunity_explorer import OpportunityExplorerAdapter
+                                    dto = OpportunityExplorerAdapter.from_matched_team_market(ev, m, s)
+                                    if dto.id == opportunity_id:
+                                        return self._serialize_matched_team_market_detail(ev, m, s, dto)
+                                except Exception:
+                                    continue
+
         # 5. Check in Player Props dedicated caches
-        all_pp_candidates = list(PlatformAPIService._cached_props_results)
-        for stat_list in PlatformAPIService._cached_props_by_stat.values():
-            all_pp_candidates.extend(stat_list)
+        all_pp_candidates = PlatformAPIService._dedupe_props_candidates(
+            PlatformAPIService._cached_props_results,
+            PlatformAPIService._cached_props_by_stat)
 
         for p in all_pp_candidates:
             if p.get("prop_id") == opportunity_id or p.get("canonical_prop_key") == opportunity_id:
                 return self._serialize_player_prop_opportunity_detail(p, opportunity_id)
 
+        # 6. Check in Ultra Scan result
+        ultra_res = getattr(self, "_last_ultra_scan_result", None)
+        if ultra_res is None and self.db_manager is not None:
+            ultra_res = _load_latest_ultra_scan_snapshot(self.db_manager)
+            if ultra_res:
+                self._last_ultra_scan_result = ultra_res
+
+        if ultra_res:
+            for cat_key in ("top_opportunities", "surebets", "valuebets", "player_props", "team_props", "watchlist"):
+                for opp in ultra_res.get(cat_key, []):
+                    opp_id = opp.get("opportunity_id") if isinstance(opp, dict) else getattr(opp, "opportunity_id", None)
+                    if opp_id == opportunity_id or (isinstance(opp, dict) and str(opp.get("id")) == opportunity_id):
+                        return self._serialize_ultra_opportunity_detail(opp if isinstance(opp, dict) else opp.to_dict())
+
+        # If not found in latest ultra scan, check historical ultra scan snapshots in database
+        if self.db_manager is not None:
+            try:
+                from database.models import SnapshotORM
+                with self.db_manager.get_session() as session:
+                    hist_snaps = (
+                        session.query(SnapshotORM)
+                        .filter(SnapshotORM.snapshot_type == "ULTRA_SCAN_RESULT", SnapshotORM.payload.like(f"%{opportunity_id}%"))
+                        .order_by(SnapshotORM.created_at.desc())
+                        .limit(5)
+                        .all()
+                    )
+                    for hs in hist_snaps:
+                        if hs and hs.payload:
+                            hist_res = json.loads(hs.payload)
+                            for cat_key in ("top_opportunities", "surebets", "valuebets", "player_props", "team_props", "watchlist"):
+                                for opp in hist_res.get(cat_key, []):
+                                    opp_id = opp.get("opportunity_id") if isinstance(opp, dict) else getattr(opp, "opportunity_id", None)
+                                    if opp_id == opportunity_id or (isinstance(opp, dict) and str(opp.get("id")) == opportunity_id):
+                                        return self._serialize_ultra_opportunity_detail(opp if isinstance(opp, dict) else opp.to_dict())
+            except Exception as ex:
+                logger.debug("Failed historical ultra scan snapshot search: %s", ex)
+
         return None
+
+    def _serialize_ultra_opportunity_detail(self, opp: Dict[str, Any]) -> Dict[str, Any]:
+        """Serializes an opportunity from ULTRA SCAN into standard opportunity detail schema."""
+        import re
+        from core.tax_engine import get_tax_engine
+        tax_engine = get_tax_engine()
+
+        opp_id = str(opp.get("opportunity_id") or opp.get("id") or "ultra_opp")
+        cat = str(opp.get("category", "WATCHLIST")).upper()
+        match_name = opp.get("match_name") or ""
+        home, away = "", ""
+        if " vs " in match_name:
+            parts = match_name.split(" vs ", 1)
+            home, away = parts[0].strip(), parts[1].strip()
+        elif " - " in match_name:
+            parts = match_name.split(" - ", 1)
+            home, away = parts[0].strip(), parts[1].strip()
+        else:
+            home = match_name
+
+        event_dict = {
+            "id": f"event_{opp_id}",
+            "home_team": home,
+            "away_team": away,
+            "competition": opp.get("competition") or "Football",
+            "start_time": opp.get("kickoff"),
+            "sport": "football",
+        }
+
+        mkt_display = opp.get("market_display") or ""
+        market_dict = {
+            "label": mkt_display,
+            "display_name": mkt_display,
+            "type": cat,
+            "line": None,
+            "line_display": "—",
+            "period": "FULL_TIME",
+            "period_display": "Full Time",
+            "scope": "MATCH",
+            "scope_display": "Match",
+            "key_string": mkt_display,
+        }
+
+        # Extract legs
+        legs: List[Dict[str, Any]] = []
+        details = opp.get("details") or {}
+        if details.get("legs"):
+            for l in details["legs"]:
+                bm_name = str(l.get("provider") or l.get("bookmaker") or "unknown").lower()
+                f_odds = float(l.get("raw_odds") or l.get("odds") or 1.0)
+                tax_res = tax_engine.calculate_net_odds(raw_odds=f_odds, bookmaker=bm_name)
+                eff_odds = float(tax_res.effective_net_odds)
+                tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+                tax_factor = float(tax_res.net_stake_multiplier)
+                sel_type = l.get("selection_type") or l.get("outcome") or "SELECTION"
+                legs.append({
+                    "selection_outcome": f"{match_name} - {sel_type}",
+                    "outcome": sel_type,
+                    "selection_type": sel_type,
+                    "provider": bm_name,
+                    "bookmaker": bm_name,
+                    "raw_odds": f_odds,
+                    "odds": f_odds,
+                    "decimal_odds": f_odds,
+                    "effective_odds": eff_odds,
+                    "tax_rate": tax_rate,
+                    "tax_factor": tax_factor,
+                    "net_implied_probability": round(1.0 / eff_odds, 4) if eff_odds > 0 else 0.0,
+                    "implied_probability": round(1.0 / eff_odds, 4) if eff_odds > 0 else 0.0,
+                })
+        else:
+            sel_disp = opp.get("selection_display") or ""
+            sel_payload = sel_disp.split(":", 1)[1] if ":" in sel_disp else sel_disp
+            matches = re.findall(r"([A-Za-z0-9_]+)\s*\(([^@]+)@\s*([0-9.]+)\)", sel_payload)
+            if matches:
+                for bm_str, outcome_str, odds_str in matches:
+                    bm_name = bm_str.strip().lower()
+                    outcome_clean = outcome_str.strip()
+                    try:
+                        f_odds = float(odds_str)
+                    except (ValueError, TypeError):
+                        f_odds = 1.0
+                    tax_res = tax_engine.calculate_net_odds(raw_odds=f_odds, bookmaker=bm_name)
+                    eff_odds = float(tax_res.effective_net_odds)
+                    tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+                    tax_factor = float(tax_res.net_stake_multiplier)
+                    legs.append({
+                        "selection_outcome": f"{match_name} - {outcome_clean}",
+                        "outcome": outcome_clean,
+                        "selection_type": outcome_clean,
+                        "provider": bm_name,
+                        "bookmaker": bm_name,
+                        "raw_odds": f_odds,
+                        "odds": f_odds,
+                        "decimal_odds": f_odds,
+                        "effective_odds": eff_odds,
+                        "tax_rate": tax_rate,
+                        "tax_factor": tax_factor,
+                        "net_implied_probability": round(1.0 / eff_odds, 4) if eff_odds > 0 else 0.0,
+                        "implied_probability": round(1.0 / eff_odds, 4) if eff_odds > 0 else 0.0,
+                    })
+
+        if not legs:
+            bm_name = str(opp.get("bookmaker") or "superbet").lower()
+            f_odds = float(opp.get("raw_odds") or opp.get("effective_odds") or 1.0)
+            tax_res = tax_engine.calculate_net_odds(raw_odds=f_odds, bookmaker=bm_name)
+            eff_odds = float(tax_res.effective_net_odds)
+            tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+            tax_factor = float(tax_res.net_stake_multiplier)
+            legs.append({
+                "selection_outcome": opp.get("selection_display") or "Selection",
+                "outcome": "SELECTION",
+                "selection_type": "SELECTION",
+                "provider": bm_name,
+                "bookmaker": bm_name,
+                "raw_odds": f_odds,
+                "odds": f_odds,
+                "decimal_odds": f_odds,
+                "effective_odds": eff_odds,
+                "tax_rate": tax_rate,
+                "tax_factor": tax_factor,
+                "net_implied_probability": round(1.0 / eff_odds, 4) if eff_odds > 0 else 0.0,
+                "implied_probability": round(1.0 / eff_odds, 4) if eff_odds > 0 else 0.0,
+            })
+
+        sum_s = sum(l["implied_probability"] for l in legs) if legs else 1.0
+        edge_pct = float(opp.get("edge_pct") or (-(sum_s - 1.0) * 100.0 if sum_s else 0.0))
+        is_sb = (sum_s < 1.0) and len(legs) >= 2 and (cat != "WATCHLIST")
+
+        bookmaker_names = list(dict.fromkeys(l["provider"] for l in legs))
+        raw_odds_val = float(opp.get("raw_odds") or (legs[0]["raw_odds"] if legs else 1.0))
+        eff_odds_val = float(opp.get("effective_odds") or (legs[0]["effective_odds"] if legs else 1.0))
+        fair_odds_val = float(opp["fair_odds"]) if opp.get("fair_odds") is not None else None
+
+        opp_type_str = "WATCHLIST" if (cat == "WATCHLIST" or opp.get("is_watchlist")) else cat
+
+        return {
+            "id": opp_id,
+            "opportunity_id": opp_id,
+            "opportunity_type": opp_type_str,
+            "event": event_dict,
+            "market": market_dict,
+            "market_label": mkt_display,
+            "value_percent": edge_pct,
+            "net_value_percent": edge_pct,
+            "margin": edge_pct,
+            "margin_pct": edge_pct,
+            "arbitrage_margin_pct": edge_pct,
+            "implied_probability_sum": round(sum_s, 4),
+            "fair_odds": fair_odds_val,
+            "fair_probability": round(1.0 / fair_odds_val, 4) if (fair_odds_val and fair_odds_val > 0) else None,
+            "bookmaker_odds": raw_odds_val,
+            "effective_net_odds": eff_odds_val,
+            "is_watchlist": bool(opp.get("is_watchlist") or cat == "WATCHLIST"),
+            "watchlist_reason": opp.get("watchlist_reason"),
+            "selections": legs,
+            "legs": legs,
+            "bookmakers": bookmaker_names,
+            "quality_score": float(opp.get("ultra_rank_score") or 50.0),
+            "status": "WATCHLIST" if (cat == "WATCHLIST" or opp.get("is_watchlist")) else "AVAILABLE",
+            "mathematical_explanation": {
+                "formula": "S = Σ(1 / Net Effective Odds)" if cat in ("WATCHLIST", "SUREBET") else "EV = (Odds * Fair Prob) - 1",
+                "implied_probability_sum": round(sum_s, 4),
+                "is_surebet": is_sb,
+                "explanation": opp.get("watchlist_reason") or f"Ultra scan {cat.lower()}: {opp.get('selection_display')}",
+            },
+            "lifecycle": {
+                "status": "WATCHLIST" if (cat == "WATCHLIST" or opp.get("is_watchlist")) else "AVAILABLE",
+                "detected_at": opp.get("kickoff"),
+            },
+            "details": details,
+        }
 
     def _serialize_team_prop_opportunity_detail(
         self,
@@ -2906,6 +4081,8 @@ class PlatformAPIService:
         status_str = "VALUEBET" if is_val else str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY")
 
         # Build legs
+        from core.tax_engine import get_tax_engine
+        tax_engine = get_tax_engine()
         legs = []
         if isinstance(exec_odds_dict, dict) and exec_odds_dict:
             for bm_name, quote_obj in exec_odds_dict.items():
@@ -2925,6 +4102,9 @@ class PlatformAPIService:
                 if f_odds <= 1.0:
                     continue
 
+                tax_res = tax_engine.calculate_net_odds(raw_odds=f_odds, bookmaker=bm_name)
+                tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+
                 legs.append({
                     "selection_outcome": f"{team} {side.title()} {line}",
                     "outcome": side,
@@ -2936,9 +4116,9 @@ class PlatformAPIService:
                     "odds": f_odds,
                     "raw_odds": f_odds,
                     "decimal_odds": f_odds,
-                    "effective_odds": f_odds * 0.88 if bm_name in ("superbet", "betclic") else f_odds,
-                    "tax_rate": 0.12 if bm_name in ("superbet", "betclic") else 0.0,
-                    "tax_factor": 0.88 if bm_name in ("superbet", "betclic") else 1.0,
+                    "effective_odds": float(tax_res.effective_net_odds),
+                    "tax_rate": tax_rate,
+                    "tax_factor": float(tax_res.net_stake_multiplier),
                     "provider": bm_name,
                     "bookmaker": bm_name,
                     "fair_odds": fair_odds,
@@ -2952,6 +4132,9 @@ class PlatformAPIService:
             except (ValueError, TypeError):
                 f_raw_val = 0.0
 
+            tax_res = tax_engine.calculate_net_odds(raw_odds=f_raw_val, bookmaker=provider_val)
+            tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+
             legs.append({
                 "selection_outcome": f"{team} {side.title()} {line}",
                 "outcome": side,
@@ -2963,9 +4146,9 @@ class PlatformAPIService:
                 "odds": f_raw_val,
                 "raw_odds": f_raw_val,
                 "decimal_odds": f_raw_val,
-                "effective_odds": f_raw_val,
-                "tax_rate": 0.0,
-                "tax_factor": 1.0,
+                "effective_odds": float(tax_res.effective_net_odds),
+                "tax_rate": tax_rate,
+                "tax_factor": float(tax_res.net_stake_multiplier),
                 "provider": provider_val,
                 "bookmaker": provider_val,
                 "fair_odds": fair_odds,
@@ -3050,8 +4233,13 @@ class PlatformAPIService:
         mkt_label = f"{team} {side.title()} {line} {m_type.replace('TEAM_', '').replace('_', ' ').title()}" if line is not None else f"{team} {m_type}"
 
         odds_map = s.get("odds") or {}
+        from core.tax_engine import get_tax_engine
+        tax_engine = get_tax_engine()
         legs = []
         for bm_name, bm_odd in odds_map.items():
+            f_odd = float(bm_odd)
+            tax_res = tax_engine.calculate_net_odds(raw_odds=f_odd, bookmaker=bm_name)
+            tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
             legs.append({
                 "selection_outcome": f"{team} {side} {line}",
                 "outcome": side,
@@ -3060,16 +4248,19 @@ class PlatformAPIService:
                 "market_name": m_type,
                 "line": line,
                 "line_display": f"{side} {line}",
-                "odds": float(bm_odd),
-                "raw_odds": float(bm_odd),
-                "decimal_odds": float(bm_odd),
-                "effective_odds": float(bm_odd) * 0.88 if bm_name in ("superbet", "betclic") else float(bm_odd),
-                "tax_rate": 0.12 if bm_name in ("superbet", "betclic") else 0.0,
-                "tax_factor": 0.88 if bm_name in ("superbet", "betclic") else 1.0,
+                "odds": f_odd,
+                "raw_odds": f_odd,
+                "decimal_odds": f_odd,
+                "effective_odds": float(tax_res.effective_net_odds),
+                "tax_rate": tax_rate,
+                "tax_factor": float(tax_res.net_stake_multiplier),
                 "provider": bm_name,
                 "bookmaker": bm_name,
             })
         if not legs and best_odds:
+            f_best = float(best_odds)
+            tax_res = tax_engine.calculate_net_odds(raw_odds=f_best, bookmaker=best_bm)
+            tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
             legs.append({
                 "selection_outcome": f"{team} {side} {line}",
                 "outcome": side,
@@ -3078,12 +4269,12 @@ class PlatformAPIService:
                 "market_name": m_type,
                 "line": line,
                 "line_display": f"{side} {line}",
-                "odds": float(best_odds),
-                "raw_odds": float(best_odds),
-                "decimal_odds": float(best_odds),
-                "effective_odds": float(best_odds) * 0.88 if best_bm in ("superbet", "betclic") else float(best_odds),
-                "tax_rate": 0.12 if best_bm in ("superbet", "betclic") else 0.0,
-                "tax_factor": 0.88 if best_bm in ("superbet", "betclic") else 1.0,
+                "odds": f_best,
+                "raw_odds": f_best,
+                "decimal_odds": f_best,
+                "effective_odds": float(tax_res.effective_net_odds),
+                "tax_rate": tax_rate,
+                "tax_factor": float(tax_res.net_stake_multiplier),
                 "provider": best_bm,
                 "bookmaker": best_bm,
             })
@@ -3155,6 +4346,12 @@ class PlatformAPIService:
         is_val = bool(p.get("is_valuebet") or p.get("execution_status") == "VALUEBET")
         status_str = "VALUEBET" if is_val else str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY")
 
+        from core.tax_engine import get_tax_engine
+        tax_engine = get_tax_engine()
+        f_exec = float(exec_odds) if exec_odds else 0.0
+        tax_res = tax_engine.calculate_net_odds(raw_odds=f_exec, bookmaker=exec_bm)
+        tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+
         legs = [{
             "selection_outcome": f"{player} {side.title()} {line}",
             "outcome": side,
@@ -3163,12 +4360,12 @@ class PlatformAPIService:
             "market_name": mkt,
             "line": line,
             "line_display": f"{side.title()} {line}",
-            "odds": float(exec_odds) if exec_odds else 0.0,
-            "raw_odds": float(exec_odds) if exec_odds else 0.0,
-            "decimal_odds": float(exec_odds) if exec_odds else 0.0,
-            "effective_odds": float(exec_odds) * 0.88 if exec_bm in ("superbet", "betclic") and exec_odds else float(exec_odds or 0.0),
-            "tax_rate": 0.12 if exec_bm in ("superbet", "betclic") else 0.0,
-            "tax_factor": 0.88 if exec_bm in ("superbet", "betclic") else 1.0,
+            "odds": f_exec,
+            "raw_odds": f_exec,
+            "decimal_odds": f_exec,
+            "effective_odds": float(tax_res.effective_net_odds),
+            "tax_rate": tax_rate,
+            "tax_factor": float(tax_res.net_stake_multiplier),
             "provider": exec_bm,
             "bookmaker": exec_bm,
             "fair_odds": fair_odds,
@@ -3229,14 +4426,129 @@ class PlatformAPIService:
 
         # 1. Look up in memory cache
         events_cache = getattr(self, "_events_cache", {})
+        cached_event = None
         if event_id in events_cache:
-            return events_cache[event_id]
+            cached_event = events_cache[event_id]
 
         # 2. Search in latest scan result detail map
-        if self._last_scan_result and self._last_scan_result.get("_events_detail_map"):
+        if not cached_event and self._last_scan_result and self._last_scan_result.get("_events_detail_map"):
             detail_map = self._last_scan_result["_events_detail_map"]
             if event_id in detail_map:
-                return detail_map[event_id]
+                cached_event = detail_map[event_id]
+
+        # 3. Search in latest ultra scan result detail map
+        last_ultra = getattr(self, "_last_ultra_scan_result", None)
+        if not cached_event and last_ultra and last_ultra.get("_events_detail_map"):
+            detail_map = last_ultra["_events_detail_map"]
+            if event_id in detail_map:
+                cached_event = detail_map[event_id]
+
+        # If cached event only has overview markets (<= 1) and provider event IDs are available,
+        # dynamically resolve full multi-market detail on demand.
+        if cached_event and len(cached_event.get("markets", [])) <= 1:
+            try:
+                provs = cached_event.get("providers", [])
+                sb_eid = next((p.get("provider_event_id") for p in provs if p.get("provider") == "superbet"), None)
+                bc_eid = next((p.get("provider_event_id") for p in provs if p.get("provider") == "betclic"), None)
+
+                from providers.base.provider_factory import ProviderFactory
+                sb_parsed = []
+                bc_parsed = []
+                if sb_eid:
+                    try:
+                        sb_prov = ProviderFactory.create_provider("superbet")
+                        if sb_prov and hasattr(sb_prov, "fetcher"):
+                            sb_raw = sb_prov.fetcher._fetch_detail_event(str(sb_eid))
+                            if sb_raw and isinstance(sb_raw, dict):
+                                parsed_list = sb_prov.parser.parse_payloads([sb_raw])
+                                if parsed_list:
+                                    sb_parsed = parsed_list
+                    except Exception as sb_err:
+                        logger.debug("On-demand Superbet detail fetch failed for %s: %s", sb_eid, sb_err)
+
+                if bc_eid:
+                    try:
+                        from providers.betclic.models import BetclicDiscoveredItem
+                        bc_prov = ProviderFactory.create_provider("betclic")
+                        if bc_prov and hasattr(bc_prov, "fetcher"):
+                            bc_item = BetclicDiscoveredItem(
+                                provider_event_id=str(bc_eid),
+                                name=f"{cached_event.get('home_team', '')} - {cached_event.get('away_team', '')}",
+                                competition_name=cached_event.get("competition", "") or "",
+                                start_time=cached_event.get("kickoff", "") or "",
+                                url="",
+                            )
+                            bc_raw = bc_prov.fetcher._fetch_detail_event(bc_item)
+                            if bc_raw and isinstance(bc_raw, dict):
+                                parsed_list = bc_prov.parser.parse_payloads([bc_raw])
+                                if parsed_list:
+                                    bc_parsed = parsed_list
+                    except Exception as bc_err:
+                        logger.debug("On-demand Betclic detail fetch failed for %s: %s", bc_eid, bc_err)
+
+                if sb_parsed or bc_parsed:
+                    norm_sb = self.scan_orchestrator.normalization_engine.normalize("superbet", sb_parsed) if sb_parsed else None
+                    norm_bc = self.scan_orchestrator.normalization_engine.normalize("betclic", bc_parsed) if bc_parsed else None
+
+                    src_graphs = norm_sb.graphs if norm_sb and norm_sb.graphs else []
+                    tgt_graphs = norm_bc.graphs if norm_bc and norm_bc.graphs else []
+
+                    if src_graphs or tgt_graphs:
+                        val_res = self.scan_orchestrator.validation_pipeline.run(
+                            source_items=src_graphs,
+                            target_items=tgt_graphs,
+                        )
+                        from providers.base.provider_result import ProviderResult
+                        from providers.base.provider_state import ProviderState
+                        temp_cycle = ScanCycleResult(
+                            execution_id="on_demand_detail",
+                            cycle_status=CycleStatus.SUCCESS,
+                            started_at="",
+                            completed_at="",
+                            duration_seconds=0.0,
+                            provider_results={
+                                "superbet": ProviderResult(provider_name="superbet", status=ProviderState.READY, execution_id="on_demand", execution_duration=0.0, parsed_objects=sb_parsed),
+                                "betclic": ProviderResult(provider_name="betclic", status=ProviderState.READY, execution_id="on_demand", execution_duration=0.0, parsed_objects=bc_parsed),
+                            },
+                            normalization_results={
+                                "superbet": norm_sb,
+                                "betclic": norm_bc,
+                            },
+                            validation_result=val_res,
+                        )
+                        summaries, details_map = _serialize_events_from_scan_result(temp_cycle)
+                        upgraded = None
+                        if event_id in details_map:
+                            upgraded = details_map[event_id]
+                        elif sb_eid and str(sb_eid) in details_map:
+                            upgraded = details_map[str(sb_eid)]
+                        elif bc_eid and str(bc_eid) in details_map:
+                            upgraded = details_map[str(bc_eid)]
+                        elif details_map:
+                            upgraded = list(details_map.values())[0]
+
+                        if upgraded and len(upgraded.get("markets", [])) > len(cached_event.get("markets", [])):
+                            upgraded["id"] = event_id
+                            upgraded["canonical_event_id"] = event_id
+                            upgraded["event_id"] = event_id
+                            events_cache[event_id] = upgraded
+                            if sb_eid:
+                                events_cache[str(sb_eid)] = upgraded
+                            if bc_eid:
+                                events_cache[str(bc_eid)] = upgraded
+                            if self._last_scan_result and "_events_detail_map" in self._last_scan_result:
+                                self._last_scan_result["_events_detail_map"][event_id] = upgraded
+                            for s_idx, s_ev in enumerate(self._events_summary_cache):
+                                if s_ev.get("id") == event_id or s_ev.get("canonical_event_id") == event_id:
+                                    self._events_summary_cache[s_idx]["normalized_markets_count"] = sum(p["market_count"] for p in upgraded.get("providers", []))
+                                    self._events_summary_cache[s_idx]["matched_markets_count"] = len(upgraded.get("markets", []))
+                                    break
+                            return upgraded
+            except Exception as on_demand_err:
+                logger.debug("On-demand detail upgrade failed for %s: %s", event_id, on_demand_err)
+
+        if cached_event:
+            return cached_event
 
         # 3. Fallback: Search in Database
         try:
@@ -3260,6 +4572,8 @@ class PlatformAPIService:
                                         "best_odds": None,
                                         "source_selection_id": out.id,
                                     })
+                            if len(sels) == 0:
+                                continue
                             markets.append({
                                 "canonical_market_key": f"{m.market_type}:FULL_TIME:MATCH:{m.line or 'no_line'}",
                                 "market_type": m.market_type,
@@ -3267,6 +4581,9 @@ class PlatformAPIService:
                                 "scope": "MATCH",
                                 "line": float(m.line) if m.line is not None else None,
                                 "status": "UNMATCHED",
+                                "completeness_status": "INCOMPLETE",
+                                "is_evaluation_eligible": False,
+                                "exclusion_reasons": ["DATABASE_FALLBACK_NO_LIVE_ODDS"],
                                 "participating_bookmakers": [],
                                 "selections": sels,
                             })
@@ -3348,6 +4665,32 @@ class PlatformAPIService:
                     "retries": 0,
                 })
 
+        # Enrich with live Telegram activity from PropsNotificationManager
+        has_extra_activity = False
+        try:
+            mgr = self._get_props_notification_manager()
+            recent_acts = getattr(mgr, "_recent_activity", [])
+            if recent_acts:
+                has_extra_activity = True
+                for act in recent_acts:
+                    notifications.append({
+                        "id": act.get("id"),
+                        "timestamp": act.get("timestamp"),
+                        "level": "INFO" if act.get("status") == "DELIVERED" else ("CRITICAL" if act.get("status") == "FAILED" else "WARNING"),
+                        "title": act.get("title", "Telegram Dispatch"),
+                        "message": act.get("message", ""),
+                        "channel": "Telegram",
+                        "status": act.get("status", "DELIVERED"),
+                        "retries": act.get("retries", 0),
+                        "details": act.get("details"),
+                    })
+        except Exception:
+            pass
+
+        # Sort combined notifications newest-first if extra telegram activity was merged
+        if has_extra_activity:
+            notifications.sort(key=lambda n: n.get("timestamp") or "", reverse=True)
+
         # Real channel status from application state
         telegram_active = False
         try:
@@ -3355,6 +4698,7 @@ class PlatformAPIService:
             telegram_active = True
         except Exception:
             pass
+
 
         return {
             "total": len(notifications),
@@ -3390,6 +4734,55 @@ class PlatformAPIService:
     _last_team_props_scan_metadata: Dict[str, Any] = {}
     _cached_team_props_by_stat: Dict[str, List[Dict[str, Any]]] = {}
     _last_team_props_scan_metadata_by_stat: Dict[str, Dict[str, Any]] = {}
+
+    @staticmethod
+    def _prop_cache_key(prop: Dict[str, Any]) -> str:
+        """Stable identity for a cached prop dict (P1-NEW-007)."""
+        if not isinstance(prop, dict):
+            return f"non_dict:{id(prop)}"
+        for field in ("prop_id", "canonical_prop_key", "id"):
+            val = prop.get(field)
+            if val:
+                return f"{field}:{val}"
+        return f"anonymous:{id(prop)}"
+
+    @staticmethod
+    def _rebuild_props_union(by_stat: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """Rebuilds the cross-stat union cache without duplicates (P1-NEW-007).
+
+        Previously the global cache was overwritten by the most recently
+        scanned stat, so readers falling back to it received valid-looking
+        data for the wrong stat scope. The union preserves every scanned
+        stat partition; per-stat readers are unaffected.
+        """
+        merged: List[Dict[str, Any]] = []
+        seen = set()
+        for stat_key in sorted(by_stat.keys()):
+            for prop in by_stat[stat_key] or []:
+                key = PlatformAPIService._prop_cache_key(prop)
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(prop)
+        return merged
+
+    @staticmethod
+    def _dedupe_props_candidates(global_results: List[Dict[str, Any]],
+                                 by_stat: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """Merges global + per-stat caches for detail lookup without doubles."""
+        merged: List[Dict[str, Any]] = []
+        seen = set()
+        for prop in list(global_results or []):
+            key = PlatformAPIService._prop_cache_key(prop)
+            if key not in seen:
+                seen.add(key)
+                merged.append(prop)
+        for stat_list in (by_stat or {}).values():
+            for prop in stat_list or []:
+                key = PlatformAPIService._prop_cache_key(prop)
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(prop)
+        return merged
 
     @staticmethod
     def normalize_stat_key(stat: Optional[str]) -> str:
@@ -3478,8 +4871,20 @@ class PlatformAPIService:
         if "venue_filter" in params and params["venue_filter"]:
             cfg.venue_filter = str(params["venue_filter"])
 
+        from orchestration.profiler import ScanExecutionProfiler, get_current_scan_profiler, set_current_scan_profiler
+        existing_prof = get_current_scan_profiler()
+        own_profiler = False
+        if existing_prof is None or getattr(existing_prof, "scan_type", "") != "player_props":
+            profiler = ScanExecutionProfiler(scan_type="player_props")
+            set_current_scan_profiler(profiler, set_global=False)
+            own_profiler = True
+        else:
+            profiler = existing_prof
+
+        profiler.start_phase("trends_discovery", counters={"stat": norm_stat})
         provider = StatsHubProvider(config=cfg)
         run_res = provider.run()
+        profiler.finish_phase("trends_discovery", counters={"parsed_props": len(run_res.parsed_objects)})
 
         # Retrieve parsed results and acquisition telemetry
         parsed_props = run_res.parsed_objects
@@ -3508,6 +4913,8 @@ class PlatformAPIService:
         sb_matched_count = 0
         bc_matched_count = 0
 
+        profiler.start_phase("execution_acquisition")
+
         # A. Superbet Execution Acquisition
         try:
             sb_p = SuperbetProvider()
@@ -3518,14 +4925,19 @@ class PlatformAPIService:
                 it_away = it.away_team if hasattr(it, "away_team") and it.away_team else (it.match_name.split("·")[1] if "·" in it.match_name else (it.match_name.split(" vs ")[1] if " vs " in it.match_name else ""))
                 for f_name in fixtures_map:
                     h, a = f_name.split(" vs ")
-                    f_match, _ = PropExecutionMatcher.is_fixture_match(h, a, it_home, it_away)
+                    f_match, _ = PropExecutionMatcher.is_fixture_match(
+                        h, a, it_home, it_away,
+                        getattr(fixtures_map[f_name], "kickoff", None),
+                        getattr(it, "start_time", None))
                     if f_match:
                         sb_matched_ids.append(it.event_id)
                         break
 
             sb_matched_count = len(sb_matched_ids)
             if sb_matched_ids:
+                sb_matched_items = [it for it in sb_disc if getattr(it, "event_id", None) in sb_matched_ids]
                 sb_p.configure_full_market_acquisition(event_ids=sb_matched_ids)
+                sb_p.set_discovered_items(sb_matched_items)
                 sb_run = sb_p.run()
                 sb_norm = SuperbetNormalizer()
                 for ev in sb_run.parsed_objects:
@@ -3545,14 +4957,19 @@ class PlatformAPIService:
                 it_away = it_name.split(" - ")[1] if " - " in it_name else (it_name.split(" vs ")[1] if " vs " in it_name else "")
                 for f_name in fixtures_map:
                     h, a = f_name.split(" vs ")
-                    f_match, _ = PropExecutionMatcher.is_fixture_match(h, a, it_home, it_away)
+                    f_match, _ = PropExecutionMatcher.is_fixture_match(
+                        h, a, it_home, it_away,
+                        getattr(fixtures_map[f_name], "kickoff", None),
+                        getattr(it, "start_time", None))
                     if f_match:
                         bc_matched_ids.append(it.provider_event_id)
                         break
 
             bc_matched_count = len(bc_matched_ids)
             if bc_matched_ids:
+                bc_matched_items = [it for it in bc_disc if getattr(it, "provider_event_id", None) in bc_matched_ids]
                 bc_p.configure_full_market_acquisition(event_ids=bc_matched_ids)
+                bc_p.set_discovered_items(bc_matched_items)
                 bc_run = bc_p.run()
                 bc_norm = BetclicNormalizer()
                 for ev in bc_run.parsed_objects:
@@ -3561,15 +4978,34 @@ class PlatformAPIService:
         except Exception as exc:
             logger.warning(f"Betclic execution acquisition encountered error: {exc}")
 
+        profiler.finish_phase("execution_acquisition", counters={"normalized_graphs": len(normalized_graphs)})
+
         # Extract normalized execution quotes with canonical stat filter
+        profiler.start_phase("quote_extraction")
         stat_filter = norm_stat.upper()
         exec_quotes = exec_engine.extract_quotes_from_graphs(normalized_graphs, stat_type=stat_filter)
+        profiler.finish_phase("quote_extraction", counters={"quotes_count": len(exec_quotes)})
 
         cached_exec_events = list(self._events_cache.values()) if hasattr(self, "_events_cache") and self._events_cache else []
         execution_matcher = PropExecutionMatcher(
             canonical_events=normalized_graphs or cached_exec_events,
             normalized_quotes=exec_quotes,
         )
+
+        profiler.start_phase("matching_and_evaluation", counters={"props_count": len(parsed_props)})
+
+        # Stage A.10 Pre-match Snapshot Recorder setup for Player Shots Over 0.5
+        single_scan_recorder = None
+        single_scan_session = None
+        if self.db_manager is not None and norm_stat == "shots":
+            try:
+                from database.repositories.player_prop_snapshot_repository import PlayerPropSnapshotRepository
+                from scanner.player_shots_snapshot_recorder import PlayerShotsSnapshotRecorder
+                single_scan_session = self.db_manager.get_session()
+                s_repo = PlayerPropSnapshotRepository(single_scan_session)
+                single_scan_recorder = PlayerShotsSnapshotRecorder(repository=s_repo)
+            except Exception as rec_init_err:
+                logger.warning(f"Could not initialize snapshot recorder for single prop scan: {rec_init_err}")
 
         for p_res in parsed_props:
             ps = p_res.player_stat
@@ -3636,6 +5072,9 @@ class PlatformAPIService:
                 cached_execution_events=normalized_graphs or cached_exec_events,
                 normalized_quotes=exec_quotes,
                 event_id=fix.fixture_id,
+                statshub_fixture_id=fix.fixture_id,
+                statshub_event_internal_id=getattr(fix, "event_internal_id", None),
+                statshub_player_id=getattr(ps, "player_id", None),
             )
 
             # Line-specific hit calculation invariant across all stats:
@@ -3654,6 +5093,18 @@ class PlatformAPIService:
                 effective_sample = 0
                 calc_hits = 0
                 effective_hr_pct = 0.0
+
+            # Evaluate Stage 3 Value Evaluation (Reference Odds -> Fair Probability -> Polish Tax/EV)
+            from scanner.props_value_evaluator import PropsValueEvaluator, PropsEvaluationConfig
+            val_evaluator = PropsValueEvaluator(
+                config=PropsEvaluationConfig(
+                    min_value_percent=Decimal(str(params.get("min_ev_threshold", 0.0))),
+                )
+            )
+            val_eval = val_evaluator.evaluate_player_prop(
+                statshub_prop=p_res,
+                odds_comparison=odds_comparison,
+            )
 
             # Evaluate Opportunity Engine Signals, Actionability & Explainable Score
             opp_eval = opportunity_engine.evaluate(
@@ -3687,6 +5138,7 @@ class PlatformAPIService:
                 "fixture": f"{fix.home_team} vs {fix.away_team}",
                 "competition": fix.competition,
                 "kickoff": fix.kickoff or "TBD",
+                "fixture_deep_link": fix.get_fixture_url() if hasattr(fix, "get_fixture_url") else None,
                 "stat": ps.stat_type.lower(),
                 "stat_type": ps.stat_type.upper(),
                 "market_type": f"PLAYER_{ps.stat_type.upper()}",
@@ -3702,12 +5154,27 @@ class PlatformAPIService:
                 "reference_odds": line_ref_odds,
                 "all_odds": all_odds_list,
                 "available_lines": available_lines,
+                "reference_calculation": val_eval.reference_calculation.to_dict(),
+                "reference_fair_probability": val_eval.reference_calculation.fair_probability,
+                "reference_fair_odds": val_eval.reference_calculation.fair_odds,
+                "reference_consensus_odds": val_eval.reference_calculation.consensus_odds,
                 # Polish Execution Odds
                 "execution_odds": {k: v.to_dict() for k, v in odds_comparison.execution_odds.items()},
                 "best_execution_odds": odds_comparison.best_executable_odds,
                 "best_execution_bookmaker": odds_comparison.best_executable_bookmaker,
+                "best_effective_odds": val_eval.best_effective_odds,
                 "execution_status": opp_eval.actionability,
+                "reason_code": odds_comparison.primary_reason_code,
+                "value_reason_code": val_eval.primary_reason_code,
+                "value_status": val_eval.overall_status,
+                "is_valuebet": val_eval.is_valuebet or opp_eval.is_valuebet,
+                "net_ev_pct": val_eval.best_net_ev_pct,
+                "gross_ev_pct": val_eval.best_gross_ev_pct,
+                "value_evaluations": {k: v.to_dict() for k, v in val_eval.bookmaker_evaluations.items()},
+                "provenance": val_eval.provenance,
                 "match_confidence": odds_comparison.match_confidence,
+
+
                 # Statistics & Form
                 "statistics": {
                     "sample_size": effective_sample,
@@ -3790,6 +5257,49 @@ class PlatformAPIService:
             }
             props_list.append(prop_dict)
 
+            # Stage A.10 Pre-match Snapshot Recording for Player Shots Over 0.5
+            if (
+                single_scan_recorder is not None
+                and norm_stat == "shots"
+                and abs(target_line - 0.5) < 0.01
+            ):
+                try:
+                    single_scan_recorder.record_snapshot(
+                        player_name=ps.player_name,
+                        home_team=fix.home_team if fix and fix.home_team else "",
+                        away_team=fix.away_team if fix and fix.away_team else "",
+                        competition=fix.competition if fix and fix.competition else "",
+                        stat_type="SHOTS",
+                        line=0.5,
+                        direction="OVER",
+                        kickoff=fix.kickoff if fix else None,
+                        observed_at=datetime.now(timezone.utc),
+                        hit_rate=effective_hr_pct,
+                        hits=calc_hits,
+                        sample_size=effective_sample,
+                        stat_average=ps.average,
+                        position_role=ps.position,
+                        recent_matches=ps.historical_matches,
+                        reference_probability=val_eval.reference_calculation.fair_probability,
+                        reference_fair_odds=val_eval.reference_calculation.fair_odds,
+                        reference_consensus_odds=val_eval.reference_calculation.consensus_odds,
+                        reference_bookmaker_count=len(val_eval.reference_calculation.used_sources),
+                        reference_odds_sources=val_eval.reference_calculation.used_sources,
+                        superbet_odds=prop_dict.get("best_execution_odds") if prop_dict.get("best_execution_bookmaker") == "Superbet" else None,
+                        betclic_odds=prop_dict.get("best_execution_odds") if prop_dict.get("best_execution_bookmaker") == "Betclic" else None,
+                        execution_odds={k: v.to_dict() for k, v in odds_comparison.execution_odds.items()} if odds_comparison and odds_comparison.execution_odds else None,
+                    )
+                except Exception as snap_err:
+                    logger.warning(f"Single prop scan snapshot recording notice: {snap_err}")
+
+        if single_scan_session is not None:
+            try:
+                single_scan_session.commit()
+            except Exception as commit_err:
+                logger.warning(f"Failed to commit snapshot session in scan_player_props: {commit_err}")
+            finally:
+                single_scan_session.close()
+
         # Sort with Actionability Hierarchy:
         # 1. BETTABLE + strong execution edge (tier 1)
         # 2. BETTABLE + moderate execution edge (tier 2)
@@ -3819,9 +5329,12 @@ class PlatformAPIService:
 
         props_list.sort(key=prop_sort_key, reverse=True)
 
-        # Update cache stores (both stat partition and global)
+        # Update cache stores (both stat partition and cross-stat union).
+        # P1-NEW-007: the global cache is the UNION of partitions, never the
+        # last-scanned stat alone (wrong-scope fallback).
         PlatformAPIService._cached_props_by_stat[norm_stat] = props_list
-        PlatformAPIService._cached_props_results = props_list
+        PlatformAPIService._cached_props_results = PlatformAPIService._rebuild_props_union(
+            PlatformAPIService._cached_props_by_stat)
 
         acq = provider.acquisition_metrics
         props_with_odds_count = len([p for p in props_list if p.get("best_odds") or p.get("best_execution_odds")])
@@ -3869,6 +5382,12 @@ class PlatformAPIService:
 
         PlatformAPIService._last_props_scan_metadata_by_stat[norm_stat] = scan_meta
         PlatformAPIService._last_props_scan_metadata = scan_meta
+
+        profiler.finish_phase("matching_and_evaluation", counters={"matched": bettable_count, "opportunities": opportunities_count})
+        if own_profiler:
+            player_trace = profiler.finish_scan()
+            self._latest_traces["player_props"] = player_trace
+            set_current_scan_profiler(None, set_global=False)
 
         return {
             "metadata": scan_meta,
@@ -4093,9 +5612,9 @@ class PlatformAPIService:
 
     def get_prop_detail(self, prop_id: str) -> Optional[Dict[str, Any]]:
         """Get detail for a specific player prop ID with full Decision Engine contract."""
-        all_candidates = list(PlatformAPIService._cached_props_results)
-        for stat_list in PlatformAPIService._cached_props_by_stat.values():
-            all_candidates.extend(stat_list)
+        all_candidates = PlatformAPIService._dedupe_props_candidates(
+            PlatformAPIService._cached_props_results,
+            PlatformAPIService._cached_props_by_stat)
 
         for p in all_candidates:
             if p.get("prop_id") == prop_id:
@@ -4259,7 +5778,7 @@ class PlatformAPIService:
         line = float(params.get("line")) if params.get("line") is not None else None
         team_search = str(params.get("search") or "").strip().lower()
         auto_paginate = bool(params.get("auto_paginate", True))
-        max_prop_results = int(params.get("max_prop_results", 500))
+        max_prop_results = int(params.get("max_prop_results") or 500)
         days_ahead = int(params.get("days_ahead") or 7)
 
         cfg = StatsHubConfig(
@@ -4286,8 +5805,20 @@ class PlatformAPIService:
         if "venue_filter" in params and params["venue_filter"]:
             cfg.venue_filter = str(params["venue_filter"])
 
+        from orchestration.profiler import ScanExecutionProfiler, get_current_scan_profiler, set_current_scan_profiler
+        existing_prof = get_current_scan_profiler()
+        own_profiler = False
+        if existing_prof is None or getattr(existing_prof, "scan_type", "") != "team_props":
+            profiler = ScanExecutionProfiler(scan_type="team_props")
+            set_current_scan_profiler(profiler, set_global=False)
+            own_profiler = True
+        else:
+            profiler = existing_prof
+
+        profiler.start_phase("trends_discovery", counters={"stat": norm_stat})
         provider = StatsHubTeamPropsProvider(config=cfg)
         run_res = provider.run()
+        profiler.finish_phase("trends_discovery", counters={"parsed_props": len(run_res.parsed_objects)})
 
         parsed_props = run_res.parsed_objects
         props_list: List[Dict[str, Any]] = []
@@ -4312,7 +5843,12 @@ class PlatformAPIService:
 
         exec_engine = ExecutionMarketEngine()
         normalized_graphs: List[NormalizedGraph] = []
+        sb_matched_count = 0
+        bc_matched_count = 0
 
+        profiler.start_phase("execution_acquisition")
+
+        # A. Superbet Execution Acquisition
         try:
             sb_p = SuperbetProvider()
             sb_disc = sb_p.discover()
@@ -4322,13 +5858,19 @@ class PlatformAPIService:
                 it_away = it.away_team if hasattr(it, "away_team") and it.away_team else (it.match_name.split("·")[1] if "·" in it.match_name else (it.match_name.split(" vs ")[1] if " vs " in it.match_name else ""))
                 for f_name in fixtures_map:
                     h, a = f_name.split(" vs ")
-                    f_match, _ = TeamPropExecutionMatcher.is_fixture_match(h, a, it_home, it_away)
+                    f_match, _ = TeamPropExecutionMatcher.is_fixture_match(
+                        h, a, it_home, it_away,
+                        getattr(fixtures_map[f_name], "kickoff", None),
+                        getattr(it, "start_time", None))
                     if f_match:
                         sb_matched_ids.append(it.event_id)
                         break
 
+            sb_matched_count = len(sb_matched_ids)
             if sb_matched_ids:
+                sb_matched_items = [it for it in sb_disc if getattr(it, "event_id", None) in sb_matched_ids]
                 sb_p.configure_full_market_acquisition(event_ids=sb_matched_ids)
+                sb_p.set_discovered_items(sb_matched_items)
                 sb_run = sb_p.run()
                 sb_norm = SuperbetNormalizer()
                 for ev in sb_run.parsed_objects:
@@ -4337,6 +5879,7 @@ class PlatformAPIService:
         except Exception as exc:
             logger.warning(f"Superbet execution acquisition encountered error: {exc}")
 
+        # B. Betclic Execution Acquisition
         try:
             bc_p = BetclicProvider()
             bc_disc = bc_p.discover()
@@ -4347,13 +5890,18 @@ class PlatformAPIService:
                 it_away = it_name.split(" - ")[1] if " - " in it_name else (it_name.split(" vs ")[1] if " vs " in it_name else "")
                 for f_name in fixtures_map:
                     h, a = f_name.split(" vs ")
-                    f_match, _ = TeamPropExecutionMatcher.is_fixture_match(h, a, it_home, it_away)
+                    f_match, _ = TeamPropExecutionMatcher.is_fixture_match(
+                        h, a, it_home, it_away,
+                        getattr(fixtures_map[f_name], "kickoff", None),
+                        getattr(it, "start_time", None))
                     if f_match:
                         bc_matched_ids.append(it.provider_event_id)
                         break
 
             if bc_matched_ids:
+                bc_matched_items = [it for it in bc_disc if getattr(it, "provider_event_id", None) in bc_matched_ids]
                 bc_p.configure_full_market_acquisition(event_ids=bc_matched_ids)
+                bc_p.set_discovered_items(bc_matched_items)
                 bc_run = bc_p.run()
                 bc_norm = BetclicNormalizer()
                 for ev in bc_run.parsed_objects:
@@ -4362,14 +5910,20 @@ class PlatformAPIService:
         except Exception as exc:
             logger.warning(f"Betclic execution acquisition encountered error: {exc}")
 
+        profiler.finish_phase("execution_acquisition", counters={"normalized_graphs": len(normalized_graphs)})
+
+        profiler.start_phase("quote_extraction")
         stat_filter = norm_stat.upper()
         exec_quotes = exec_engine.extract_team_quotes_from_graphs(normalized_graphs, stat_type=stat_filter)
+        profiler.finish_phase("quote_extraction", counters={"quotes_count": len(exec_quotes)})
 
         cached_exec_events = list(self._events_cache.values()) if hasattr(self, "_events_cache") and self._events_cache else []
         execution_matcher = TeamPropExecutionMatcher(
             canonical_events=normalized_graphs or cached_exec_events,
             normalized_quotes=exec_quotes,
         )
+
+        profiler.start_phase("matching_and_evaluation", counters={"props_count": len(parsed_props)})
 
         for p_res in parsed_props:
             ts = p_res.team_stat
@@ -4432,6 +5986,9 @@ class PlatformAPIService:
                 cached_execution_events=normalized_graphs or cached_exec_events,
                 normalized_quotes=exec_quotes,
                 event_id=fix.fixture_id,
+                statshub_fixture_id=fix.fixture_id,
+                statshub_event_internal_id=getattr(fix, "event_internal_id", None),
+                statshub_team_id=getattr(ts, "team_id", None),
             )
 
             if ts.sample_size > 0:
@@ -4446,6 +6003,18 @@ class PlatformAPIService:
                 effective_sample = 0
                 calc_hits = 0
                 effective_hr_pct = 0.0
+
+            # Evaluate Stage 3 Value Evaluation (Reference Odds -> Fair Probability -> Polish Tax/EV)
+            from scanner.props_value_evaluator import PropsValueEvaluator, PropsEvaluationConfig
+            val_evaluator = PropsValueEvaluator(
+                config=PropsEvaluationConfig(
+                    min_value_percent=Decimal(str(params.get("min_ev_threshold", 0.0))),
+                )
+            )
+            val_eval = val_evaluator.evaluate_team_prop(
+                statshub_team_prop=p_res,
+                odds_comparison=odds_comparison,
+            )
 
             opp_eval = opportunity_engine.evaluate(
                 hit_rate_pct=effective_hr_pct,
@@ -4482,6 +6051,7 @@ class PlatformAPIService:
                 "fixture": f"{fix.home_team} vs {fix.away_team}",
                 "competition": fix.competition,
                 "kickoff": fix.kickoff or "TBD",
+                "fixture_deep_link": fix.get_fixture_url() if hasattr(fix, "get_fixture_url") else None,
                 "stat": ts.stat_type.lower(),
                 "stat_type": ts.stat_type.upper(),
                 "market_type": f"TEAM_{ts.stat_type.upper()}",
@@ -4498,12 +6068,27 @@ class PlatformAPIService:
                 "reference_odds": line_ref_odds,
                 "all_odds": all_odds_list,
                 "available_lines": available_lines,
+                "reference_calculation": val_eval.reference_calculation.to_dict(),
+                "reference_fair_probability": val_eval.reference_calculation.fair_probability,
+                "reference_fair_odds": val_eval.reference_calculation.fair_odds,
+                "reference_consensus_odds": val_eval.reference_calculation.consensus_odds,
                 # Polish Execution Odds
                 "execution_odds": {k: v.to_dict() for k, v in odds_comparison.execution_odds.items()},
                 "best_execution_odds": odds_comparison.best_executable_odds,
                 "best_execution_bookmaker": odds_comparison.best_executable_bookmaker,
+                "best_effective_odds": val_eval.best_effective_odds,
                 "execution_status": opp_eval.actionability,
+                "reason_code": odds_comparison.primary_reason_code,
+                "value_reason_code": val_eval.primary_reason_code,
+                "value_status": val_eval.overall_status,
+                "is_valuebet": val_eval.is_valuebet or opp_eval.is_valuebet,
+                "net_ev_pct": val_eval.best_net_ev_pct,
+                "gross_ev_pct": val_eval.best_gross_ev_pct,
+                "value_evaluations": {k: v.to_dict() for k, v in val_eval.bookmaker_evaluations.items()},
+                "provenance": val_eval.provenance,
                 "match_confidence": odds_comparison.match_confidence,
+
+
                 # Statistics & Form
                 "statistics": {
                     "sample_size": effective_sample,
@@ -4610,7 +6195,8 @@ class PlatformAPIService:
         props_list.sort(key=prop_sort_key, reverse=True)
 
         PlatformAPIService._cached_team_props_by_stat[norm_stat] = props_list
-        PlatformAPIService._cached_team_props_results = props_list
+        PlatformAPIService._cached_team_props_results = PlatformAPIService._rebuild_props_union(
+            PlatformAPIService._cached_team_props_by_stat)
 
         acq = provider.acquisition_metrics
         props_with_odds_count = len([p for p in props_list if p.get("best_odds") or p.get("best_execution_odds")])
@@ -4634,6 +6220,12 @@ class PlatformAPIService:
         }
         PlatformAPIService._last_team_props_scan_metadata_by_stat[norm_stat] = scan_meta
         PlatformAPIService._last_team_props_scan_metadata = scan_meta
+
+        profiler.finish_phase("matching_and_evaluation", counters={"matched": bettable_count, "opportunities": opportunities_count})
+        if own_profiler:
+            team_trace = profiler.finish_scan()
+            self._latest_traces["team_props"] = team_trace
+            set_current_scan_profiler(None, set_global=False)
 
         return {
             "stat": norm_stat,
@@ -4750,9 +6342,9 @@ class PlatformAPIService:
 
     def get_team_prop_detail(self, prop_id: str) -> Optional[Dict[str, Any]]:
         """Finds a single team prop result by ID across global or stat-partitioned caches."""
-        all_candidates = list(PlatformAPIService._cached_team_props_results)
-        for stat_list in PlatformAPIService._cached_team_props_by_stat.values():
-            all_candidates.extend(stat_list)
+        all_candidates = PlatformAPIService._dedupe_props_candidates(
+            PlatformAPIService._cached_team_props_results,
+            PlatformAPIService._cached_team_props_by_stat)
 
         for p in all_candidates:
             if p.get("prop_id") == prop_id or p.get("canonical_prop_key") == prop_id:
@@ -4837,9 +6429,21 @@ class PlatformAPIService:
         return base
 
     def authenticate_user(self, username: str = "admin", password: str = "") -> Dict[str, Any]:
-        """Authenticates user credentials and returns session token envelope."""
+        """Authenticates administrator credentials and returns a session token envelope.
+
+        P1-007: arbitrary passwords are rejected with UnauthorizedError (401).
+        The password and the issued token are never logged.
+        """
+        from api.auth import create_session, verify_credentials
+
+        if not verify_credentials(username, password):
+            logger.warning("Authentication failed for user '%s'.", username)
+            from api.exceptions import UnauthorizedError
+
+            raise UnauthorizedError("Invalid username or password.")
+        token = create_session(username, role="Admin")
         return {
-            "access_token": "mock_token_" + uuid.uuid4().hex[:12],
+            "access_token": token,
             "token_type": "bearer",
             "user": {
                 "username": username,
@@ -4847,3 +6451,441 @@ class PlatformAPIService:
                 "authenticated": True,
             },
         }
+
+    _cached_global_props_results: Optional[Dict[str, Any]] = None
+
+    def scan_global_props(self, scope_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Executes a bounded global props scan across Player Props and Team Props for multiple fixtures."""
+        from scanner.global_props_scanner import (
+            GlobalPropsScanner,
+            GlobalScanScope,
+            GlobalScanBudget,
+        )
+
+        params = scope_params or {}
+        time_horizon = int(params.get("time_horizon_days") or params.get("days_ahead") or 7)
+        tournaments = params.get("tournaments")
+        if isinstance(tournaments, str) and tournaments:
+            tournaments = [t.strip() for t in tournaments.split(",") if t.strip()]
+        elif not isinstance(tournaments, list):
+            tournaments = None
+
+        props_scope = str(params.get("props_scope") or "ALL").upper()
+        stat_types = params.get("stat_types")
+        if isinstance(stat_types, str) and stat_types:
+            stat_types = [st.strip() for st in stat_types.split(",") if st.strip()]
+        elif not isinstance(stat_types, list):
+            stat_types = None
+
+        min_ev_val = params.get("min_ev_percent") if params.get("min_ev_percent") is not None else (params.get("min_ev_threshold") if params.get("min_ev_threshold") is not None else 3.0)
+        min_ev_pct = float(min_ev_val)
+        max_results = int(params.get("max_results") or params.get("limit") or 50)
+        max_fixtures = int(params.get("max_fixtures") or 30)
+        max_trends = int(params.get("max_trends_requests") or 10)
+        max_exec = int(params.get("max_execution_events") or 20)
+
+        scope = GlobalScanScope(
+            time_horizon_days=time_horizon,
+            tournaments=tournaments,
+            props_scope=props_scope,
+            stat_types=stat_types,
+            min_ev_percent=min_ev_pct,
+            max_results=max_results,
+            venue_filter=params.get("venue_filter"),
+            start_of_day=int(params["start_of_day"]) if "start_of_day" in params and params["start_of_day"] else None,
+            end_of_day=int(params["end_of_day"]) if "end_of_day" in params and params["end_of_day"] else None,
+            fixture_ids=str(params["fixture_ids"]) if "fixture_ids" in params and params["fixture_ids"] else None,
+        )
+
+        budget = GlobalScanBudget(
+            max_fixtures=max_fixtures,
+            max_trends_requests=max_trends,
+            max_execution_events=max_exec,
+            auto_paginate_statshub=bool(params.get("auto_paginate", True)),
+            max_prop_results_per_stat=int(params.get("max_prop_results_per_stat", 500)),
+        )
+
+        from normalization.base_normalizer import NormalizedGraph
+
+        recorder = None
+        session = None
+        if self.db_manager is not None:
+            try:
+                from database.repositories.player_prop_snapshot_repository import PlayerPropSnapshotRepository
+                from scanner.player_shots_snapshot_recorder import PlayerShotsSnapshotRecorder
+                session = self.db_manager.get_session()
+                repo = PlayerPropSnapshotRepository(session)
+                recorder = PlayerShotsSnapshotRecorder(repository=repo)
+            except Exception as rec_err:
+                logger.warning(f"Could not initialize PlayerShotsSnapshotRecorder for global scan: {rec_err}")
+
+        try:
+            cached_graphs = list(self._events_cache.values()) if hasattr(self, "_events_cache") and self._events_cache else []
+            scanner = GlobalPropsScanner(
+                cached_execution_events=cached_graphs if isinstance(cached_graphs, list) and cached_graphs and isinstance(cached_graphs[0], NormalizedGraph) else [],
+                snapshot_recorder=recorder,
+            )
+
+            scan_result = scanner.execute_scan(scope=scope, budget=budget)
+            res_dict = scan_result.to_dict()
+            res_dict["total_qualified_matching_filter"] = res_dict.get("qualified_count", len(scan_result.qualified_opportunities))
+            PlatformAPIService._cached_global_props_results = res_dict
+
+            trace_obj = res_dict.get("scan_trace")
+            if trace_obj:
+                target_scope = str(scope.props_scope).upper() if scope and hasattr(scope, "props_scope") else "ALL"
+                if target_scope == "TEAM":
+                    self._latest_traces["team_props"] = trace_obj
+                elif target_scope == "PLAYER":
+                    self._latest_traces["player_props"] = trace_obj
+                else:
+                    self._latest_traces["team_props"] = trace_obj
+                    self._latest_traces["player_props"] = trace_obj
+
+            return res_dict
+        finally:
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+
+    def get_global_props_results(
+        self,
+        props_scope: Optional[str] = None,
+        stat: Optional[str] = None,
+        search: Optional[str] = None,
+        min_net_ev: Optional[float] = None,
+        status: Optional[str] = None,
+        bookmaker: Optional[str] = None,
+        view_mode: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        min_odds: Optional[float] = None,
+        competition: Optional[str] = None,
+        position: Optional[str] = None,
+        threshold: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Returns cached global props scan results with optional filtering, diagnostics and pagination."""
+        cached = PlatformAPIService._cached_global_props_results
+        if not cached:
+            from scanner.global_props_scanner import GlobalScanFunnelMetrics
+            return {
+                "status": "NOT_RUN",
+                "scope": {},
+                "budget": {},
+                "funnel_metrics": GlobalScanFunnelMetrics().to_dict(),
+                "qualified_count": 0,
+                "diagnostic_count": 0,
+                "qualified_opportunities": [],
+                "diagnostic_candidates": [],
+                "items": [],
+                "all_candidates": [],
+                "total_qualified_matching_filter": 0,
+                "total_items_matching_filter": 0,
+                "limit": limit,
+                "offset": offset,
+                "duration_ms": 0.0,
+                "scanned_at": None,
+            }
+
+        qualified_raw = list(cached.get("qualified_opportunities", []))
+        diagnostic_raw = list(cached.get("diagnostic_candidates", []))
+
+        is_all_candidates_view = (view_mode or "").upper() == "ALL_CANDIDATES"
+        if is_all_candidates_view:
+            target_list = qualified_raw + diagnostic_raw
+        else:
+            target_list = qualified_raw
+
+        opportunities = list(target_list)
+
+        if props_scope and props_scope.upper() in ("PLAYER", "TEAM"):
+            opportunities = [o for o in opportunities if o.get("prop_type", "").upper() == props_scope.upper()]
+
+        if stat:
+            stat_raw = stat.strip().lower()
+            if stat_raw.startswith("player_"):
+                p_stat = stat_raw.replace("player_", "").upper()
+                opportunities = [
+                    o for o in opportunities
+                    if o.get("prop_type", "").upper() == "PLAYER"
+                    and o.get("stat_type", "").upper() == p_stat
+                ]
+            elif stat_raw.startswith("team_"):
+                t_stat = stat_raw.replace("team_", "").upper()
+                opportunities = [
+                    o for o in opportunities
+                    if o.get("prop_type", "").upper() == "TEAM"
+                    and o.get("stat_type", "").upper() == t_stat
+                ]
+            else:
+                from normalization.props_taxonomy import resolve_prop_stat
+                resolved = resolve_prop_stat(stat_raw, scope=props_scope)
+                target_stat = resolved.statshub_stat_type.upper() if resolved else stat_raw.upper()
+                opportunities = [
+                    o for o in opportunities
+                    if o.get("stat_type", "").upper() == target_stat
+                ]
+
+        if status:
+            st_clean = status.strip().upper()
+            def _status_matches(o: Dict[str, Any]) -> bool:
+                r_code = (o.get("reason_code") or "").upper()
+                o_status = (o.get("status") or "").upper()
+                o_action = (o.get("action") or "").upper()
+                if st_clean in (r_code, o_status, o_action):
+                    return True
+                if st_clean == "MATCHING_FAILURE" and (r_code in (
+                    "MATCHING_FAILURE", "MARKET_UNMATCHED", "EVENT_UNMATCHED",
+                    "PLAYER_UNMATCHED", "TEAM_UNMATCHED", "LINE_MISMATCH",
+                    "SELECTION_MISMATCH", "MATCH_UNCERTAIN"
+                ) or o_status == "MATCHING_FAILURE"):
+                    return True
+                if st_clean in ("REFERENCE_GAP", "INSUFFICIENT_REFERENCE_SOURCES") and r_code in (
+                    "REFERENCE_GAP", "INSUFFICIENT_REFERENCE_SOURCES", "STALE_REFERENCE_DATA"
+                ):
+                    return True
+                if st_clean == "POLISH_ODDS_UNAVAILABLE" and r_code in (
+                    "POLISH_ODDS_UNAVAILABLE", "ODDS_INACTIVE"
+                ):
+                    return True
+                if st_clean in ("BELOW_THRESHOLD", "BELOW_VALUE_THRESHOLD") and r_code in (
+                    "BELOW_THRESHOLD", "BELOW_VALUE_THRESHOLD"
+                ):
+                    return True
+                if st_clean == "QUALIFIED" and (r_code == "QUALIFIED" or o_status == "QUALIFIED" or o.get("is_valuebet")):
+                    return True
+                if st_clean == "INVALID_DATA" and (r_code == "INVALID_DATA" or r_code.startswith("INVALID_")):
+                    return True
+                return False
+
+            opportunities = [o for o in opportunities if _status_matches(o)]
+
+        if bookmaker:
+            bk_clean = bookmaker.strip().lower()
+            def _bookmaker_matches(o: Dict[str, Any]) -> bool:
+                if (o.get("best_bookmaker") or "").lower() == bk_clean:
+                    return True
+                if bk_clean == "superbet" and o.get("superbet_odds") is not None:
+                    return True
+                if bk_clean == "betclic" and o.get("betclic_odds") is not None:
+                    return True
+                if o.get("execution_odds") and any(bk_clean in k.lower() for k in o.get("execution_odds").keys()):
+                    return True
+                if bk_clean in ("bet365", "unibet") and o.get("reference_odds"):
+                    return any(bk_clean in str(ro.get("bookmaker", "")).lower() for ro in o.get("reference_odds", []))
+                return False
+            opportunities = [o for o in opportunities if _bookmaker_matches(o)]
+
+        if search:
+            s_clean = search.strip().lower()
+            def _search_matches(o: Dict[str, Any]) -> bool:
+                fields = [
+                    str(o.get("player_name") or ""),
+                    str(o.get("team") or ""),
+                    str(o.get("opponent") or ""),
+                    str(o.get("match_name") or ""),
+                    str(o.get("stat_type") or ""),
+                    str(o.get("competition") or ""),
+                    f"{o.get('side', '')} {o.get('line', '')}",
+                ]
+                return any(s_clean in f.lower() for f in fields)
+            opportunities = [o for o in opportunities if _search_matches(o)]
+
+        if min_net_ev is not None:
+            if not is_all_candidates_view:
+                opportunities = [o for o in opportunities if o.get("net_ev_pct") is not None and o.get("net_ev_pct") >= min_net_ev]
+            elif min_net_ev != 3.0:
+                opportunities = [o for o in opportunities if o.get("net_ev_pct") is not None and o.get("net_ev_pct") >= min_net_ev]
+
+        if min_odds is not None:
+            def _has_min_odds(o: Dict[str, Any]) -> bool:
+                if bookmaker:
+                    bk_low = bookmaker.strip().lower()
+                    if bk_low == "superbet" and o.get("superbet_odds") is not None:
+                        return float(o["superbet_odds"]) >= min_odds
+                    if bk_low == "betclic" and o.get("betclic_odds") is not None:
+                        return float(o["betclic_odds"]) >= min_odds
+                    exec_odds = o.get("execution_odds", {})
+                    for k, v in exec_odds.items():
+                        if bk_low in k.lower() and isinstance(v, dict) and v.get("decimal_odds"):
+                            return float(v["decimal_odds"]) >= min_odds
+                if o.get("best_raw_odds") is not None and float(o["best_raw_odds"]) >= min_odds:
+                    return True
+                if o.get("superbet_odds") is not None and float(o["superbet_odds"]) >= min_odds:
+                    return True
+                if o.get("betclic_odds") is not None and float(o["betclic_odds"]) >= min_odds:
+                    return True
+                return False
+            opportunities = [o for o in opportunities if _has_min_odds(o)]
+
+        if competition:
+            c_clean = competition.strip().lower()
+            opportunities = [o for o in opportunities if c_clean in (o.get("competition") or "").lower()]
+
+        KNOWN_PLAYER_POSITIONS = {
+            # Defenders
+            "achraf hakimi": "D", "denzel dumfries": "D", "diego llorente": "D",
+            "jonathan clauss": "D", "lucas digne": "D", "matthieu udol": "D",
+            "vanderson": "D",
+            # Midfielders
+            "aitor ruibal": "M", "andrija bulatovic": "M", "arda guler": "M",
+            "bandiougou fadiga": "M", "billal brahimi": "M", "desire doue": "M",
+            "edan diop": "M", "eduardo camavinga": "M", "federico valverde": "M",
+            "florian thauvin": "M", "gauthier hein": "M", "ilan kebbal": "M",
+            "isco": "M", "jude bellingham": "M", "michael cuisance": "M",
+            # Forwards
+            "abdallah sima": "F", "abdessamad ezzalzouli": "F", "ansu fati": "F",
+            "antony": "F", "carlos espi": "F", "cucho hernandez": "F",
+            "dame gueye": "F", "endrick": "F", "ferran torres": "F",
+            "florian sotoca": "F", "folarin balogun": "F", "franjo ivanovic": "F",
+            "ibrahima balde": "F", "khvicha kvaratskhelia": "F", "kylian mbappe": "F",
+            "louis mafouta": "F", "matthis abline": "F", "mika godts": "F",
+            "nathan n'goumou": "F", "odsonne edouard": "F", "ousmane dembele": "F",
+            "paris brunner": "F", "souleymane faye": "F", "takumi minamino": "F",
+            "troy parrott": "F", "vinicius junior": "F", "robert lewandowski": "F",
+            "erling haaland": "F", "bukayo saka": "F", "mohamed salah": "F",
+        }
+
+        # Position / Role filtering
+        if position:
+            p_clean = position.strip().upper()
+            if p_clean in ("D,M,F", "ALL", ""):
+                pass  # All positions / roles
+            elif p_clean in ("HOME", "AWAY"):
+                # Team props (or participant role)
+                opportunities = [
+                    o for o in opportunities
+                    if (o.get("participant_role") or "").upper() == p_clean
+                ]
+            else:
+                # Player positions: F, M, D (with canonical normalization)
+                pos_target = p_clean
+                if pos_target in ("FW", "FORWARD", "FORWARDS", "ATTACKER"):
+                    pos_target = "F"
+                elif pos_target in ("MF", "MIDFIELDER", "MIDFIELDERS"):
+                    pos_target = "M"
+                elif pos_target in ("DF", "DEFENDER", "DEFENDERS"):
+                    pos_target = "D"
+
+                def _player_pos_matches(o: Dict[str, Any]) -> bool:
+                    if (o.get("prop_type") or "").upper() == "TEAM":
+                        return False
+                    cand_pos = (
+                        o.get("position")
+                        or (o.get("provenance") or {}).get("position")
+                        or (o.get("provenance") or {}).get("position_role")
+                        or ""
+                    ).strip().upper()
+
+                    if not cand_pos and o.get("player_name"):
+                        clean_name = o["player_name"].lower().strip()
+                        import unicodedata
+                        norm_name = "".join(c for c in unicodedata.normalize("NFD", clean_name) if unicodedata.category(c) != "Mn")
+                        cand_pos = KNOWN_PLAYER_POSITIONS.get(clean_name) or KNOWN_PLAYER_POSITIONS.get(norm_name) or ""
+
+                    if cand_pos in ("FW", "FORWARD", "FORWARDS", "ATTACKER"):
+                        cand_pos = "F"
+                    elif cand_pos in ("MF", "MIDFIELDER", "MIDFIELDERS"):
+                        cand_pos = "M"
+                    elif cand_pos in ("DF", "DEFENDER", "DEFENDERS"):
+                        cand_pos = "D"
+
+                    return cand_pos == pos_target
+
+                opportunities = [o for o in opportunities if _player_pos_matches(o)]
+
+        # Stat Line / Threshold filtering (exact line match with float tolerance)
+        if threshold is not None:
+            try:
+                t_val = float(threshold)
+                if t_val > 0 or t_val == 0.5:
+                    opportunities = [
+                        o for o in opportunities
+                        if o.get("line") is not None and abs(float(o["line"]) - t_val) < 0.05
+                    ]
+            except (ValueError, TypeError):
+                pass
+
+        # Sorting
+        sort_key_mode = (sort_by or "net_ev").lower()
+        if sort_key_mode == "hit_rate":
+            opportunities.sort(key=lambda x: (x.get("hit_rate_pct") is not None, x.get("hit_rate_pct") or 0.0), reverse=True)
+        elif sort_key_mode == "sample_size":
+            opportunities.sort(key=lambda x: (x.get("trend_window") is not None, x.get("trend_window") or x.get("sample_size") or 0), reverse=True)
+        elif sort_key_mode == "gross_ev":
+            opportunities.sort(key=lambda x: (x.get("gross_ev_pct") is not None, x.get("gross_ev_pct") or -999.0), reverse=True)
+        elif sort_key_mode == "odds":
+            opportunities.sort(key=lambda x: (x.get("best_raw_odds") is not None, x.get("best_raw_odds") or 0.0), reverse=True)
+        elif sort_key_mode == "name":
+            opportunities.sort(key=lambda x: str(x.get("player_name") or x.get("team") or ""))
+        else:  # "net_ev"
+            opportunities.sort(key=lambda x: (x.get("net_ev_pct") is not None, x.get("net_ev_pct") or -999.0), reverse=True)
+
+        total = len(opportunities)
+        paginated = opportunities[offset:offset + limit]
+
+        # Ensure candidate position is populated for frontend display
+        for o in paginated:
+            if o.get("prop_type") != "TEAM" and not o.get("position") and o.get("player_name"):
+                clean_name = o["player_name"].lower().strip()
+                import unicodedata
+                norm_name = "".join(c for c in unicodedata.normalize("NFD", clean_name) if unicodedata.category(c) != "Mn")
+                resolved = KNOWN_PLAYER_POSITIONS.get(clean_name) or KNOWN_PLAYER_POSITIONS.get(norm_name)
+                if resolved:
+                    o["position"] = resolved
+
+        res = dict(cached)
+        res["items"] = paginated
+        res["all_candidates"] = qualified_raw + diagnostic_raw
+        if is_all_candidates_view:
+            res["qualified_opportunities"] = qualified_raw
+            res["total_qualified_matching_filter"] = len([o for o in qualified_raw if o.get("is_valuebet") or o.get("status") == "QUALIFIED"])
+        else:
+            res["qualified_opportunities"] = paginated
+            res["total_qualified_matching_filter"] = total
+        res["diagnostic_candidates"] = diagnostic_raw
+        res["total_items_matching_filter"] = total
+        res["limit"] = limit
+        res["offset"] = offset
+        res["view_mode"] = view_mode or ("ALL_CANDIDATES" if is_all_candidates_view else "TOP_VALUE")
+        return res
+
+    def run_player_shots_settlement(self, now: Optional[datetime] = None) -> Dict[str, Any]:
+        """Triggers a single cycle of Player Shots post-match settlement."""
+        if self.db_manager is None:
+            return {"status": "SKIPPED", "reason": "No database manager configured"}
+        try:
+            from database.repositories.player_prop_snapshot_repository import PlayerPropSnapshotRepository
+            from scanner.player_shots_settlement_runner import PlayerShotsSettlementRunner
+            with self.db_manager.get_session() as session:
+                repo = PlayerPropSnapshotRepository(session)
+                runner = PlayerShotsSettlementRunner(repository=repo)
+                summary = runner.run(now=now)
+                if summary.settled_count > 0:
+                    session.commit()
+                return {
+                    "status": "COMPLETED",
+                    "total_pending": summary.total_pending,
+                    "eligible": summary.eligible_count,
+                    "settled": summary.settled_count,
+                    "unresolved": summary.unresolved_count,
+                    "skipped_future": summary.skipped_future_count,
+                }
+        except Exception as e:
+            logger.error(f"Player shots settlement failed in service: {e}")
+            return {"status": "ERROR", "error": str(e)}
+
+    def get_props_taxonomy(self) -> Dict[str, Any]:
+        """Returns authoritative props taxonomy metadata including optgroups for UI/API."""
+        from normalization.props_taxonomy import get_ui_props_taxonomy
+        return get_ui_props_taxonomy()
+
+    def get_props_coverage(self) -> Dict[str, Any]:
+        """Returns 10-stage Props coverage matrix across all target categories."""
+        from normalization.props_taxonomy import get_props_coverage_matrix
+        return get_props_coverage_matrix()
+
+

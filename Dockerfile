@@ -23,7 +23,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app
 
 RUN groupadd -g 10001 appuser && \
-    useradd -u 10000 -g appuser -s /bin/sh appuser
+    useradd -u 10000 -g appuser -s /bin/sh appuser && \
+    chown -R appuser:appuser /app
 
 COPY --from=builder /root/.local /home/appuser/.local
 ENV PATH=/home/appuser/.local/bin:$PATH
@@ -36,7 +37,9 @@ COPY --chown=appuser:appuser normalization /app/normalization
 COPY --chown=appuser:appuser notifications /app/notifications
 COPY --chown=appuser:appuser orchestration /app/orchestration
 COPY --chown=appuser:appuser providers /app/providers
+COPY --chown=appuser:appuser reference_odds /app/reference_odds
 COPY --chown=appuser:appuser scanner /app/scanner
+COPY --chown=appuser:appuser valuebets /app/valuebets
 COPY --chown=appuser:appuser web /app/web
 
 USER appuser

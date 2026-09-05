@@ -21,6 +21,11 @@ from normalization.identity import (
     parse_kickoff_to_utc,
     compare_teams,
     AliasResolver,
+    TeamIdentityResolver,
+    TeamResolutionResult,
+    get_team_resolver,
+    are_kickoffs_compatible,
+    get_warsaw_tz,
 )
 from normalization.candidate_generator import (
     EventCandidate,
@@ -176,6 +181,11 @@ __all__ = [
     "parse_kickoff_to_utc",
     "compare_teams",
     "AliasResolver",
+    "TeamIdentityResolver",
+    "TeamResolutionResult",
+    "get_team_resolver",
+    "are_kickoffs_compatible",
+    "get_warsaw_tz",
     "EventCandidate",
     "CandidateGenerationResult",
     "EventCandidateGenerator",

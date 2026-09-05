@@ -169,6 +169,16 @@ class SelectionMatcher:
         else:
             evidence["score_outcome"] = "exact" if key_source.score_outcome else "not_applicable"
 
+        # Participant / Player Canonical ID
+        s_part_id = getattr(key_source, "canonical_participant_id", None)
+        t_part_id = getattr(key_target, "canonical_participant_id", None)
+        if s_part_id and t_part_id:
+            if s_part_id != t_part_id:
+                reasons.append("PARTICIPANT_MISMATCH")
+                evidence["canonical_participant_id"] = f"mismatch ({s_part_id} vs {t_part_id})"
+            else:
+                evidence["canonical_participant_id"] = "exact"
+
         if reasons:
             return SelectionMatchDecision(
                 decision=SelectionMatchDecisionType.REJECTED,

@@ -427,14 +427,14 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         ),
     ),
 
-    # ─── TIER 2: SECONDARY LEAGUES & DOMESTIC CUPS ───────────────────────────
+    # ─── TIER 1: SECONDARY LEAGUES & DOMESTIC CUPS ───────────────────────────
     # England 2nd (Championship)
     CanonicalCompetitionDefinition(
         canonical_id="comp_eng_championship",
         canonical_name="Championship",
         country="England",
         competition_type="LEAGUE",
-        tier=2,
+        tier=1,
         aliases=(
             "championship", "efl championship", "anglia 2", "anglia championship",
             "anglia 2 liga", "anglia 2. liga", "england championship",
@@ -443,6 +443,18 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
             r"\bchampionship\b",
             r"\banglia\s+(?:2|championship)\b",
         ),
+        betclic_competition_ids=("2",),
+        known_teams=(
+            "leeds", "leeds united", "burnley", "sheffield united", "sheffield utd",
+            "luton", "luton town", "middlesbrough", "west brom", "west bromwich",
+            "west bromwich albion", "norwich", "norwich city", "coventry", "coventry city",
+            "sunderland", "watford", "bristol city", "swansea", "swansea city",
+            "blackburn", "blackburn rovers", "millwall", "stoke", "stoke city",
+            "qpr", "queens park rangers", "portsmouth", "derby", "derby county",
+            "sheffield wednesday", "sheff wed", "plymouth", "plymouth argyle",
+            "hull", "hull city", "preston", "preston north end", "cardiff", "cardiff city",
+            "oxford united", "oxford utd",
+        ),
     ),
     # Spain 2nd (LaLiga 2)
     CanonicalCompetitionDefinition(
@@ -450,7 +462,7 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         canonical_name="LaLiga 2",
         country="Spain",
         competition_type="LEAGUE",
-        tier=2,
+        tier=1,
         aliases=(
             "laliga 2", "la liga 2", "segunda division", "laliga hypermotion",
             "hiszpania 2", "hiszpania laliga 2", "hiszpania 2 liga", "hiszpania 2. liga",
@@ -460,6 +472,13 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
             r"\bsegunda\s+division\b",
             r"\bhypermotion\b",
         ),
+        betclic_competition_ids=("28",),
+        known_teams=(
+            "zaragoza", "real zaragoza", "sporting gijon", "oviedo", "real oviedo",
+            "racing santander", "levante", "elche", "eibar", "cadiz", "almeria",
+            "granada", "malaga", "tenerife", "huesca", "burgos", "albacete",
+            "cartagena", "cordoba", "castellon", "ferrol", "mirandes", "eldense",
+        ),
     ),
     # Italy 2nd (Serie B)
     CanonicalCompetitionDefinition(
@@ -467,7 +486,7 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         canonical_name="Serie B",
         country="Italy",
         competition_type="LEAGUE",
-        tier=2,
+        tier=1,
         aliases=(
             "serie b", "wlochy 2", "wlochy serie b", "wlochy 2 liga", "wlochy 2. liga",
             "italy serie b",
@@ -476,6 +495,12 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
             r"\bserie\s+b\b",
             r"\bwlochy\s+(?:2|serie\s+b)\b",
         ),
+        betclic_competition_ids=("29",),
+        known_teams=(
+            "palermo", "sassuolo", "sampdoria", "salernitana", "frosinone", "cremonese",
+            "spezia", "bari", "pisa", "cesena", "catanzaro", "brescia", "modena",
+            "reggiana", "mantova", "sudtirol", "carrarese", "cittadella", "cosenza", "juve stabia",
+        ),
     ),
     # Germany 2nd (2. Bundesliga)
     CanonicalCompetitionDefinition(
@@ -483,7 +508,7 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         canonical_name="2. Bundesliga",
         country="Germany",
         competition_type="LEAGUE",
-        tier=2,
+        tier=1,
         aliases=(
             "2 bundesliga", "2. bundesliga", "niemcy 2", "niemcy 2 bundesliga",
             "niemcy 2 liga", "niemcy 2. liga", "germany 2 bundesliga",
@@ -492,6 +517,14 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
             r"\b2\.?\s*bundesliga\b",
             r"\bniemcy\s+(?:2|2\.?\s*bundesliga)\b",
         ),
+        betclic_competition_ids=("25",),
+        known_teams=(
+            "koln", "1 fc koln", "darmstadt", "hamburg", "hamburger sv", "schalke",
+            "schalke 04", "hertha", "hertha bsc", "hannover", "hannover 96",
+            "fortuna dusseldorf", "dusseldorf", "paderborn", "karlsruher", "nuernberg",
+            "nurnberg", "kaiserslautern", "greuther furth", "magdeburg", "elversberg",
+            "braunschweig", "preussen munster", "regensburg", "ulm",
+        ),
     ),
     # France 2nd (Ligue 2)
     CanonicalCompetitionDefinition(
@@ -499,7 +532,7 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         canonical_name="Ligue 2",
         country="France",
         competition_type="LEAGUE",
-        tier=2,
+        tier=1,
         aliases=(
             "ligue 2", "francja 2", "francja ligue 2", "francja 2 liga", "francja 2. liga",
             "france ligue 2",
@@ -508,6 +541,12 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
             r"\bligue\s+2\b",
             r"\bfrancja\s+(?:2|ligue\s+2)\b",
         ),
+        betclic_competition_ids=("19",),
+        known_teams=(
+            "metz", "lorient", "clermont", "paris fc", "guingamp", "dunkerque",
+            "laval", "annecy", "bastia", "grenoble", "amiens", "pau", "rodez",
+            "ajaccio", "caen", "red star", "martigues", "troyes",
+        ),
     ),
     # Poland 2nd (1. Liga)
     CanonicalCompetitionDefinition(
@@ -515,7 +554,7 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         canonical_name="1. Liga",
         country="Poland",
         competition_type="LEAGUE",
-        tier=2,
+        tier=1,
         aliases=(
             "1 liga", "1. liga", "polska 1 liga", "polska 1. liga", "betclic 1 liga",
             "betclic 1. liga", "polska 2", "poland 1 liga",
@@ -525,6 +564,12 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
             r"\bpolska\s+1\.?\s*liga\b",
         ),
         betclic_competition_ids=("32",),
+        known_teams=(
+            "wisla krakow", "arka gdynia", "ruch chorzow", "lks lodz", "warta poznan",
+            "termalica", "bruk-bet termalica", "miedz legnica", "polonia warszawa",
+            "gks tychy", "stal rzeszow", "wisla plock", "znicz pruszkow", "odra opole",
+            "gornik leczna", "stal stalowa wola", "chrobry glogow", "kotwica kolobrzeg", "pogon siedlce",
+        ),
     ),
     # Cups
     CanonicalCompetitionDefinition(
@@ -532,15 +577,16 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         canonical_name="FA Cup",
         country="England",
         competition_type="DOMESTIC_CUP",
-        tier=2,
+        tier=1,
         aliases=("fa cup", "puchar anglii", "the fa cup", "the emirates fa cup"),
+        betclic_competition_ids=("15",),
     ),
     CanonicalCompetitionDefinition(
         canonical_id="comp_eng_efl_cup",
         canonical_name="EFL Cup",
         country="England",
         competition_type="DOMESTIC_CUP",
-        tier=2,
+        tier=1,
         aliases=("efl cup", "carabao cup", "puchar ligi angielskiej"),
     ),
     CanonicalCompetitionDefinition(
@@ -548,31 +594,34 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         canonical_name="Copa del Rey",
         country="Spain",
         competition_type="DOMESTIC_CUP",
-        tier=2,
+        tier=1,
         aliases=("copa del rey", "puchar krola", "puchar hiszpanii"),
+        betclic_competition_ids=("14",),
     ),
     CanonicalCompetitionDefinition(
         canonical_id="comp_ita_coppa_italia",
         canonical_name="Coppa Italia",
         country="Italy",
         competition_type="DOMESTIC_CUP",
-        tier=2,
+        tier=1,
         aliases=("coppa italia", "puchar wloch"),
+        betclic_competition_ids=("13",),
     ),
     CanonicalCompetitionDefinition(
         canonical_id="comp_ger_dfb_pokal",
         canonical_name="DFB-Pokal",
         country="Germany",
         competition_type="DOMESTIC_CUP",
-        tier=2,
+        tier=1,
         aliases=("dfb pokal", "dfb-pokal", "puchar niemiec"),
+        betclic_competition_ids=("16",),
     ),
     CanonicalCompetitionDefinition(
         canonical_id="comp_fra_coupe_de_france",
         canonical_name="Coupe de France",
         country="France",
         competition_type="DOMESTIC_CUP",
-        tier=2,
+        tier=1,
         aliases=("coupe de france", "puchar francji"),
     ),
     CanonicalCompetitionDefinition(
@@ -580,7 +629,7 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
         canonical_name="Puchar Polski",
         country="Poland",
         competition_type="DOMESTIC_CUP",
-        tier=2,
+        tier=1,
         aliases=("puchar polski", "polish cup", "poland cup"),
         betclic_competition_ids=("33",),
     ),
@@ -825,9 +874,13 @@ class CanonicalCompetitionRegistry:
 
         # Case 1: Both teams uniquely belong to the SAME league definition
         if comps_h and comps_a:
-            common = [c for c in comps_h if c in comps_a and c.competition_type == "LEAGUE"]
-            if len(common) == 1:
-                return common[0]
+            common_dict = {
+                c.canonical_id: c
+                for c in comps_h
+                if any(ca.canonical_id == c.canonical_id for ca in comps_a) and c.competition_type == "LEAGUE"
+            }
+            if len(common_dict) == 1:
+                return next(iter(common_dict.values()))
 
         # Case 2: One known domestic team vs another team from the same country or explicit context
         # (e.g. if home is 'rakow czestochowa' and away is 'puszcza niepolomice')
@@ -847,11 +900,12 @@ class CanonicalCompetitionRegistry:
     def _match_team_to_comps(self, clean_team_name: str) -> List[CanonicalCompetitionDefinition]:
         if not clean_team_name:
             return []
-        matched = []
+        matched_dict = {}
         for team_key, defn_list in self._team_to_comp.items():
             if team_key == clean_team_name or f" {team_key} " in f" {clean_team_name} ":
-                matched.extend(defn_list)
-        return matched
+                for defn in defn_list:
+                    matched_dict[defn.canonical_id] = defn
+        return list(matched_dict.values())
 
 
 # Global singleton instance

@@ -18,9 +18,13 @@ Key Architectural Invariants:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Dict, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
+
+
+logger = logging.getLogger("zielonebety.tax_engine")
 
 
 DECIMAL_ZERO = Decimal("0")
@@ -73,16 +77,35 @@ class TaxEngine:
             "pinnacle": BookmakerTaxConfig(tax_enabled=False, is_reference_only=True),
             "the_odds_api": BookmakerTaxConfig(tax_enabled=False, is_reference_only=True),
         }
+        # P2: bookmakers already warned about (unknown-tax assumption is loud, once each).
+        self._warned_unknown_bookmakers: set = set()
         if custom_configs:
             for bm, cfg in custom_configs.items():
                 self._configs[bm.lower().strip()] = cfg
 
     def get_config(self, bookmaker: Optional[str]) -> BookmakerTaxConfig:
-        """Returns tax configuration for a bookmaker."""
+        """Returns tax configuration for a bookmaker.
+
+        P2: unknown bookmakers conservatively default to NO tax (previous
+        behavior preserved), but the assumption is now LOUD — a warning is
+        emitted once per bookmaker so a new taxed execution bookmaker can
+        never silently pass as tax-free.
+        """
         if not bookmaker:
             return BookmakerTaxConfig(tax_enabled=False)
         bm_clean = str(bookmaker).lower().strip()
-        return self._configs.get(bm_clean, BookmakerTaxConfig(tax_enabled=False))
+        cfg = self._configs.get(bm_clean)
+        if cfg is None:
+            if bm_clean not in self._warned_unknown_bookmakers:
+                self._warned_unknown_bookmakers.add(bm_clean)
+                logger.warning(
+                    "TaxEngine: no tax configuration for bookmaker '%s'; "
+                    "assuming 0%% tax. Register an explicit BookmakerTaxConfig "
+                    "if this bookmaker withholds tax.",
+                    bm_clean,
+                )
+            return BookmakerTaxConfig(tax_enabled=False)
+        return cfg
 
     def update_config(
         self,

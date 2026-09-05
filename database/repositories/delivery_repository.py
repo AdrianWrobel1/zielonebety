@@ -4,6 +4,7 @@ Delivery Repository Implementation for Persistent Notification Delivery & Retry 
 
 from typing import List, Optional
 from datetime import datetime, timezone
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from database.repositories.base_repository import BaseRepository
 from database.models import DeliveryRecordORM
@@ -24,12 +25,23 @@ class DeliveryRepository(BaseRepository[DeliveryRecordORM]):
         )
 
     def save_or_update(self, record: DeliveryRecordORM) -> DeliveryRecordORM:
-        """Persists a new delivery record or updates an existing record."""
+        """Persists a new delivery record or updates an existing record.
+
+        P1-NEW-008: same IntegrityError recovery as OpportunityRepository —
+        rollback, re-read the winning row by idempotency key, apply as update.
+        """
         existing = self.get_by_idempotency_key(record.idempotency_key)
         if not existing:
             self.session.add(record)
-            self.session.flush()
-            return record
+            try:
+                self.session.flush()
+            except IntegrityError:
+                self.session.rollback()
+                existing = self.get_by_idempotency_key(record.idempotency_key)
+                if existing is None:
+                    raise
+            else:
+                return record
 
         existing.state = record.state
         existing.attempt_count = record.attempt_count

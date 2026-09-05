@@ -3,7 +3,7 @@ Database Connection Engine & Session Management
 """
 
 from typing import Generator, Optional
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import sessionmaker, Session
 from database.config import DatabaseConfig
 from database.models import BaseORM
@@ -26,6 +26,21 @@ class DatabaseManager:
                 echo=self.config.echo,
                 connect_args=connect_args,
             )
+
+            if self.config.db_url.startswith("sqlite"):
+                @event.listens_for(self.engine, "connect")
+                def _set_sqlite_pragma(dbapi_connection, connection_record):
+                    cursor = dbapi_connection.cursor()
+                    try:
+                        if ":memory:" not in self.config.db_url:
+                            cursor.execute("PRAGMA journal_mode=WAL;")
+                        cursor.execute("PRAGMA busy_timeout=15000;")
+                        cursor.execute("PRAGMA synchronous=NORMAL;")
+                    except Exception:
+                        pass
+                    finally:
+                        cursor.close()
+
             self.session_factory = sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False)
         except Exception as e:
             raise ConnectionError(f"Failed to create database engine: {e}") from e

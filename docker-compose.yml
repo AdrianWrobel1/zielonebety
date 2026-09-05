@@ -8,11 +8,14 @@ services:
     environment:
       - ENVIRONMENT=production
       - LOG_LEVEL=INFO
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DB=zielonebety
       - POSTGRES_USER=zielonebety_user
-      - POSTGRES_PASSWORD=secure_production_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     ports:
       - "8000:8000"
     depends_on:
@@ -31,7 +34,7 @@ services:
     environment:
       POSTGRES_DB: zielonebety
       POSTGRES_USER: zielonebety_user
-      POSTGRES_PASSWORD: secure_production_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5433:5432"
     volumes:

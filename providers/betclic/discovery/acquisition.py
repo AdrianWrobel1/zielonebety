@@ -89,9 +89,13 @@ class BetclicDiscoveryAcquisition:
         })
 
         workers = getattr(self.config, "discovery_workers", 4) or 4
+        from orchestration.profiler import get_current_scan_profiler, set_current_scan_profiler
+        parent_profiler = get_current_scan_profiler()
 
         def _fetch_single_page(url_item: str) -> Optional[str]:
             nonlocal access_denied_exc
+            if parent_profiler:
+                set_current_scan_profiler(parent_profiler, set_global=False)
             if access_denied_event.is_set():
                 return None
 

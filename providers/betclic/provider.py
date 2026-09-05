@@ -84,6 +84,8 @@ class BetclicProvider(BaseProvider):
         self._raw_discovery_payload: Optional[List[Dict[str, Any]]] = None
         self._mock_fetch_provider = None
         self._discovered_items_cache: Optional[List[Any]] = None
+        self._discovery_cache_hits: int = 0
+        self._parsed_events_count: int = 0
 
         # Provider-level acquisition metrics
         self.acquisition_metrics: Dict[str, Any] = {
@@ -123,11 +125,13 @@ class BetclicProvider(BaseProvider):
 
     def discover(self) -> List[Any]:
         """Discover available Betclic football events."""
-        if self._discovered_items_cache is not None:
-            return self._discovered_items_cache
+        cached = self.get_discovered_items()
+        if cached is not None:
+            self._discovery_cache_hits += 1
+            return cached
         self.context.logger.info("Betclic discovery started")
         discovered = self.discovery.discover_events(self._raw_discovery_payload)
-        self._discovered_items_cache = discovered
+        self.set_discovered_items(discovered)
         self.acquisition_metrics["events_discovered"] = len(discovered)
         self.acquisition_metrics.update({
             "discovery_method": self.discovery.stats.get("acquisition_method"),
@@ -152,6 +156,7 @@ class BetclicProvider(BaseProvider):
         """Transform raw responses into BetclicEvent models."""
         self.context.logger.info(f"Betclic parsing {len(raw_data)} raw payloads")
         parsed_events = self.parser.parse_payloads(raw_data)
+        self._parsed_events_count = len(parsed_events)
 
         # Update market and selection counts
         total_mkts = sum(len(ev.markets) for ev in parsed_events)
@@ -166,6 +171,7 @@ class BetclicProvider(BaseProvider):
         self.acquisition_metrics["markets_acquired"] = total_mkts
         self.acquisition_metrics["selections_acquired"] = total_sels
         self.acquisition_metrics["valid_odds_acquired"] = valid_odds
+        self.acquisition_metrics["events_parsed"] = len(parsed_events)
 
         self.context.logger.info(f"Betclic parsed {len(parsed_events)} event models ({total_mkts} markets, {total_sels} selections)")
         return parsed_events
@@ -176,3 +182,13 @@ class BetclicProvider(BaseProvider):
         report = self.validator.validate_events(parsed_data)
         self.context.logger.info(f"Betclic validation finished: valid={report.valid_objects}, invalid={report.invalid_objects}")
         return report
+
+    def get_accounting(self):
+        """Constructs an authoritative Acquisition 2.0 accounting record for Betclic."""
+        return self.fetcher.get_accounting(
+            discovery_stats=getattr(self.discovery, "stats", {}),
+            discovery_cache_hits=self._discovery_cache_hits,
+            parsed_events_count=self._parsed_events_count,
+            markets_acquired=self.acquisition_metrics.get("markets_acquired", 0),
+            selections_acquired=self.acquisition_metrics.get("selections_acquired", 0),
+        )

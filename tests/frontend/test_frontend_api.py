@@ -2,6 +2,7 @@
 Unit & Integration Tests for Stage 10 Frontend API Endpoints
 """
 
+import os
 import unittest
 from api.app import create_api_app
 from api.services import PlatformAPIService
@@ -11,6 +12,9 @@ class TestFrontendAPIEndpoints(unittest.TestCase):
     """Test suite ensuring REST API endpoints serving Frontend UI meet contract standards."""
 
     def setUp(self):
+        self._prev_admin_password = os.environ.get("ADMIN_PASSWORD")
+        os.environ["ADMIN_USERNAME"] = "admin"
+        os.environ["ADMIN_PASSWORD"] = "test-frontend-admin-password"
         PlatformAPIService._user_settings = {
             "theme": "dark",
             "language": "en",
@@ -34,6 +38,10 @@ class TestFrontendAPIEndpoints(unittest.TestCase):
     def tearDown(self):
         self.service.scheduler.stop()
         self.db_manager.dispose()
+        if self._prev_admin_password is None:
+            os.environ.pop("ADMIN_PASSWORD", None)
+        else:
+            os.environ["ADMIN_PASSWORD"] = self._prev_admin_password
 
     def test_health_endpoint(self):
         response = self.router.handle_get_health()
@@ -156,10 +164,15 @@ class TestFrontendAPIEndpoints(unittest.TestCase):
         self.assertEqual(update_res.data["min_surebet_roi"], 2.5)
 
     def test_auth_login_endpoint(self):
-        response = self.router.handle_post_auth_login(username="admin", password="password123")
+        response = self.router.handle_post_auth_login(username="admin", password="test-frontend-admin-password")
         self.assertEqual(response.status_code, 200)
         self.assertIn("access_token", response.data)
         self.assertEqual(response.data["user"]["username"], "admin")
+
+    def test_auth_login_endpoint_rejects_wrong_password(self):
+        response = self.router.handle_post_auth_login(username="admin", password="password123")
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn("access_token", response.data or {})
 
 
 if __name__ == "__main__":

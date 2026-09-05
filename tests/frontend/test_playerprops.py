@@ -98,7 +98,46 @@ class TestPlayerPropsFrontendStructure(unittest.TestCase):
         self.assertIn('document.getElementById(\'props-filter-stat\')', content)
         self.assertIn('handlePropsScan()', content)
 
+    def test_decision_ux_drawer_presentation_and_tax_contract(self):
+        """Validates targeted Decision UX contracts: negative EV formatting, foreign odds mapping, and Polish tax."""
+        with open(self.app_js_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Dynamic EV pill styling & no duplicate +- signs
+        self.assertIn("hasNetEv ? (isHighEv ? 'high-ev' : (isPositiveEv ? '' : 'negative-ev'))", content)
+        self.assertIn("numNetEv >= 0 ? `+${netEvVal}% Net EV` : `${netEvVal}% Net EV`", content)
+
+        # Foreign reference odds mapping from o.odds
+        self.assertIn("(o.odds !== undefined && o.odds !== null) ? o.odds : o.decimal_odds", content)
+
+        # Polish Superbet effective odds formula applies 12% turnover tax
+        self.assertIn("isSuperbet ? 0.12 : 0.0", content)
+
+        # Drawer consumes backend TaxEngine best_effective_odds as single source of truth
+        self.assertIn("isBest && item.best_effective_odds !== undefined", content)
+
+        # 1-click diagnostic jump from QUALIFIED = 0 empty state
+        self.assertIn('btn-empty-jump-diagnostics', content)
+
+    def test_ranking_ordinal_display_and_opportunity_comprehension(self):
+        """Validates ranking ordinal display in table and data quality/market comprehension in drawer."""
+        with open(self.app_js_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Row displays ordinal ranking index (#1, #2, etc.)
+        self.assertIn('#${rankNum}', content)
+
+        # Meta line displays active sort criterion
+        self.assertIn('Ranking sorted by', content)
+
+        # Drawer displays data confidence badge for data quality comprehension
+        self.assertIn('CONFIDENCE', content)
+
+        # Drawer header explicitly displays market & line badge for WHAT comprehension
+        self.assertIn('${marketName}', content)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

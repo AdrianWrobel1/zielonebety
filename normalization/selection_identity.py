@@ -131,6 +131,7 @@ class CanonicalSelectionKey:
     participant_role: Optional[str] = None
     selection_line: Optional[Decimal] = None
     score_outcome: Optional[str] = None
+    canonical_participant_id: Optional[str] = None
 
     def __post_init__(self):
         if self.selection_line is not None and not isinstance(self.selection_line, Decimal):
@@ -327,12 +328,13 @@ def extract_canonical_selection_key(
                 market_key=market_key,
                 selection_type=mapped,
             )
-        if raw_sel_type.startswith(("OVER", "POWYŻEJ", "POWYZEJ", "+")):
+        # Threshold player props (Over / Under)
+        if any(k in raw_sel_type for k in ("OVER", "POWYŻEJ", "POWYZEJ", "+")):
             return CanonicalSelectionKey(
                 market_key=market_key,
                 selection_type=CanonicalSelectionType.OVER.value,
             )
-        if raw_sel_type.startswith(("UNDER", "PONIŻEJ", "PONIZEJ", "-")):
+        if any(k in raw_sel_type for k in ("UNDER", "PONIŻEJ", "PONIZEJ", "-")):
             return CanonicalSelectionKey(
                 market_key=market_key,
                 selection_type=CanonicalSelectionType.UNDER.value,
@@ -347,13 +349,18 @@ def extract_canonical_selection_key(
                 market_key=market_key,
                 selection_type=CanonicalSelectionType.NO.value,
             )
-        from normalization.market_identity import normalize_player_name
-        norm_sel_p = normalize_player_name(selection.participant or raw_sel_type)
-        if norm_sel_p and market_key.player_name and norm_sel_p == market_key.player_name:
-            return CanonicalSelectionKey(
-                market_key=market_key,
-                selection_type=CanonicalSelectionType.YES.value,
-            )
+        if mkt_family in (
+            CanonicalMarketType.PLAYER_GOALS.value,
+            CanonicalMarketType.PLAYER_CARDS.value,
+            CanonicalMarketType.PLAYER_ASSISTS.value,
+        ):
+            from normalization.market_identity import normalize_player_name
+            norm_sel_p = normalize_player_name(selection.participant or raw_sel_type)
+            if norm_sel_p and market_key.player_name and norm_sel_p == market_key.player_name:
+                return CanonicalSelectionKey(
+                    market_key=market_key,
+                    selection_type=CanonicalSelectionType.YES.value,
+                )
         return None
 
     # Unsupported or unrecognized market family for selection extraction

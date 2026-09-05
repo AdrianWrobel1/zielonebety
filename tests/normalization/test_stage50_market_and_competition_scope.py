@@ -64,7 +64,7 @@ def test_market_scope_allowlist_rejection():
 
 
 def test_competition_scope_tier_resolution():
-    policy = DefaultEventSelectionPolicy()
+    policy = DefaultEventSelectionPolicy(default_preferred_competitions=())
 
     # Tier 0
     for t0_name in (
@@ -96,15 +96,10 @@ def test_competition_scope_tier_resolution():
 
     # Tier 2 / Out of Scope
     for t2_name in (
-        'England Championship',
-        'LaLiga 2',
-        'Serie B',
-        '2. Bundesliga',
-        'Ligue 2',
-        '1. Liga',
-        'FA Cup',
-        'Copa del Rey',
         'Youth League U19',
+        'Unknown Regional League',
+        'Germany Oberliga',
+        'Poland 4 Liga',
     ):
         tier = policy.calculate_competition_tier(t2_name)
         assert tier >= 2, f'Expected {t2_name} to be Tier >= 2, got {tier}'

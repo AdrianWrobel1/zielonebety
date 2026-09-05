@@ -29,26 +29,16 @@ from database.models import OpportunityRecordORM
 from database.repositories.opportunity_repository import OpportunityRepository
 from normalization.lifecycle import LifecycleAction, OpportunityStatus
 from normalization.market_identity import CanonicalMarketKey
-from valuebets.models import ValueBetCandidate
+from valuebets.models import ValueBetCandidate, generate_valuebet_fingerprint
 from valuebets.quality_policy import ValuebetQualityEvaluation, ValuebetQualityPolicy
 
 
-def generate_valuebet_fingerprint(candidate: ValueBetCandidate) -> str:
-    """Generates a stable, deterministic logical fingerprint for a ValueBetCandidate.
+from valuebets.quality_policy import ValuebetQualityEvaluation, ValuebetQualityPolicy
 
-    Formula:
-      opp:VALUEBET:<EVENT_ID>:<MARKET_TYPE>:<LINE>:<SELECTION_TYPE>:<BOOKMAKER>:<REF_SOURCE>
-    """
-    line_str = f"{candidate.line:f}" if candidate.line is not None else "no_line"
-    if "." in line_str and line_str != "no_line":
-        line_str = line_str.rstrip("0").rstrip(".")
-    bm = (candidate.bookmaker or "").lower().strip()
-    ref = (candidate.reference_source or "").lower().strip()
-    sel = (candidate.selection_type or "").upper().strip()
-    mkt = (candidate.market_type or "").upper().strip()
-    ev_id = str(candidate.canonical_event_id).strip()
 
-    return f"opp:VALUEBET:{ev_id}:{mkt}:{line_str}:{sel}:{bm}:{ref}"
+# NOTE: generate_valuebet_fingerprint is imported from valuebets.models
+# (single source of truth) and remains accessible as
+# valuebets.lifecycle.generate_valuebet_fingerprint for existing import sites.
 
 
 def _serialize_valuebet_snapshot(
@@ -337,11 +327,24 @@ class ValuebetLifecycleManager:
         now = evaluation_time or datetime.now(timezone.utc)
         seen_fps: Set[str] = set()
 
-        # Step 1: Evaluate each candidate
+        # Step 1: Evaluate each candidate. Candidates sharing a fingerprint
+        # are duplicate quotes for one logical opportunity: evaluate only the
+        # best (P2 — previously first-wins, order-dependent). Selection is
+        # pure (no side effects) and deterministic: highest net EV, then
+        # gross EV, then odds, then candidate id.
+        def _quote_rank(c: ValueBetCandidate) -> Tuple[Any, ...]:
+            net_pct = c.net_value_percent if c.net_value_percent is not None else Decimal("-9999")
+            return (net_pct, c.value_percent, c.bookmaker_odds, c.candidate_id)
+
+        best_by_fp: Dict[str, ValueBetCandidate] = {}
         for cand in candidates:
             fp = generate_valuebet_fingerprint(cand)
-            if fp in seen_fps:
-                continue
+            prev = best_by_fp.get(fp)
+            if prev is None or _quote_rank(cand) > _quote_rank(prev):
+                best_by_fp[fp] = cand
+
+        for fp in sorted(best_by_fp.keys()):
+            cand = best_by_fp[fp]
             seen_fps.add(fp)
 
             eval_res = self.evaluate_candidate(cand, evaluation_time=now)

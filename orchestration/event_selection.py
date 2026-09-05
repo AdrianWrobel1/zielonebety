@@ -44,6 +44,19 @@ class DetailPrioritizationResult:
     tier_samples: Dict[str, List[str]] = field(default_factory=dict)
 
 
+
+DEFAULT_PREFERRED_COMPETITIONS: Tuple[str, ...] = (
+    "Premier League",
+    "LaLiga",
+    "Serie A",
+    "Bundesliga",
+    "Ligue 1",
+    "Ekstraklasa",
+    "Champions League",
+    "Europa League",
+    "Conference League",
+)
+
 # Tier 0: Major continental & international senior tournaments and qualifiers
 TOP_TIER_COMPETITIONS: Tuple[str, ...] = (
     # Major UEFA Tournaments & Qualifiers

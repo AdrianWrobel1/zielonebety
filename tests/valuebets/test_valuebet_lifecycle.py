@@ -4,6 +4,7 @@ Unit tests for ValuebetLifecycleManager, Fingerprint stability, Transitions, and
 
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
+from typing import Optional
 import pytest
 
 from database.connection import DatabaseManager

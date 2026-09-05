@@ -1,0 +1,295 @@
+{
+  "baseline_commit": "5c70a6c178e286897ab295deaa1abc2d0112fea0",
+  "cardinality_funnel": {
+    "detected_opportunities": 0,
+    "discovered_events": 1,
+    "evaluated_markets_total": 0,
+    "evaluation_candidates_total": 0,
+    "markets_discovered": 2,
+    "markets_matched": 0,
+    "markets_normalized": 2,
+    "matched_events": 0,
+    "normalization_failed": 0,
+    "normalized_graphs": 1,
+    "not_evaluated_markets_count": 0,
+    "parsed_events": 1,
+    "popular_events_discovered": 1,
+    "popular_events_selected": 1,
+    "rejected_markets_count": 0,
+    "unmatched_events": 0,
+    "valid_surebets": 0,
+    "valuebets_qualified": 0
+  },
+  "checksum": "016fe8864a85af1235602d9febaa55fe50811b311108a23217cce008ff494275",
+  "created_at": "2026-08-17T12:00:00+00:00",
+  "dataset_id": "betclic_live_v1",
+  "dataset_version": "1.0",
+  "execution_diagnostics": {
+    "cycle_status": "PARTIAL",
+    "errors": [],
+    "scan_mode": "NORMAL",
+    "warnings": [
+      "Only provider 'betclic' has valid data (1 graphs). Cross-bookmaker matching requires 2+ providers. Matching skipped."
+    ]
+  },
+  "snapshot_version": "1.0",
+  "stages": {
+    "acquisition": {
+      "metadata": {
+        "detail_http_requests": 0,
+        "total_http_requests": 1
+      },
+      "record_count": 1,
+      "records": {
+        "betclic": {
+          "discovered_count": 1,
+          "errors": [],
+          "parsed_count": 1,
+          "provider": "betclic",
+          "status": 5,
+          "warnings": []
+        }
+      },
+      "rejections": {},
+      "stage_name": "acquisition"
+    },
+    "detection": {
+      "metadata": {
+        "detected_opportunities_count": 0,
+        "valid_surebets_count": 0,
+        "valuebets_qualified_count": 0
+      },
+      "record_count": 0,
+      "records": {},
+      "rejections": {},
+      "stage_name": "detection"
+    },
+    "discovery": {
+      "metadata": {
+        "providers": [
+          "betclic"
+        ]
+      },
+      "record_count": 1,
+      "records": {
+        "betclic:event_betclic_9901": {
+          "competition_name": "La Liga",
+          "event_name": "Barcelona vs Real Madrid",
+          "provider": "betclic",
+          "provider_event_id": "event_betclic_9901",
+          "sport": "football",
+          "start_time": "2026-08-25T20:00:00Z"
+        }
+      },
+      "rejections": {},
+      "stage_name": "discovery"
+    },
+    "evaluation": {
+      "metadata": {
+        "evaluated_markets_total": 0,
+        "evaluation_candidates_total": 0,
+        "not_evaluated_markets_count": 0,
+        "rejected_markets_count": 0,
+        "rejection_reasons_breakdown": {}
+      },
+      "record_count": 0,
+      "records": {},
+      "rejections": {},
+      "stage_name": "evaluation"
+    },
+    "event_matching": {
+      "metadata": {
+        "cross_bookmaker_overlap_rate": 0.0,
+        "matched_events_count": 0,
+        "unmatched_events_count": 0
+      },
+      "record_count": 0,
+      "records": {},
+      "rejections": {},
+      "stage_name": "event_matching"
+    },
+    "final": {
+      "metadata": {
+        "cycle_status": "PARTIAL",
+        "errors_count": 0,
+        "is_success": false,
+        "warnings_count": 1
+      },
+      "record_count": 18,
+      "records": {
+        "detected_opportunities": 0,
+        "discovered_events": 1,
+        "evaluated_markets_total": 0,
+        "evaluation_candidates_total": 0,
+        "markets_discovered": 2,
+        "markets_matched": 0,
+        "markets_normalized": 2,
+        "matched_events": 0,
+        "normalization_failed": 0,
+        "normalized_graphs": 1,
+        "not_evaluated_markets_count": 0,
+        "parsed_events": 1,
+        "popular_events_discovered": 1,
+        "popular_events_selected": 1,
+        "rejected_markets_count": 0,
+        "unmatched_events": 0,
+        "valid_surebets": 0,
+        "valuebets_qualified": 0
+      },
+      "rejections": {},
+      "stage_name": "final"
+    },
+    "market_matching": {
+      "metadata": {
+        "evaluation_candidates_total": 0,
+        "markets_matched_count": 0
+      },
+      "record_count": 0,
+      "records": {},
+      "rejections": {},
+      "stage_name": "market_matching"
+    },
+    "normalization": {
+      "metadata": {
+        "markets_normalized_count": 2,
+        "normalization_failed_count": 0,
+        "normalized_graphs_count": 1
+      },
+      "record_count": 1,
+      "records": {
+        "betclic:event_betclic_9901": {
+          "away_participant": "Real Madrid",
+          "competition": "La Liga",
+          "home_participant": "Barcelona",
+          "market_count": 2,
+          "markets": [
+            {
+              "line": 2.5,
+              "market_type": "TOTALS",
+              "metric": "GOALS",
+              "scope": "MATCH",
+              "selections": [
+                {
+                  "line": 2.5,
+                  "odds": 1.65,
+                  "participant": null,
+                  "selection_type": "OVER"
+                },
+                {
+                  "line": 2.5,
+                  "odds": 2.2,
+                  "participant": null,
+                  "selection_type": "UNDER"
+                }
+              ]
+            },
+            {
+              "line": null,
+              "market_type": "1X2",
+              "metric": "GOALS",
+              "scope": "MATCH",
+              "selections": [
+                {
+                  "line": null,
+                  "odds": 2.25,
+                  "participant": "Barcelona",
+                  "selection_type": "HOME"
+                },
+                {
+                  "line": null,
+                  "odds": 3.1,
+                  "participant": "Real Madrid",
+                  "selection_type": "AWAY"
+                },
+                {
+                  "line": null,
+                  "odds": 3.5,
+                  "participant": null,
+                  "selection_type": "DRAW"
+                }
+              ]
+            }
+          ],
+          "provider": "betclic",
+          "provider_event_id": "event_betclic_9901",
+          "scheduled_start": "2026-08-25T20:00:00Z"
+        }
+      },
+      "rejections": {},
+      "stage_name": "normalization"
+    },
+    "parsing": {
+      "metadata": {},
+      "record_count": 1,
+      "records": {
+        "betclic:event_betclic_9901": {
+          "away_team": "Real Madrid",
+          "home_team": "Barcelona",
+          "market_count": 2,
+          "markets": [
+            {
+              "line": null,
+              "market_name": "Match Result",
+              "selections": [
+                {
+                  "line": null,
+                  "odds": 2.25,
+                  "participant": null,
+                  "selection_name": "Barcelona"
+                },
+                {
+                  "line": null,
+                  "odds": 3.1,
+                  "participant": null,
+                  "selection_name": "Real Madrid"
+                },
+                {
+                  "line": null,
+                  "odds": 3.5,
+                  "participant": null,
+                  "selection_name": "Draw"
+                }
+              ],
+              "selections_count": 3
+            },
+            {
+              "line": null,
+              "market_name": "Total Goals 2.5",
+              "selections": [
+                {
+                  "line": null,
+                  "odds": 1.65,
+                  "participant": null,
+                  "selection_name": "Over 2.5"
+                },
+                {
+                  "line": null,
+                  "odds": 2.2,
+                  "participant": null,
+                  "selection_name": "Under 2.5"
+                }
+              ],
+              "selections_count": 2
+            }
+          ],
+          "provider": "betclic",
+          "provider_event_id": "event_betclic_9901"
+        }
+      },
+      "rejections": {},
+      "stage_name": "parsing"
+    },
+    "selection": {
+      "metadata": {
+        "detail_budget": 0,
+        "matched_events_eligible": 0,
+        "matched_events_selected": 0,
+        "scan_mode": "NORMAL"
+      },
+      "record_count": 0,
+      "records": {},
+      "rejections": {},
+      "stage_name": "selection"
+    }
+  }
+}

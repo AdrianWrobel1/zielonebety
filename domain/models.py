@@ -3,7 +3,8 @@ Canonical Domain Models for Zielone Bety Platform
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple, Set
+import hashlib
 import itertools
 import time
 from datetime import datetime, timezone
@@ -79,6 +80,7 @@ class Selection:
     selection_type: str
     line: Optional[float] = None
     participant: Optional[str] = None
+    canonical_participant_id: Optional[str] = None
     internal_id: str = field(default_factory=lambda: generate_canonical_id("sel"))
     provider_ids: Dict[str, str] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -95,30 +97,170 @@ class Odds:
     internal_id: str = field(default_factory=lambda: generate_canonical_id("odds"))
 
 
+def _normalize_kickoff_for_identity(scheduled_start_utc: Optional[str]) -> Optional[str]:
+    """Normalizes a kickoff string for canonical event identity (P1-NEW-002).
+
+    - Parses ISO-8601 (tolerates trailing 'Z', numeric offsets, naive UTC).
+    - Truncates seconds/microseconds and floors minutes to a 15-minute grid
+      so harmless provider jitter (seconds, small provider-time skew,
+      earliest-of-subset differences within one bucket) cannot fork identity.
+    - Returns ``None`` when kickoff is missing or unparseable; callers must
+      keep such identities explicitly dateless (never silently coarsen).
+    """
+    if not scheduled_start_utc:
+        return None
+    raw = str(scheduled_start_utc).strip()
+    if not raw:
+        return None
+    try:
+        iso = raw.replace("Z", "+00:00") if raw.endswith(("Z", "z")) else raw
+        dt = datetime.fromisoformat(iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        bucket_min = (dt.minute // 15) * 15
+        floored = dt.replace(minute=bucket_min, second=0, microsecond=0)
+        return floored.strftime("%Y-%m-%dT%H:%M:00Z")
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
 def generate_deterministic_canonical_event_id(
     sport: str,
     home_team_norm: str,
     away_team_norm: str,
     scheduled_start_utc: Optional[str] = None,
+    competition_norm: Optional[str] = None,
 ) -> str:
     """Generate a deterministic, provider-independent canonical event identifier.
 
-    Derivation:
+    Derivation (identity scheme v2, P1-NEW-002):
     - sport (lowercased)
     - normalized home participant name
-    - normalized away participant name
-    - normalized UTC kickoff string (or 'no_start')
+    - normalized away participant name (orientation preserved: home/away
+      semantics are required by TEAM roles/participant logic, so teams are
+      NOT sorted; swapped-orientation provider pairs still aggregate into a
+      single component/ID within one scan via ORIENTATION_SWAP matching)
+    - kickoff floored to a 15-minute UTC bucket (or 'no_start')
+    - competition slug included ONLY in the dateless branch so missing
+      kickoff cannot silently collapse unrelated fixtures across competitions
     Format: cev_<16-char sha256 hex digest>
+
+    Migration scope: dated IDs change once versus the previous exact-second
+    scheme (one-time expiry/re-alert bounded by max_misses=2); dateless IDs
+    change only when a competition context is supplied.
     """
-    import hashlib
     sport_clean = (sport or "football").strip().lower()
     home_clean = home_team_norm.strip().lower()
     away_clean = away_team_norm.strip().lower()
-    start_clean = scheduled_start_utc.strip() if scheduled_start_utc else "no_start"
+    bucket = _normalize_kickoff_for_identity(scheduled_start_utc)
+    if bucket is not None:
+        start_clean = bucket
+    elif competition_norm and str(competition_norm).strip():
+        comp_clean = str(competition_norm).strip().lower()
+        start_clean = f"no_start:{comp_clean}"
+    else:
+        start_clean = "no_start"
 
-    key_str = f"{sport_clean}:{home_clean}:{away_clean}:{start_clean}"
+    key_str = f"v2:{sport_clean}:{home_clean}:{away_clean}:{start_clean}"
     digest = hashlib.sha256(key_str.encode("utf-8")).hexdigest()[:16]
     return f"cev_{digest}"
+
+
+def generate_deterministic_canonical_player_id(
+    sport: str,
+    player_name_norm: str,
+    team_context: Optional[str] = None,
+) -> str:
+    """Generate a deterministic, provider-independent canonical player identifier.
+
+    Derivation:
+    - sport (lowercased)
+    - normalized player name
+    - optional team context (e.g. normalized team name)
+    Format: cplr_<16-char sha256 hex digest>
+    """
+    sport_clean = (sport or "football").strip().lower()
+    player_clean = (player_name_norm or "").strip().lower()
+    team_clean = (team_context or "").strip().lower()
+    key_str = f"{sport_clean}:{player_clean}"
+    if team_clean:
+        key_str = f"{key_str}:{team_clean}"
+    digest = hashlib.sha256(key_str.encode("utf-8")).hexdigest()[:16]
+    return f"cplr_{digest}"
+
+
+def generate_deterministic_canonical_team_id(
+    sport: str,
+    team_name_norm: str,
+) -> str:
+    """Generate a deterministic, provider-independent canonical team identifier.
+
+    Derivation:
+    - sport (lowercased)
+    - normalized team name
+    Format: cteam_<16-char sha256 hex digest>
+    """
+    sport_clean = (sport or "football").strip().lower()
+    team_clean = (team_name_norm or "").strip().lower()
+    key_str = f"{sport_clean}:{team_clean}"
+    digest = hashlib.sha256(key_str.encode("utf-8")).hexdigest()[:16]
+    return f"cteam_{digest}"
+
+
+def generate_deterministic_canonical_competition_id(
+    sport: str,
+    comp_name_norm: str,
+    country: Optional[str] = None,
+) -> str:
+    """Generate a deterministic, provider-independent canonical competition identifier.
+
+    Derivation:
+    - sport (lowercased)
+    - normalized competition name
+    - country (lowercased)
+    Format: ccomp_<16-char sha256 hex digest>
+    """
+    sport_clean = (sport or "football").strip().lower()
+    comp_clean = (comp_name_norm or "").strip().lower()
+    country_clean = (country or "international").strip().lower()
+    key_str = f"{sport_clean}:{comp_clean}:{country_clean}"
+    digest = hashlib.sha256(key_str.encode("utf-8")).hexdigest()[:16]
+    return f"ccomp_{digest}"
+
+
+@dataclass
+class CanonicalPlayer:
+    """Provider-independent canonical sports player identity."""
+    canonical_player_id: str
+    canonical_name: str
+    normalized_name: str
+    sport: str = "Football"
+    team_name: Optional[str] = None
+    canonical_team_id: Optional[str] = None
+    aliases: Tuple[str, ...] = field(default_factory=tuple)
+    provider_player_ids: Dict[str, str] = field(default_factory=dict)
+    external_ids: Dict[str, str] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=_get_current_iso_ts)
+    updated_at: str = field(default_factory=_get_current_iso_ts)
+
+
+@dataclass
+class CanonicalTeam:
+    """Provider-independent canonical sports team identity."""
+    canonical_team_id: str
+    canonical_name: str
+    normalized_name: str
+    sport: str = "Football"
+    country: Optional[str] = None
+    aliases: Tuple[str, ...] = field(default_factory=tuple)
+    provider_team_ids: Dict[str, str] = field(default_factory=dict)
+    external_ids: Dict[str, str] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=_get_current_iso_ts)
+    updated_at: str = field(default_factory=_get_current_iso_ts)
 
 
 @dataclass
@@ -159,7 +301,6 @@ class MatchEvidence:
     start_time: Optional[str] = None
 
 
-
 @dataclass
 class CanonicalCompetition:
     """Canonical representation of a competition across aggregated sources."""
@@ -167,6 +308,7 @@ class CanonicalCompetition:
     sport: str = "Football"
     country: Optional[str] = None
     competition_id: Optional[str] = None
+    canonical_comp_id: Optional[str] = None
     competition_type: Optional[str] = None
     tier: int = 2
     provenance: str = "PROVIDER_METADATA"
@@ -174,6 +316,12 @@ class CanonicalCompetition:
     provider_competition_ids: Dict[str, str] = field(default_factory=dict)
     external_ids: Dict[str, str] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not self.canonical_comp_id and self.competition_id:
+            self.canonical_comp_id = self.competition_id
+        elif not self.competition_id and self.canonical_comp_id:
+            self.competition_id = self.canonical_comp_id
 
 
 @dataclass
@@ -183,11 +331,15 @@ class CanonicalEvent:
     sport: str
     home_team: str
     away_team: str
+    canonical_home_team_id: Optional[str] = None
+    canonical_away_team_id: Optional[str] = None
+    canonical_competition_id: Optional[str] = None
     scheduled_start: Optional[str] = None
     competition: Optional[CanonicalCompetition] = None
     sources: Dict[str, EventSource] = field(default_factory=dict)
     match_evidence: List[MatchEvidence] = field(default_factory=list)
     status: str = "SCHEDULED"
+    provenance: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=_get_current_iso_ts)
     updated_at: str = field(default_factory=_get_current_iso_ts)

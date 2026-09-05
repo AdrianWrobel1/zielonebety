@@ -104,13 +104,28 @@ def execute_quality_gates() -> bool:
         return False
     print("  [PASSED] Performance benchmark satisfied.\n")
 
-    # Gate 6: Security & Role Authorization
+    # Gate 6: Security & Role Authorization (P1-007: real credential check)
     print("[GATE 6/7] Security & Role Audit")
-    auth_res = router.handle_post_auth_login(username="admin")
-    if auth_res.status_code != 200 or "access_token" not in auth_res.data:
-        print("  [FAILED] Security auth token check failed.\n")
-        return False
-    print("  [PASSED] Authentication and security audit satisfied.\n")
+    from database.connection import DatabaseManager
+    from database.config import DatabaseConfig
+    _db_mgr = DatabaseManager(DatabaseConfig.default_sqlite_in_memory())
+    _db_mgr.create_tables()
+    router = APIRouter(service=PlatformAPIService(db_manager=_db_mgr))
+    _admin_user = os.environ.get("ADMIN_USERNAME", "admin")
+    _admin_password = os.environ.get("ADMIN_PASSWORD", "")
+    if _admin_password:
+        auth_res = router.handle_post_auth_login(username=_admin_user, password=_admin_password)
+        if auth_res.status_code != 200 or "access_token" not in auth_res.data:
+            print("  [FAILED] Security auth token check failed.\n")
+            return False
+        print("  [PASSED] Authentication and security audit satisfied.\n")
+    else:
+        # No password configured: anonymous login must be rejected.
+        anon_res = router.handle_post_auth_login(username=_admin_user)
+        if anon_res.status_code != 401:
+            print("  [FAILED] Anonymous login was not rejected.\n")
+            return False
+        print("  [PASSED] Anonymous login rejected (set ADMIN_PASSWORD for full auth).\n")
 
     # Gate 7: Final Production Acceptance Sign-Off
     print("[GATE 7/7] Final Production Sign-Off")

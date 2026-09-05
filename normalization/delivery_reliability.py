@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 import json
+import logging
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -32,6 +33,9 @@ from normalization.dispatcher import (
 from normalization.market_identity import CanonicalMarketKey
 from normalization.selection_identity import CanonicalSelectionKey
 from normalization.surebet import SurebetLeg, SurebetOpportunity, SurebetStatus
+
+
+logger = logging.getLogger(__name__)
 
 
 class DeliveryState(str, Enum):
@@ -425,5 +429,27 @@ class DeliveryReconciliationService:
                 record.last_error = (delivery_res.metadata or {}).get("reason", "Consumer disabled")
                 self.delivery_repository.save_or_update(record)
                 summary.skipped_count += 1
+
+        # Explicit transaction boundary: commit reconciled delivery records
+        if self.delivery_repository is not None and hasattr(self.delivery_repository, "session") and self.delivery_repository.session is not None:
+            try:
+                self.delivery_repository.session.commit()
+            except Exception as c_err:
+                # P1-NEW-008: roll back so the session stays usable; PENDING
+                # intents remain recoverable via a later reconciliation pass.
+                try:
+                    self.delivery_repository.session.rollback()
+                except Exception:
+                    pass
+                logger.warning(f"Could not commit delivery state after reconciliation: {c_err}")
+        if self.opportunity_repository is not None and hasattr(self.opportunity_repository, "session") and self.opportunity_repository.session is not None:
+            try:
+                self.opportunity_repository.session.commit()
+            except Exception as c_err:
+                try:
+                    self.opportunity_repository.session.rollback()
+                except Exception:
+                    pass
+                logger.warning(f"Could not commit opportunity state after reconciliation: {c_err}")
 
         return summary

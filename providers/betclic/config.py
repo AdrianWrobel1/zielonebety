@@ -47,8 +47,8 @@ class BetclicConfig:
     preferred_competitions: Sequence[str] = field(default_factory=tuple)
     use_grpc_detail: bool = True
     grpc_endpoint_url: str = "https://offering.begmedia.com/web/offering.access.api/offering.access.api.MatchService/GetMatchWithNotification"
-    grpc_categories: Tuple[str, ...] = ("", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_cshcp", "ca_ftb_prp", "ca_ftb_gsc")
-    tier2_grpc_categories: Tuple[str, ...] = ("", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_cshcp")
+    grpc_categories: Tuple[str, ...] = ("", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_prp", "ca_ftb_gsc")
+    tier2_grpc_categories: Tuple[str, ...] = ("", "ca_ftb_rslt", "ca_ftb_goa")
     selective_categories: bool = True
     parallel_categories: bool = True
     fallback_to_html: bool = True
@@ -82,8 +82,8 @@ class BetclicConfig:
             preferred_competitions=tuple(data.get("preferred_competitions", ())),
             use_grpc_detail=bool(data.get("use_grpc_detail", True)),
             grpc_endpoint_url=str(data.get("grpc_endpoint_url", "https://offering.begmedia.com/web/offering.access.api/offering.access.api.MatchService/GetMatchWithNotification")),
-            grpc_categories=tuple(data.get("grpc_categories", ("", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_cshcp", "ca_ftb_prp", "ca_ftb_gsc"))),
-            tier2_grpc_categories=tuple(data.get("tier2_grpc_categories", ("", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_cshcp"))),
+            grpc_categories=tuple(data.get("grpc_categories", ("", "ca_ftb_rslt", "ca_ftb_goa", "ca_ftb_prp", "ca_ftb_gsc"))),
+            tier2_grpc_categories=tuple(data.get("tier2_grpc_categories", ("", "ca_ftb_rslt", "ca_ftb_goa"))),
             selective_categories=bool(data.get("selective_categories", True)),
             parallel_categories=bool(data.get("parallel_categories", True)),
             fallback_to_html=bool(data.get("fallback_to_html", True)),

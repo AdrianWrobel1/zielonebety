@@ -196,3 +196,57 @@ class DeliveryRecordORM(BaseORM):
     payload_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
 
 
+class PlayerPropSnapshotORM(BaseORM):
+    """Immutable persistent record of a pre-match Player Prop state for OOS validation."""
+    __tablename__ = "player_prop_snapshots"
+
+    # Identity
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    canonical_prop_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    canonical_event_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    canonical_player_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    player_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    home_team: Mapped[str] = mapped_column(String(256), nullable=False)
+    away_team: Mapped[str] = mapped_column(String(256), nullable=False)
+    competition: Mapped[str] = mapped_column(String(256), nullable=False)
+    stat_type: Mapped[str] = mapped_column(String(32), default="SHOTS", nullable=False)
+    line: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), default="OVER", nullable=False)
+    kickoff_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Temporal Metadata
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    # Pre-Match Observation Features
+    hit_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    hits: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    sample_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    stat_average: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    position_role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    recent_matches_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Pre-Match Estimation Features
+    reference_probability: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    reference_fair_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    reference_consensus_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    reference_bookmaker_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    reference_odds_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Pre-Match Execution Quotes
+    superbet_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    betclic_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    execution_odds_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Post-Match Settlement Lifecycle
+    outcome_status: Mapped[str] = mapped_column(String(32), default="PENDING", index=True, nullable=False)
+    actual_shots: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    actual_outcome: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1 = WIN, 0 = LOSS
+    settled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    settlement_source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    settlement_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+

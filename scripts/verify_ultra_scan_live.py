@@ -56,14 +56,15 @@ def main():
     
     target_today = result.funnel.discovered_today_events
     target_tomorrow = result.funnel.discovered_tomorrow_events
-    in_horizon_events = target_today + target_tomorrow
+    target_day_after = result.funnel.discovered_day_after_tomorrow_events
+    in_horizon_events = target_today + target_tomorrow + target_day_after
     total_attempted = result.funnel.detail_fetch_attempted_superbet + result.funnel.detail_fetch_attempted_betclic
     total_success = result.funnel.detail_fetch_success_superbet + result.funnel.detail_fetch_success_betclic
     total_failed = result.funnel.detail_fetch_failed_superbet + result.funnel.detail_fetch_failed_betclic
     total_skipped = result.funnel.detail_fetch_skipped
     
     print("\n=== INVARIANT VERIFICATION ===")
-    print(f"In-Horizon Events (Today: {target_today}, Tomorrow: {target_tomorrow}): {in_horizon_events} == Attempted: {total_attempted} + Skipped: {total_skipped} -> {in_horizon_events == total_attempted + total_skipped}")
+    print(f"In-Horizon Events (Today: {target_today}, Tomorrow: {target_tomorrow}, Day After: {target_day_after}): {in_horizon_events} == Attempted: {total_attempted} + Skipped: {total_skipped} -> {in_horizon_events == total_attempted + total_skipped}")
     print(f"Attempted: {total_attempted} == Success: {total_success} + Failed: {total_failed} -> {total_attempted == total_success + total_failed}")
     
     print("\n=== FUNNEL METRICS ===")

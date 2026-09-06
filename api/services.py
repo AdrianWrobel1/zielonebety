@@ -5,6 +5,7 @@ Application Services for API Orchestration
 from collections import defaultdict
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -220,7 +221,7 @@ def _extract_opp_data(opp_or_record: Any) -> Dict[str, Any]:
             "implied_probability_sum": float(opp_or_record.implied_probability_sum),
             "is_mixed_bookmakers": snapshot.get("is_mixed_bookmakers", len(bookmakers) > 1),
             "bookmakers": bookmakers,
-            "quality_score": float(quality_score) if quality_score is not None else 50.0,
+            "quality_score": float(quality_score) if quality_score is not None else None,
             "competition_tier": int(comp_tier) if comp_tier is not None else 2,
             "tier_name": tier_name or "Tier 2 (Standard)",
             "is_qualified": is_qual,
@@ -600,7 +601,7 @@ def serialize_opportunity_summary(opp_or_record: Any) -> Dict[str, Any]:
         "calculation": calculation_block,
         "bookmakers": data.get("bookmakers", []),
         "is_mixed_bookmakers": data.get("is_mixed_bookmakers", False),
-        "quality_score": data.get("quality_score", 50.0),
+        "quality_score": data.get("quality_score"),
         "competition_tier": data.get("competition_tier", 2),
         "tier_name": data.get("tier_name", "Tier 2 (Standard)"),
         "is_qualified": data.get("is_qualified", True),
@@ -630,10 +631,61 @@ def serialize_opportunity_detail(opp_or_record: Any) -> Dict[str, Any]:
         return {}
 
     legs_raw = data.get("legs", [])
-    opp_type = data.get("opportunity_type", "SUREBET")
+    opp_type = (data.get("opportunity_type") or data.get("type") or "SUREBET").upper()
     s_val = float(data.get("implied_probability_sum", 0.0))
     margin_val = float(data.get("arbitrage_margin", 0.0))
     margin_pct = data.get("arbitrage_margin_pct", round(margin_val * 100.0, 2))
+
+    if opp_type in ("TEAM_PROP", "PLAYER_PROP", "QUOTE_COMPARISON"):
+        event_info = data.get("event") or {}
+        mkt_info = data.get("market") or {}
+        mkt_display = _format_market_human_readable(mkt_info, event_info) if mkt_info else {}
+        if mkt_display:
+            mkt_info["display_name"] = mkt_display.get("market_name")
+            mkt_info["line_display"] = mkt_display.get("line_display")
+            mkt_info["period_display"] = mkt_display.get("period_display")
+            mkt_info["scope_display"] = mkt_display.get("scope_display")
+            mkt_info["label"] = mkt_display.get("label")
+
+        best_odds = data.get("execution_odds") or data.get("bookmaker_odds") or (legs_raw[0].get("odds") if legs_raw else None)
+        bms = data.get("bookmakers") or data.get("all_bookmakers") or []
+        status_str = data.get("status") or "AVAILABLE"
+
+        return {
+            "id": data.get("opportunity_id") or data.get("id"),
+            "opportunity_id": data.get("opportunity_id") or data.get("id"),
+            "opportunity_type": opp_type,
+            "type": opp_type,
+            "event": event_info,
+            "market": mkt_info,
+            "market_label": (mkt_display.get("label") if mkt_display else None) or data.get("market_label"),
+            "value_percent": data.get("value_percent"),
+            "net_value_percent": data.get("net_ev_pct") or data.get("net_value_percent"),
+            "margin": None,
+            "margin_pct": None,
+            "arbitrage_margin_pct": None,
+            "implied_probability_sum": None,
+            "bookmaker_odds": float(best_odds) if best_odds else None,
+            "selections": legs_raw,
+            "legs": legs_raw,
+            "bookmakers": bms,
+            "quality_score": data.get("quality_score") or data.get("score"),
+            "status": status_str,
+            "mathematical_explanation": {
+                "type": opp_type,
+                "is_surebet": False,
+                "is_valuebet": False,
+                "implied_probability_sum": None,
+                "value_percent": data.get("value_percent"),
+                "net_value_percent": data.get("net_ev_pct") or data.get("net_value_percent"),
+                "bookmaker_odds": float(best_odds) if best_odds else None,
+                "explanation": f"Matched market quotes across Polish bookmakers. Best execution odds: {best_odds}. Status: {status_str}.",
+            },
+            "lifecycle": {
+                "status": status_str,
+                "detected_at": data.get("detected_at") or data.get("created_at"),
+            },
+        }
 
     if opp_type == "VALUEBET":
         val_pct = data.get("value_percent", margin_pct)
@@ -661,6 +713,7 @@ def serialize_opportunity_detail(opp_or_record: Any) -> Dict[str, Any]:
             "opportunity_id": data.get("opportunity_id"),
             "fingerprint": data.get("fingerprint"),
             "opportunity_type": "VALUEBET",
+            "type": "VALUEBET",
             "event": data.get("event"),
             "market": mkt_info,
             "market_label": mkt_display.get("label"),
@@ -684,7 +737,7 @@ def serialize_opportunity_detail(opp_or_record: Any) -> Dict[str, Any]:
             "legs": legs_raw,
             "bookmakers": data.get("bookmakers", []),
             "is_mixed_bookmakers": False,
-            "quality_score": data.get("quality_score", 50.0),
+            "quality_score": data.get("quality_score"),
             "competition_tier": data.get("competition_tier", 2),
             "tier_name": data.get("tier_name", "Tier 2 (Standard)"),
             "is_qualified": data.get("is_qualified", True),
@@ -890,6 +943,7 @@ def serialize_opportunity_detail(opp_or_record: Any) -> Dict[str, Any]:
         "opportunity_id": data.get("opportunity_id"),
         "fingerprint": data.get("fingerprint"),
         "opportunity_type": data.get("opportunity_type", "SUREBET"),
+        "type": data.get("opportunity_type") or data.get("type", "SUREBET"),
         "event": data.get("event"),
         "market": mkt_info,
         "market_label": mkt_display.get("label"),
@@ -908,7 +962,7 @@ def serialize_opportunity_detail(opp_or_record: Any) -> Dict[str, Any]:
         "legs": enriched_legs,
         "bookmakers": data.get("bookmakers", []),
         "is_mixed_bookmakers": data.get("is_mixed_bookmakers", False),
-        "quality_score": data.get("quality_score", 50.0),
+        "quality_score": data.get("quality_score"),
         "competition_tier": data.get("competition_tier", 2),
         "tier_name": data.get("tier_name", "Tier 2 (Standard)"),
         "is_qualified": data.get("is_qualified", True),
@@ -3407,25 +3461,8 @@ class PlatformAPIService:
 
         return results
 
-    def get_unified_explorer_opportunities(
-        self,
-        opp_type: Optional[str] = None,
-        status: Optional[str] = None,
-        bookmaker: Optional[str] = None,
-        sport: Optional[str] = None,
-        competition: Optional[str] = None,
-        search: Optional[str] = None,
-        min_score: float = 0.0,
-        min_execution_edge: Optional[float] = None,
-        min_ev: Optional[float] = None,
-        date_from: Optional[str] = None,
-        date_to: Optional[str] = None,
-        sort: str = "score",
-        order: str = "desc",
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Dict[str, Any]:
-        """Aggregates Player Props, Valuebets, Surebets, Boosters, and Team Props into unified DTOs."""
+    def _collect_unified_explorer_opportunities(self) -> List[Any]:
+        """Collects opportunities across engines and formats into UnifiedOpportunityDTOs."""
         from core.opportunity_explorer import (
             OpportunityExplorerAdapter,
             OpportunityType,
@@ -3433,12 +3470,10 @@ class PlatformAPIService:
         )
 
         unified_items: List[UnifiedOpportunityDTO] = []
-        counts_by_type: Dict[str, int] = {t.value: 0 for t in OpportunityType}
-        counts_by_status: Dict[str, int] = {}
+        seen_opp_ids = set()
 
         # 1. Collect Surebets & Valuebets from database & latest scan
         scanned_opps = self.list_opportunities(status="ALL")
-        seen_opp_ids = set()
         for o in scanned_opps:
             o_type = o.get("opportunity_type", "").upper()
             if o_type == "VALUEBET":
@@ -3484,7 +3519,6 @@ class PlatformAPIService:
             collected_props = []
             seen_prop_keys = set()
 
-            # First add all items from stat partitions
             for stat_key, stat_items in PlatformAPIService._cached_props_by_stat.items():
                 for p in stat_items:
                     if isinstance(p, dict):
@@ -3493,7 +3527,6 @@ class PlatformAPIService:
                             seen_prop_keys.add(pkey)
                             collected_props.append(p)
 
-            # Fallback / augment with global _cached_props_results
             for p in PlatformAPIService._cached_props_results:
                 if isinstance(p, dict):
                     pkey = p.get("prop_id") or p.get("canonical_prop_key")
@@ -3556,14 +3589,56 @@ class PlatformAPIService:
                                 if dto.id not in seen_opp_ids:
                                     seen_opp_ids.add(dto.id)
                                     unified_items.append(dto)
+                        elif m_scope in ("PLAYER", "PROP") or m_type.startswith("PLAYER_"):
+                            for s in m.get("selections", []):
+                                dto = OpportunityExplorerAdapter.from_matched_prop_market(ev, m, s)
+                                if dto.id not in seen_opp_ids:
+                                    seen_opp_ids.add(dto.id)
+                                    unified_items.append(dto)
         except Exception as exc:
-            logger.warning("Could not fetch team props for unified explorer: %s", exc)
+            logger.warning("Could not fetch matched markets for unified explorer: %s", exc)
 
         # 4. Collect Boosters (if available in scan result / config)
         if self._last_scan_result and self._last_scan_result.get("boosters"):
             for b in self._last_scan_result["boosters"]:
                 dto = OpportunityExplorerAdapter.from_booster(b)
                 unified_items.append(dto)
+
+        return unified_items
+
+    def get_unified_explorer_opportunities(
+        self,
+        opp_type: Optional[str] = None,
+        status: Optional[str] = None,
+        bookmaker: Optional[str] = None,
+        sport: Optional[str] = None,
+        competition: Optional[str] = None,
+        search: Optional[str] = None,
+        min_score: float = 0.0,
+        min_execution_edge: Optional[float] = None,
+        min_ev: Optional[float] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        sort: str = "score",
+        order: str = "desc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Aggregates Player Props, Valuebets, Surebets, Boosters, and Team Props into unified DTOs."""
+        from core.opportunity_explorer import (
+            OpportunityExplorerAdapter,
+            OpportunityType,
+            UnifiedOpportunityDTO,
+        )
+
+        unified_items: List[UnifiedOpportunityDTO] = []
+        counts_by_type: Dict[str, int] = {t.value: 0 for t in OpportunityType}
+        counts_by_status: Dict[str, int] = {}
+
+        if getattr(self, "_unified_opportunities_cache", None) is not None:
+            unified_items = list(self._unified_opportunities_cache)
+        else:
+            unified_items = self._collect_unified_explorer_opportunities()
 
         # Update raw type counts before filtering
         for item in unified_items:
@@ -3621,7 +3696,7 @@ class PlatformAPIService:
 
             # Min Score
             if min_score > 0.0:
-                if item.score < min_score:
+                if item.score is None or item.score < min_score:
                     continue
 
             # Min Execution Edge
@@ -3641,18 +3716,21 @@ class PlatformAPIService:
         def sort_key(dto: UnifiedOpportunityDTO):
             reverse_mult = -1 if order.lower() == "desc" else 1
             if sort == "execution_edge":
-                val = dto.execution_edge_pct or -999.0
-            elif sort in ("ev", "gross_ev", "net_ev"):
-                val = dto.gross_ev_pct if dto.gross_ev_pct is not None else (dto.value_edge_pp or -999.0)
+                val = dto.execution_edge_pct if dto.execution_edge_pct is not None else -999.0
+            elif sort in ("ev", "net_ev"):
+                val = dto.net_ev_pct if dto.net_ev_pct is not None else (dto.gross_ev_pct if dto.gross_ev_pct is not None else -999.0)
+            elif sort == "gross_ev":
+                val = dto.gross_ev_pct if dto.gross_ev_pct is not None else (dto.value_edge_pp if dto.value_edge_pp is not None else -999.0)
             elif sort == "kickoff":
                 val = dto.kickoff or "9999"
                 return (val, dto.id)
             elif sort == "odds":
                 val = dto.execution_odds or dto.reference_odds or 0.0
             elif sort == "type":
-                return (dto.type, -dto.score, dto.id)
+                score_num = dto.score if dto.score is not None else -999.0
+                return (dto.type, -score_num, dto.id)
             else:  # default "score"
-                val = dto.score
+                val = dto.score if dto.score is not None else -999.0
             return (-val if order.lower() == "desc" else val, dto.id)
 
         filtered.sort(key=sort_key)
@@ -3769,9 +3847,15 @@ class PlatformAPIService:
                             dto = OpportunityExplorerAdapter.from_matched_team_market(ev, m, s)
                             if dto.id == opportunity_id:
                                 return self._serialize_matched_team_market_detail(ev, m, s, dto)
+                    elif m_scope in ("PLAYER", "PROP") or m_type.startswith("PLAYER_"):
+                        for s in m.get("selections", []):
+                            from core.opportunity_explorer import OpportunityExplorerAdapter
+                            dto = OpportunityExplorerAdapter.from_matched_prop_market(ev, m, s)
+                            if dto.id == opportunity_id:
+                                return self._serialize_matched_prop_market_detail(ev, m, s, dto)
 
         # Also search persisted scan snapshots in database if not found in memory
-        if opportunity_id.startswith("ctp_scan_") and self.db_manager is not None:
+        if (opportunity_id.startswith("ctp_scan_") or opportunity_id.startswith("cpp_scan_")) and self.db_manager is not None:
             parts = opportunity_id.split("_")
             ev_id_hint = None
             if len(parts) >= 4 and parts[2] == "cev":
@@ -3800,12 +3884,20 @@ class PlatformAPIService:
                             for m in ev.get("markets", []):
                                 m_scope = str(m.get("scope", "")).upper()
                                 m_type = str(m.get("market_type", "")).upper()
-                                if m_scope == "TEAM" or m_type.startswith("TEAM_") or m_type in ("TOTALS", "HANDICAP", "1X2", "DOUBLE_CHANCE"):
+                                if opportunity_id.startswith("ctp_scan_") and (m_scope == "TEAM" or m_type.startswith("TEAM_") or m_type in ("TOTALS", "HANDICAP", "1X2", "DOUBLE_CHANCE")):
                                     for s in m.get("selections", []):
                                         try:
                                             dto = OpportunityExplorerAdapter.from_matched_team_market(ev, m, s)
                                             if dto.id == opportunity_id:
                                                 return self._serialize_matched_team_market_detail(ev, m, s, dto)
+                                        except Exception:
+                                            continue
+                                elif opportunity_id.startswith("cpp_scan_") and (m_scope in ("PLAYER", "PROP") or m_type.startswith("PLAYER_")):
+                                    for s in m.get("selections", []):
+                                        try:
+                                            dto = OpportunityExplorerAdapter.from_matched_prop_market(ev, m, s)
+                                            if dto.id == opportunity_id:
+                                                return self._serialize_matched_prop_market_detail(ev, m, s, dto)
                                         except Exception:
                                             continue
             except Exception as ex:
@@ -3820,13 +3912,22 @@ class PlatformAPIService:
                     for m in ev.get("markets", []):
                         m_scope = str(m.get("scope", "")).upper()
                         m_type = str(m.get("market_type", "")).upper()
-                        if m_scope == "TEAM" or m_type.startswith("TEAM_") or m_type in ("TOTALS", "HANDICAP", "1X2", "DOUBLE_CHANCE"):
+                        if opportunity_id.startswith("ctp_scan_") and (m_scope == "TEAM" or m_type.startswith("TEAM_") or m_type in ("TOTALS", "HANDICAP", "1X2", "DOUBLE_CHANCE")):
                             for s in m.get("selections", []):
                                 try:
                                     from core.opportunity_explorer import OpportunityExplorerAdapter
                                     dto = OpportunityExplorerAdapter.from_matched_team_market(ev, m, s)
                                     if dto.id == opportunity_id:
                                         return self._serialize_matched_team_market_detail(ev, m, s, dto)
+                                except Exception:
+                                    continue
+                        elif opportunity_id.startswith("cpp_scan_") and (m_scope in ("PLAYER", "PROP") or m_type.startswith("PLAYER_")):
+                            for s in m.get("selections", []):
+                                try:
+                                    from core.opportunity_explorer import OpportunityExplorerAdapter
+                                    dto = OpportunityExplorerAdapter.from_matched_prop_market(ev, m, s)
+                                    if dto.id == opportunity_id:
+                                        return self._serialize_matched_prop_market_detail(ev, m, s, dto)
                                 except Exception:
                                     continue
 
@@ -4035,7 +4136,7 @@ class PlatformAPIService:
             "selections": legs,
             "legs": legs,
             "bookmakers": bookmaker_names,
-            "quality_score": float(opp.get("ultra_rank_score") or 50.0),
+            "quality_score": float(opp["ultra_rank_score"]) if opp.get("ultra_rank_score") is not None else None,
             "status": "WATCHLIST" if (cat == "WATCHLIST" or opp.get("is_watchlist")) else "AVAILABLE",
             "mathematical_explanation": {
                 "formula": "S = Σ(1 / Net Effective Odds)" if cat in ("WATCHLIST", "SUREBET") else "EV = (Odds * Fair Prob) - 1",
@@ -4074,8 +4175,8 @@ class PlatformAPIService:
         exec_odds_dict = p.get("execution_odds") or {}
         bms = list(exec_odds_dict.keys()) if isinstance(exec_odds_dict, dict) else ([exec_bm] if exec_bm else [])
 
-        model_p = p.get("model_probability") or (p.get("hit_rate_pct", 0.0) / 100.0 if p.get("hit_rate_pct") else None)
-        fair_odds = p.get("fair_odds") or (round(1.0 / model_p, 4) if model_p and model_p > 0 else None)
+        model_p = p.get("model_probability")
+        fair_odds = p.get("fair_odds")
         val_edge = p.get("value_edge_pp") or p.get("execution_edge_pct") or 0.0
         is_val = bool(p.get("is_valuebet") or p.get("execution_status") == "VALUEBET")
         status_str = "VALUEBET" if is_val else str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY")
@@ -4203,7 +4304,7 @@ class PlatformAPIService:
             "bookmaker_odds": float(exec_odds) if exec_odds else 0.0,
             "fair_odds": float(fair_odds) if fair_odds else None,
             "fair_probability": float(model_p) if model_p else None,
-            "quality_score": float(p.get("score") or 50.0),
+            "quality_score": float(p["score"]) if p.get("score") is not None else None,
             "status": status_str,
             "details": p,
             "recent_matches": p.get("recent_matches", []),
@@ -4229,7 +4330,7 @@ class PlatformAPIService:
         best_bm = dto.best_bookmaker or "superbet"
         all_bms = dto.all_bookmakers or [best_bm]
 
-        status_str = dto.status or "BETTABLE"
+        status_str = dto.status or "AVAILABLE"
         mkt_label = f"{team} {side.title()} {line} {m_type.replace('TEAM_', '').replace('_', ' ').title()}" if line is not None else f"{team} {m_type}"
 
         odds_map = s.get("odds") or {}
@@ -4279,10 +4380,12 @@ class PlatformAPIService:
                 "bookmaker": best_bm,
             })
 
+        opp_type_val = getattr(dto, "opportunity_type", None) or getattr(dto, "type", None) or "QUOTE_COMPARISON"
         return {
             "id": dto.id,
             "opportunity_id": dto.id,
-            "opportunity_type": "TEAM_PROP",
+            "opportunity_type": opp_type_val,
+            "type": getattr(dto, "type", None) or opp_type_val,
             "event": {
                 "id": ev.get("id") or ev.get("canonical_event_id") or "event_tp",
                 "home_team": home,
@@ -4304,11 +4407,15 @@ class PlatformAPIService:
                 "key_string": m.get("canonical_market_key") or dto.id,
             },
             "mathematical_explanation": {
-                "value_percent": 0.0,
-                "bookmaker_odds": float(best_odds) if best_odds else 0.0,
+                "type": "QUOTE_COMPARISON",
+                "is_surebet": False,
+                "is_valuebet": False,
+                "implied_probability_sum": None,
+                "value_percent": None,
+                "bookmaker_odds": float(best_odds) if best_odds else None,
                 "fair_odds": None,
                 "fair_probability": None,
-                "explanation": f"Matched team prop market across Polish bookmakers: {', '.join(all_bms)}. Best odds: {best_odds} ({best_bm}). Status: {status_str}.",
+                "explanation": f"Matched team prop market across Polish bookmakers: {', '.join(all_bms)}. Best odds: {best_odds} ({best_bm}). Status: {status_str} (execution quote comparison, no model valuation).",
             },
             "lifecycle": {
                 "status": status_str,
@@ -4317,9 +4424,9 @@ class PlatformAPIService:
             "selections": legs,
             "legs": legs,
             "bookmakers": all_bms,
-            "value_percent": 0.0,
-            "bookmaker_odds": float(best_odds) if best_odds else 0.0,
-            "quality_score": dto.score or 50.0,
+            "value_percent": None,
+            "bookmaker_odds": float(best_odds) if best_odds else None,
+            "quality_score": dto.score,
             "status": status_str,
             "details": {"event": ev, "market": m, "selection": s},
         }
@@ -4340,42 +4447,126 @@ class PlatformAPIService:
 
         exec_odds = p.get("best_execution_odds") or p.get("best_odds")
         exec_bm = p.get("best_execution_bookmaker") or p.get("best_bookmaker") or "superbet"
-        model_p = p.get("model_probability") or (p.get("hit_rate_pct", 0.0) / 100.0 if p.get("hit_rate_pct") else None)
+        model_p = p.get("model_probability")
         fair_odds = p.get("fair_odds")
         val_edge = p.get("value_edge_pp") or p.get("execution_edge_pct") or 0.0
         is_val = bool(p.get("is_valuebet") or p.get("execution_status") == "VALUEBET")
-        status_str = "VALUEBET" if is_val else str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY")
+
+        # Discrepancy detection
+        disc_details = p.get("discrepancy_details") or p.get("discrepancy")
+        is_disc = bool(
+            p.get("is_discrepancy")
+            or (disc_details and disc_details.get("is_discrepancy"))
+            or (p.get("relative_price_difference_pct") is not None and float(p["relative_price_difference_pct"]) >= 10.0)
+        )
+        opp_type_val = "QUOTE_DISCREPANCY" if is_disc else ("VALUEBET" if is_val else "PLAYER_PROP")
+        status_str = "BETTABLE" if is_disc else ("VALUEBET" if is_val else str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY"))
 
         from core.tax_engine import get_tax_engine
         tax_engine = get_tax_engine()
-        f_exec = float(exec_odds) if exec_odds else 0.0
-        tax_res = tax_engine.calculate_net_odds(raw_odds=f_exec, bookmaker=exec_bm)
-        tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
 
-        legs = [{
-            "selection_outcome": f"{player} {side.title()} {line}",
-            "outcome": side,
-            "selection_type": side,
-            "participant": player,
-            "market_name": mkt,
-            "line": line,
-            "line_display": f"{side.title()} {line}",
-            "odds": f_exec,
-            "raw_odds": f_exec,
-            "decimal_odds": f_exec,
-            "effective_odds": float(tax_res.effective_net_odds),
-            "tax_rate": tax_rate,
-            "tax_factor": float(tax_res.net_stake_multiplier),
-            "provider": exec_bm,
-            "bookmaker": exec_bm,
-            "fair_odds": fair_odds,
-            "fair_probability": model_p,
-        }]
+        legs = []
+        exec_odds_dict = p.get("execution_odds") or {}
+        bms = []
+        if isinstance(exec_odds_dict, dict) and len(exec_odds_dict) > 0:
+            for bm_name, quote_obj in exec_odds_dict.items():
+                if isinstance(quote_obj, dict):
+                    odds_val = quote_obj.get("decimal_odds") or quote_obj.get("odds")
+                else:
+                    odds_val = quote_obj
+                try:
+                    f_odd = float(odds_val)
+                except (ValueError, TypeError):
+                    continue
+                if f_odd <= 1.0:
+                    continue
+                bms.append(bm_name)
+                tax_res = tax_engine.calculate_net_odds(raw_odds=f_odd, bookmaker=bm_name)
+                tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+                legs.append({
+                    "selection_outcome": f"{player} {side.title()} {line}",
+                    "outcome": side,
+                    "selection_type": side,
+                    "participant": player,
+                    "market_name": mkt,
+                    "line": line,
+                    "line_display": f"{side.title()} {line}",
+                    "odds": f_odd,
+                    "raw_odds": f_odd,
+                    "decimal_odds": f_odd,
+                    "effective_odds": float(tax_res.effective_net_odds),
+                    "tax_rate": tax_rate,
+                    "tax_factor": float(tax_res.net_stake_multiplier),
+                    "provider": bm_name,
+                    "bookmaker": bm_name,
+                    "fair_odds": fair_odds,
+                    "fair_probability": model_p,
+                })
+        if not legs:
+            f_exec = float(exec_odds) if exec_odds else 0.0
+            tax_res = tax_engine.calculate_net_odds(raw_odds=f_exec, bookmaker=exec_bm)
+            tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+            bms = [exec_bm] if exec_bm else []
+            legs.append({
+                "selection_outcome": f"{player} {side.title()} {line}",
+                "outcome": side,
+                "selection_type": side,
+                "participant": player,
+                "market_name": mkt,
+                "line": line,
+                "line_display": f"{side.title()} {line}",
+                "odds": f_exec,
+                "raw_odds": f_exec,
+                "decimal_odds": f_exec,
+                "effective_odds": float(tax_res.effective_net_odds),
+                "tax_rate": tax_rate,
+                "tax_factor": float(tax_res.net_stake_multiplier),
+                "provider": exec_bm,
+                "bookmaker": exec_bm,
+                "fair_odds": fair_odds,
+                "fair_probability": model_p,
+            })
+
+        if is_disc:
+            lower_bm = p.get("lower_executable_bookmaker") or (disc_details or {}).get("lower_bookmaker") or "Alternative"
+            lower_price = p.get("lower_executable_odds") or (disc_details or {}).get("lower_odds")
+            odds_diff = p.get("odds_difference") or (disc_details or {}).get("odds_difference")
+            rel_diff = p.get("relative_price_difference_pct") or (disc_details or {}).get("relative_price_difference_pct")
+            math_explanation = {
+                "type": "QUOTE_DISCREPANCY",
+                "is_discrepancy": True,
+                "is_surebet": False,
+                "is_valuebet": is_val,
+                "odds_difference": float(odds_diff) if odds_diff is not None else None,
+                "relative_price_difference_pct": float(rel_diff) if rel_diff is not None else None,
+                "best_bookmaker": exec_bm,
+                "best_odds": float(exec_odds) if exec_odds else None,
+                "lower_bookmaker": lower_bm,
+                "lower_odds": float(lower_price) if lower_price is not None else None,
+                "fair_odds": float(fair_odds) if fair_odds else None,
+                "fair_probability": float(model_p) if model_p else None,
+                "value_percent": float(val_edge) if is_val else None,
+                "bookmaker_odds": float(exec_odds) if exec_odds else 0.0,
+                "explanation": f"Polish bookmaker price discrepancy: {exec_bm} offers {exec_odds} vs {lower_bm} ({lower_price}). Single-selection execution, not a surebet.",
+            }
+        else:
+            math_explanation = {
+                "type": opp_type_val,
+                "is_discrepancy": False,
+                "is_surebet": False,
+                "is_valuebet": is_val,
+                "value_percent": float(val_edge),
+                "bookmaker_odds": float(exec_odds) if exec_odds else 0.0,
+                "fair_odds": float(fair_odds) if fair_odds else None,
+                "fair_probability": float(model_p) if model_p else None,
+                "explanation": f"Player Prop for {player} ({team}). Fair odds: {fair_odds or 'N/A'}. Execution odds: {exec_odds or 'N/A'} ({exec_bm}).",
+            }
 
         return {
             "id": p.get("prop_id") or opportunity_id,
             "opportunity_id": p.get("prop_id") or opportunity_id,
-            "opportunity_type": "PLAYER_PROP",
+            "opportunity_type": opp_type_val,
+            "type": opp_type_val,
             "event": {
                 "id": p.get("fixture") or "event_pp",
                 "home_team": team,
@@ -4396,27 +4587,166 @@ class PlatformAPIService:
                 "scope_display": "Player",
                 "key_string": p.get("canonical_prop_key") or opportunity_id,
             },
-            "mathematical_explanation": {
-                "value_percent": float(val_edge),
-                "bookmaker_odds": float(exec_odds) if exec_odds else 0.0,
-                "fair_odds": float(fair_odds) if fair_odds else None,
-                "fair_probability": float(model_p) if model_p else None,
-                "explanation": f"Player Prop for {player} ({team}). Fair odds: {fair_odds or 'N/A'}. Execution odds: {exec_odds or 'N/A'} ({exec_bm}).",
-            },
+            "mathematical_explanation": math_explanation,
             "lifecycle": {
                 "status": status_str,
                 "detected_at": p.get("detected_at") or p.get("created_at"),
             },
             "selections": legs,
             "legs": legs,
-            "bookmakers": [exec_bm] if exec_bm else [],
-            "value_percent": float(val_edge),
+            "bookmakers": bms,
+            "value_percent": float(val_edge) if is_val else None,
             "bookmaker_odds": float(exec_odds) if exec_odds else 0.0,
             "fair_odds": float(fair_odds) if fair_odds else None,
             "fair_probability": float(model_p) if model_p else None,
-            "quality_score": float(p.get("score") or 50.0),
+            "quality_score": float(p["score"]) if p.get("score") is not None else None,
             "status": status_str,
             "details": p,
+        }
+
+    def _build_prop_detail(
+        self,
+        p: Dict[str, Any],
+        opportunity_id: str = "prop",
+    ) -> Dict[str, Any]:
+        """Serializes player prop opportunity details, preserving fair_odds strictly without hit-rate fallbacks."""
+        return self._serialize_player_prop_opportunity_detail(p, opportunity_id)
+
+    def _serialize_matched_prop_market_detail(
+        self,
+        ev: Dict[str, Any],
+        m: Dict[str, Any],
+        s: Dict[str, Any],
+        dto: Any,
+    ) -> Dict[str, Any]:
+        """Serializes a matched Player Prop market selection from scan results into detail schema."""
+        home = ev.get("home_team") or ""
+        away = ev.get("away_team") or ""
+        player = s.get("player_name") or s.get("player") or s.get("participant") or ""
+        team = s.get("team") or home
+        opp = away if team == home else home
+        m_type = str(m.get("market_type") or "PLAYER_PROP")
+        line = s.get("line") if s.get("line") is not None else m.get("line")
+        side = str(s.get("selection_type") or s.get("side") or "OVER").upper()
+
+        odds_map = s.get("odds") or {}
+        best_bm = getattr(dto, "best_bookmaker", None) or "superbet"
+        best_odds = getattr(dto, "execution_odds", None)
+        all_bms = list(odds_map.keys()) if isinstance(odds_map, dict) else list(m.get("participating_bookmakers") or [])
+
+        from core.tax_engine import get_tax_engine
+        tax_engine = get_tax_engine()
+        legs = []
+        for bm_name, quote_val in odds_map.items():
+            try:
+                f_odd = float(quote_val)
+            except (ValueError, TypeError):
+                continue
+            if f_odd <= 1.0:
+                continue
+            tax_res = tax_engine.calculate_net_odds(raw_odds=f_odd, bookmaker=bm_name)
+            tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+            legs.append({
+                "selection_outcome": f"{player} {side} {line}",
+                "outcome": side,
+                "selection_type": side,
+                "participant": player,
+                "market_name": m_type,
+                "line": line,
+                "line_display": f"{side} {line}",
+                "odds": f_odd,
+                "raw_odds": f_odd,
+                "decimal_odds": f_odd,
+                "effective_odds": float(tax_res.effective_net_odds),
+                "tax_rate": tax_rate,
+                "tax_factor": float(tax_res.net_stake_multiplier),
+                "provider": bm_name,
+                "bookmaker": bm_name,
+            })
+        if not legs and best_odds:
+            f_best = float(best_odds)
+            tax_res = tax_engine.calculate_net_odds(raw_odds=f_best, bookmaker=best_bm)
+            tax_rate = float(Decimal("1") - tax_res.net_stake_multiplier) if tax_res.is_tax_applied else 0.0
+            legs.append({
+                "selection_outcome": f"{player} {side} {line}",
+                "outcome": side,
+                "selection_type": side,
+                "participant": player,
+                "market_name": m_type,
+                "line": line,
+                "line_display": f"{side} {line}",
+                "odds": f_best,
+                "raw_odds": f_best,
+                "decimal_odds": f_best,
+                "effective_odds": float(tax_res.effective_net_odds),
+                "tax_rate": tax_rate,
+                "tax_factor": float(tax_res.net_stake_multiplier),
+                "provider": best_bm,
+                "bookmaker": best_bm,
+            })
+
+        opp_type_val = getattr(dto, "opportunity_type", None) or getattr(dto, "type", None) or "PLAYER_PROP"
+        is_disc = (opp_type_val == "QUOTE_DISCREPANCY")
+        disc_dict = dto.details.get("discrepancy") if hasattr(dto, "details") and isinstance(dto.details, dict) else None
+
+        math_explanation = {
+            "type": opp_type_val,
+            "is_discrepancy": is_disc,
+            "is_surebet": False,
+            "is_valuebet": False,
+            "odds_difference": getattr(dto, "odds_difference", None) or (disc_dict or {}).get("odds_difference"),
+            "relative_price_difference_pct": getattr(dto, "price_discrepancy_pct", None) or (disc_dict or {}).get("relative_price_difference_pct"),
+            "best_bookmaker": best_bm,
+            "best_odds": float(best_odds) if best_odds else None,
+            "lower_bookmaker": getattr(dto, "lower_bookmaker", None) or (disc_dict or {}).get("lower_bookmaker"),
+            "lower_odds": getattr(dto, "lower_execution_odds", None) or (disc_dict or {}).get("lower_odds"),
+            "fair_odds": None,
+            "fair_probability": None,
+            "value_percent": None,
+            "bookmaker_odds": float(best_odds) if best_odds else None,
+            "explanation": f"Polish bookmaker price discrepancy: {best_bm} ({best_odds}) vs {getattr(dto, 'lower_bookmaker', 'alternative')}. Single-leg execution." if is_disc else f"Matched player prop market: {', '.join(all_bms)}. Best odds: {best_odds} ({best_bm}).",
+        }
+
+        mkt_label = f"{player} ({team}) {side} {line} {m_type.replace('_', ' ').title()}"
+
+        return {
+            "id": dto.id,
+            "opportunity_id": dto.id,
+            "opportunity_type": opp_type_val,
+            "type": opp_type_val,
+            "event": {
+                "id": ev.get("id") or ev.get("canonical_event_id") or "event_pp",
+                "home_team": home,
+                "away_team": away,
+                "competition": ev.get("competition") or "Football",
+                "start_time": ev.get("kickoff") or ev.get("scheduled_start"),
+                "sport": ev.get("sport") or "football",
+            },
+            "market": {
+                "label": mkt_label,
+                "display_name": mkt_label,
+                "type": m_type,
+                "line": line,
+                "line_display": f"{side} {line}" if line is not None else "—",
+                "period": m.get("period") or "FULL_TIME",
+                "period_display": "Full Time",
+                "scope": "PLAYER",
+                "scope_display": "Player",
+                "key_string": m.get("canonical_market_key") or dto.id,
+            },
+            "mathematical_explanation": math_explanation,
+            "lifecycle": {
+                "status": dto.status,
+                "detected_at": ev.get("detected_at") or ev.get("created_at"),
+            },
+            "selections": legs,
+            "legs": legs,
+            "bookmakers": all_bms,
+            "value_percent": None,
+            "bookmaker_odds": float(best_odds) if best_odds else None,
+            "quality_score": dto.score,
+            "status": dto.status,
+            "details": {"event": ev, "market": m, "selection": s, "discrepancy": disc_dict},
         }
 
     def get_event_detail(self, event_id: str) -> Optional[Dict[str, Any]]:
@@ -6566,6 +6896,7 @@ class PlatformAPIService:
         competition: Optional[str] = None,
         position: Optional[str] = None,
         threshold: Optional[float] = None,
+        match_status: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Returns cached global props scan results with optional filtering, diagnostics and pagination."""
         cached = PlatformAPIService._cached_global_props_results
@@ -6594,8 +6925,15 @@ class PlatformAPIService:
         diagnostic_raw = list(cached.get("diagnostic_candidates", []))
 
         is_all_candidates_view = (view_mode or "").upper() == "ALL_CANDIDATES"
+        is_quote_discrepancy_view = (view_mode or "").upper() in ("QUOTE_DISCREPANCY", "DISCREPANCY")
         if is_all_candidates_view:
             target_list = qualified_raw + diagnostic_raw
+        elif is_quote_discrepancy_view:
+            target_list = [
+                o for o in (qualified_raw + diagnostic_raw)
+                if o.get("is_discrepancy") is True
+                or (o.get("relative_price_difference_pct") is not None and float(o.get("relative_price_difference_pct") or 0.0) >= 10.0)
+            ]
         else:
             target_list = qualified_raw
 
@@ -6679,6 +7017,20 @@ class PlatformAPIService:
                 return False
             opportunities = [o for o in opportunities if _bookmaker_matches(o)]
 
+        if match_status:
+            m_clean = match_status.strip().upper()
+            def _is_matched_both(o: Dict[str, Any]) -> bool:
+                sb_odds = o.get("superbet_odds")
+                bc_odds = o.get("betclic_odds")
+                sb_valid = sb_odds is not None and float(sb_odds) > 1.0
+                bc_valid = bc_odds is not None and float(bc_odds) > 1.0
+                return sb_valid and bc_valid
+
+            if m_clean in ("MATCHED", "MATCHED_BOTH", "BOTH", "MATCHED_BETCLIC_SUPERBET"):
+                opportunities = [o for o in opportunities if _is_matched_both(o)]
+            elif m_clean in ("UNMATCHED", "PARTIAL", "PARTIAL_UNMATCHED"):
+                opportunities = [o for o in opportunities if not _is_matched_both(o)]
+
         if search:
             s_clean = search.strip().lower()
             def _search_matches(o: Dict[str, Any]) -> bool:
@@ -6694,10 +7046,10 @@ class PlatformAPIService:
                 return any(s_clean in f.lower() for f in fields)
             opportunities = [o for o in opportunities if _search_matches(o)]
 
-        if min_net_ev is not None:
+        if min_net_ev is not None and not is_quote_discrepancy_view:
             if not is_all_candidates_view:
                 opportunities = [o for o in opportunities if o.get("net_ev_pct") is not None and o.get("net_ev_pct") >= min_net_ev]
-            elif min_net_ev != 3.0:
+            elif is_all_candidates_view and min_net_ev != 3.0:
                 opportunities = [o for o in opportunities if o.get("net_ev_pct") is not None and o.get("net_ev_pct") >= min_net_ev]
 
         if min_odds is not None:
@@ -6810,8 +7162,28 @@ class PlatformAPIService:
                 pass
 
         # Sorting
-        sort_key_mode = (sort_by or "net_ev").lower()
-        if sort_key_mode == "hit_rate":
+        sort_key_mode = (sort_by or ("discrepancy_pct" if is_quote_discrepancy_view else "net_ev")).lower()
+        if sort_key_mode in ("discrepancy_pct", "discrepancy", "price_discrepancy", "discrepancy_high"):
+            # Deterministic ranking: relative_price_difference_pct DESC -> odds_difference DESC -> canonical_prop_key ASC
+            def _discrepancy_sort_key_desc(x: Dict[str, Any]):
+                has_rel = 0 if x.get("relative_price_difference_pct") is not None else 1
+                rel = -float(x.get("relative_price_difference_pct") or 0.0)
+                diff = -float(x.get("odds_difference") or 0.0)
+                key = str(x.get("canonical_prop_key") or x.get("prop_id") or "")
+                return (has_rel, rel, diff, key)
+
+            opportunities.sort(key=_discrepancy_sort_key_desc)
+        elif sort_key_mode in ("discrepancy_pct_asc", "discrepancy_low"):
+            # Deterministic ranking: relative_price_difference_pct ASC -> odds_difference ASC -> canonical_prop_key ASC
+            def _discrepancy_sort_key_asc(x: Dict[str, Any]):
+                has_rel = 0 if x.get("relative_price_difference_pct") is not None else 1
+                rel = float(x.get("relative_price_difference_pct") or 0.0)
+                diff = float(x.get("odds_difference") or 0.0)
+                key = str(x.get("canonical_prop_key") or x.get("prop_id") or "")
+                return (has_rel, rel, diff, key)
+
+            opportunities.sort(key=_discrepancy_sort_key_asc)
+        elif sort_key_mode == "hit_rate":
             opportunities.sort(key=lambda x: (x.get("hit_rate_pct") is not None, x.get("hit_rate_pct") or 0.0), reverse=True)
         elif sort_key_mode == "sample_size":
             opportunities.sort(key=lambda x: (x.get("trend_window") is not None, x.get("trend_window") or x.get("sample_size") or 0), reverse=True)
@@ -6839,10 +7211,14 @@ class PlatformAPIService:
 
         res = dict(cached)
         res["items"] = paginated
+        res["opportunities"] = paginated
         res["all_candidates"] = qualified_raw + diagnostic_raw
         if is_all_candidates_view:
             res["qualified_opportunities"] = qualified_raw
             res["total_qualified_matching_filter"] = len([o for o in qualified_raw if o.get("is_valuebet") or o.get("status") == "QUALIFIED"])
+        elif is_quote_discrepancy_view:
+            res["qualified_opportunities"] = paginated
+            res["total_qualified_matching_filter"] = total
         else:
             res["qualified_opportunities"] = paginated
             res["total_qualified_matching_filter"] = total
@@ -6850,7 +7226,7 @@ class PlatformAPIService:
         res["total_items_matching_filter"] = total
         res["limit"] = limit
         res["offset"] = offset
-        res["view_mode"] = view_mode or ("ALL_CANDIDATES" if is_all_candidates_view else "TOP_VALUE")
+        res["view_mode"] = view_mode or ("ALL_CANDIDATES" if is_all_candidates_view else ("QUOTE_DISCREPANCY" if is_quote_discrepancy_view else "TOP_VALUE"))
         return res
 
     def run_player_shots_settlement(self, now: Optional[datetime] = None) -> Dict[str, Any]:

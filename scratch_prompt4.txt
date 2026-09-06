@@ -1,0 +1,801 @@
+<USER_REQUEST>
+MASTER PROMPT — GLOBAL PROPS SCANNER / OPPORTUNITY NAVIGATION + QUOTE DISCREPANCY RANKING
+
+PROJECT: Zielone Bety
+TARGET: Global Props Scanner (/playerprops) + its opportunity-result presentation
+
+TASK TYPE:
+Focused information-architecture and opportunity-navigation improvement.
+
+The newly implemented Polish bookmaker Quote Discrepancy engine is now a first-class opportunity type.
+
+The UI must make it possible to:
+1. quickly choose the type of opportunity,
+2. see how many opportunities exist,
+3. inspect the most important opportunities first,
+4. specifically sort Quote Discrepancies by the largest bookmaker price difference.
+
+IMPORTANT:
+This is NOT a request to redesign the whole scanner.
+Do not touch unrelated screens.
+
+==================================================
+1. CURRENT PROBLEM
+==================================================
+
+The current Global Props Scanner category/navigation layer mixes:
+
+- real opportunity categories,
+- bookmaker filters,
+- technical diagnostics,
+- rejection states.
+
+Examples:
+
+- Top Valuebets
+- All Candidates / Diagnostics
+- Player Props
+- Team Props
+- Superbet
+- Betclic
+- Below Threshold
+- Reference Gap
+- No Polish Odds
+
+This is poor information architecture.
+
+The primary navigation should represent USER INTENT.
+
+A user should be able to immediately answer:
+
+"What kind of betting opportunity do I want to inspect?"
+
+The primary categories must therefore be:
+
+TOP VALUEBETS
+PLAYER PROPS
+TEAM PROPS
+QUOTE DISCREPANCY
+ALL
+
+==================================================
+2. PRIMARY NAVIGATION
+==================================================
+
+Replace the current primary category row with:
+
+[ TOP VALUEBETS ]
+[ PLAYER PROPS ]
+[ TEAM PROPS ]
+[ QUOTE DISCREPANCY ]
+[ ALL ]
+
+Do not expose bookmaker-specific or diagnostic states as primary categories.
+
+QUOTE DISCREPANCY is a first-class opportunity category.
+
+Supporting explanation may be:
+
+"Large price differences between Betclic and Superbet"
+
+Do not rename it to:
+
+- Odds
+- Price Difference
+- Polish Odds
+- Bookmaker Odds
+
+Use the canonical opportunity terminology:
+
+QUOTE DISCREPANCY
+
+==================================================
+3. REMOVE FROM PRIMARY NAVIGATION
+==================================================
+
+These must NOT remain as primary navigation buttons:
+
+- Superbet
+- Betclic
+- Below Threshold
+- Reference Gap
+- No Polish Odds
+- All Candidates / Diagnostics
+
+Do NOT delete their functionality if it is useful.
+
+Move appropriate diagnostic/refinement filters into:
+
+MORE FILTERS
+
+or:
+
+ADVANCED FILTERS / DIAGNOSTICS
+
+Primary navigation = opportunity categories.
+
+Secondary controls = technical/refinement filters.
+
+==================================================
+4. QUOTE DISCREPANCY — FIRST-CLASS EXPERIENCE
+==================================================
+
+When the user selects:
+
+QUOTE DISCREPANCY
+
+the scanner must display only:
+
+type = QUOTE_DISCREPANCY
+
+Use the existing backend/API classification.
+
+Do NOT recreate discrepancy calculations in frontend.
+
+Backend remains the source of truth.
+
+Each discrepancy opportunity should expose, where available:
+
+- player
+- team
+- match
+- stat
+- line
+- outcome
+- Betclic odds
+- Superbet odds
+- best executable bookmaker
+- lower executable bookmaker
+- odds delta
+- relative price improvement %
+- implied probability difference
+- timestamp/source information where already available
+
+Example:
+
+Vinícius
+Player Shots
+Over 2.5
+
+Betclic: 3.10
+Superbet: 1.88
+
+Best executable: Betclic 3.10
+
+Relative discrepancy:
+
++64.9%
+
+The user must immediately understand that the same canonical proposition has materially different executable prices between Polish bookmakers.
+
+==================================================
+5. CRITICAL NEW REQUIREMENT — QUOTE DISCREPANCY SORTING
+==================================================
+
+THIS IS MANDATORY.
+
+When the user is viewing:
+
+QUOTE DISCREPANCY
+
+they must be able to sort opportunities by the size of the bookmaker price discrepancy.
+
+Add a dedicated sort option:
+
+DISCREPANCY % (HIGH)
+
+or equivalent clear wording such as:
+
+Price Discrepancy (High → Low)
+
+This must sort by:
+
+relative_price_difference_pct DESC
+
+NOT by:
+
+- raw odds
+- Score
+- Net EV
+- opportunity type
+- kickoff
+- arbitrary database order
+
+The largest relative bookmaker price discrepancy must appear first.
+
+Example:
+
++175.5%
++125.9%
++64.9%
++53.1%
++36.2%
++23.3%
++18.2%
++10.9%
+
+The ranking must be deterministic.
+
+Recommended secondary tie-breakers:
+
+1. relative_price_difference_pct DESC
+2. odds_difference DESC
+3. stable opportunity/canonical ID ASC
+
+Do not use random ordering.
+
+==================================================
+6. DEFAULT SORTING FOR QUOTE DISCREPANCY
+==================================================
+
+When the user switches to:
+
+QUOTE DISCREPANCY
+
+the default sort should automatically become:
+
+DISCREPANCY % — HIGH → LOW
+
+unless the user has explicitly selected another supported sort.
+
+This is important because the primary purpose of this category is discovering the largest price inefficiencies.
+
+The user should NOT have to manually discover a hidden sort option every time.
+
+Example:
+
+User clicks:
+
+QUOTE DISCREPANCY
+
+Result immediately begins with:
+
++175.5% DISC
++125.9% DISC
++64.9% DISC
++53.1% DISC
+...
+
+not:
+
++10.9%
++11.2%
++13.0%
+...
+
+==================================================
+7. CONTEXTUAL SORT OPTIONS
+==================================================
+
+Keep existing generic sorting where it remains meaningful.
+
+For example:
+
+- Net EV (High → Low)
+- Quality Score
+- Odds (High → Low)
+- Kickoff (Soonest)
+- Opportunity Type
+
+But add:
+
+- Discrepancy % (High → Low)
+- Discrepancy % (Low → High)
+
+Optionally, if the underlying DTO already exposes it:
+
+- Odds Delta (High → Low)
+- Implied Probability Gap (High → Low)
+
+Do NOT invent metrics that the backend does not provide.
+
+When QUOTE DISCREPANCY is active, visually prioritize the discrepancy sort.
+
+For other categories, preserve existing meaningful sorting.
+
+==================================================
+8. IMPORTANT METRIC SEMANTICS
+==================================================
+
+There are three different concepts:
+
+1. odds_difference
+
+best_odds - lower_odds
+
+2. relative_price_difference_pct
+
+((best_odds / lower_odds) - 1) * 100
+
+3. implied_probability_difference
+
+(1 / lower_odds - 1 / best_odds) * 100
+
+Do not confuse them.
+
+The PRIMARY ranking metric for Quote Discrepancy is:
+
+relative_price_difference_pct
+
+because it expresses the proportional improvement in executable price.
+
+Example:
+
+Betclic = 3.75
+Superbet = 2.45
+
+odds_difference = +1.30
+
+relative discrepancy = +53.1%
+
+The UI may display both:
+
++53.1% DISC
+Δ +1.30
+
+but ranking is based on +53.1%.
+
+==================================================
+9. COUNTERS
+==================================================
+
+Counters must represent actual result-set counts.
+
+Primary categories:
+
+TOP VALUEBETS
+PLAYER PROPS
+TEAM PROPS
+QUOTE DISCREPANCY
+ALL
+
+Do NOT reuse diagnostic counts as opportunity counts.
+
+For example:
+
+"Superbet 50"
+
+does not belong in primary opportunity navigation.
+
+If a clean count cannot be obtained, omit it rather than fabricate it.
+
+==================================================
+10. MORE FILTERS
+==================================================
+
+Move secondary filters into More Filters.
+
+Potential existing filters:
+
+BOOKMAKER:
+- Betclic
+- Superbet
+
+DIAGNOSTICS:
+- Below Threshold
+- Reference Gap
+- No Polish Odds
+- Unverified Cross-Mapping
+- other existing diagnostic states
+
+Do not invent new backend filtering systems.
+
+Do not remove existing functionality merely because it is moved.
+
+More Filters should clearly feel secondary to opportunity categories.
+
+==================================================
+11. PRIMARY NAVIGATION VISUAL DESIGN
+==================================================
+
+The category row should be compact and calm.
+
+Recommended:
+
+[ 🏆 TOP VALUEBETS ] [ PLAYER PROPS ] [ TEAM PROPS ] [ QUOTE DISCREPANCY ] [ ALL ]
+
+Do not give every button a different color.
+
+Use one strong active state.
+
+QUOTE DISCREPANCY may have a subtle distinct accent because it represents a separate opportunity class.
+
+Avoid:
+
+- casino aesthetics
+- neon
+- gradients
+- excessive borders
+- oversized pills
+- giant icons
+- unnecessary animations
+
+This is a professional sports analytics / trading-style tool.
+
+==================================================
+12. OPPORTUNITY ROWS
+==================================================
+
+For Quote Discrepancy rows, make the discrepancy the dominant signal.
+
+Example:
+
++53.1%
+DISC
+
+Abde Rebbach
+Alaves vs Osasuna
+
+PLAYER_SHOTS · 2.5
+Betclic 3.75
+Superbet 2.45
+
+Best: Betclic 3.75
+
+Score —
+
+The user should not have to open the Inspector to understand that the opportunity exists because of a major bookmaker price difference.
+
+Do NOT show fake Score values.
+
+Unrated discrepancy opportunities remain:
+
+Score —
+
+==================================================
+13. INSPECTOR
+==================================================
+
+Keep existing discrepancy Inspector functionality.
+
+When a Quote Discrepancy is selected, show:
+
+BEST EXECUTABLE ODDS
+
+PRICE DISCREPANCY
+
+POLISH BOOKMAKER PRICE DISCREPANCY ANALYSIS
+
+Include:
+
+- higher quote
+- lower quote
+- bookmaker names
+- Δ odds
+- relative %
+- implied probability comparison
+- explicit non-surebet disclaimer
+
+Preserve current semantics.
+
+Do not turn Quote Discrepancy into ValueBet or Surebet.
+
+==================================================
+14. SEMANTIC SEPARATION
+==================================================
+
+QUOTE_DISCREPANCY is NOT:
+
+- Surebet
+- Guaranteed Profit
+- ValueBet
+
+It means:
+
+"Two execution bookmakers offer materially different prices for the same canonical proposition."
+
+Do not fabricate EV.
+
+Do not fabricate Fair Odds.
+
+Do not fabricate Score 50.
+
+Do not change existing valuation logic.
+
+==================================================
+15. EMPTY STATES
+==================================================
+
+QUOTE DISCREPANCY:
+
+"No significant Polish bookmaker price discrepancies found."
+
+Supporting text:
+
+"Discrepancies require the same player, market, line and period to be matched across Betclic and Superbet and to exceed the configured threshold."
+
+PLAYER PROPS:
+
+"No player prop opportunities match the current filters."
+
+TEAM PROPS:
+
+"No team prop opportunities match the current filters."
+
+TOP VALUEBETS:
+
+"No valuebets meet the current criteria."
+
+ALL:
+
+"No opportunities match the current filters."
+
+Use category-specific language.
+
+==================================================
+16. RESPONSIVE
+==================================================
+
+Verify:
+
+1366px
+1024px
+768px
+375px
+
+At 375px:
+
+- no page-level horizontal overflow
+- category controls remain usable
+- sort control remains usable
+- discrepancy percentages remain readable
+- no clipped bookmaker information
+
+A horizontally scrollable category rail is acceptable if necessary.
+
+==================================================
+17. ACCESSIBILITY
+==================================================
+
+Use semantic buttons.
+
+Requirements:
+
+- keyboard navigation
+- focus-visible
+- aria-selected where appropriate
+- active state not based on color alone
+- accessible sort control
+- reduced-motion compatibility
+
+==================================================
+18. EXISTING FILTERS
+==================================================
+
+Keep:
+
+- Search Player / Team / Match
+- Stat Type
+- Min Net EV
+- Time Horizon
+- Sort By
+- More Filters
+- Reset
+
+Do not remove useful filters.
+
+Only improve their information architecture.
+
+==================================================
+19. TESTS
+==================================================
+
+Do not create fake coverage tests.
+
+Only add targeted tests where necessary.
+
+Required behavior to verify:
+
+1. PLAYER PROPS returns player props.
+2. TEAM PROPS returns team props.
+3. QUOTE_DISCREPANCY returns only QUOTE_DISCREPANCY.
+4. TOP VALUEBETS returns valuebets.
+5. ALL removes category restriction.
+6. More Filters preserves bookmaker/diagnostic filtering.
+7. QUOTE_DISCREPANCY supports discrepancy sorting.
+8. Discrepancy sorting uses relative_price_difference_pct DESC.
+9. Largest discrepancy appears first.
+10. Ties are deterministic.
+11. Switching away from Quote Discrepancy preserves valid generic sorting behavior.
+12. No fake Score 50 is introduced.
+
+Do not duplicate tests that already exist.
+
+==================================================
+20. RUNTIME QA
+==================================================
+
+Use agent-browser against the real running application.
+
+Verify:
+
+A. /playerprops loads correctly.
+
+B. Primary navigation contains only:
+
+Top Valuebets
+Player Props
+Team Props
+Quote Discrepancy
+All
+
+C. Superbet and Betclic are no longer primary navigation buttons.
+
+D. Below Threshold / Reference Gap / No Polish Odds are no longer primary navigation buttons.
+
+E. More Filters exposes appropriate secondary filters.
+
+F. Player Props works.
+
+G. Team Props works.
+
+H. Quote Discrepancy works.
+
+I. Quote Discrepancy automatically uses:
+
+Discrepancy % — High → Low
+
+unless a user-selected sort overrides it.
+
+J. The first results are genuinely the largest discrepancies.
+
+Explicitly inspect at least several rows and verify:
+
++175% > +125% > +64% > +53% > +36%
+
+or whatever the live data actually contains.
+
+Do NOT fabricate these values.
+
+K. Changing to another sort changes ordering correctly.
+
+L. Returning to Quote Discrepancy restores the appropriate contextual/default sort.
+
+M. Inspector still works.
+
+N. Discrepancy metrics shown in row and Inspector agree.
+
+O. No console errors.
+
+P. No page-level horizontal overflow at 375px.
+
+Q. Dark theme works.
+
+R. Light theme works.
+
+S. SPA navigation remains stable.
+
+T. No unrelated screen is modified.
+
+==================================================
+21. UNLAZY
+==================================================
+
+Run unlazy on the final implementation.
+
+Inspect:
+
+- DOM complexity
+- event listeners
+- repeated rendering
+- unnecessary layout work
+- list rendering
+- sort implementation
+- filter implementation
+- responsive behavior
+
+Do not add heavy libraries for this.
+
+Prefer existing Vanilla JS architecture.
+
+Sorting should operate on the already available opportunity DTOs where practical.
+
+Do not introduce a large data-grid dependency just for sorting.
+
+==================================================
+22. SKILLS
+==================================================
+
+Use available skills:
+
+- ui-ux-pro-max
+- design
+- anti-ui-slop
+- agent-browser
+- unlazy
+
+Use pontytail only if it is actually available.
+
+Never claim a skill was used if unavailable.
+
+==================================================
+23. SCOPE LOCK
+==================================================
+
+YOU MAY MODIFY:
+
+- Global Props Scanner category navigation
+- category counters where semantically incorrect
+- More Filters presentation
+- Quote Discrepancy category UI
+- Quote Discrepancy sorting
+- relevant frontend filtering/sorting code
+- targeted tests
+
+YOU MUST NOT MODIFY:
+
+- discrepancy calculation
+- discrepancy threshold
+- PropExecutionMatcher
+- canonical matching
+- StatsHub
+- TaxEngine
+- ValueBet valuation
+- Surebet logic
+- Fair Odds pipeline
+- Opportunity Explorer backend architecture
+- Dashboard
+- Canonical Event Browser
+- unrelated views
+- mobile app
+
+Do not perform broad refactoring.
+
+==================================================
+24. STOP CONDITION
+==================================================
+
+STOP once:
+
+- primary navigation is clean,
+- diagnostic filters are secondary,
+- Quote Discrepancy is a first-class category,
+- Quote Discrepancy is sorted by largest relative price improvement,
+- sorting is deterministic,
+- Inspector remains correct,
+- existing filters still work,
+- runtime QA passes,
+- responsive QA passes,
+- no regressions are found,
+- unlazy passes.
+
+Do not continue redesigning the whole scanner.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Files changed.
+2. Final primary navigation.
+3. Filters moved to More Filters/Diagnostics.
+4. Quote Discrepancy behavior.
+5. Exact discrepancy sorting implementation.
+6. Counter semantics.
+7. Tests run + results.
+8. Runtime QA results.
+9. Proof that highest discrepancy appears first.
+10. Responsive results: 1366 / 1024 / 768 / 375.
+11. Dark/Light results.
+12. unlazy result.
+13. Remaining limitations.
+
+Do not claim PASS without actual runtime verification.
+
+CORE PRINCIPLE:
+
+PRIMARY NAVIGATION = USER INTENT.
+
+DIAGNOSTICS = SECONDARY CONTROLS.
+
+QUOTE DISCREPANCY = FIRST-CLASS OPPORTUNITY.
+
+AND:
+
+WHEN I ASK FOR QUOTE DISCREPANCIES,
+SHOW ME THE BIGGEST PRICE INEFFICIENCIES FIRST.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-05T21:02:48+02:00.
+</ADDITIONAL_METADATA>

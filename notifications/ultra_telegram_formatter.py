@@ -34,7 +34,13 @@ def _format_opportunity_card(idx: int, opp: UltraOpportunity) -> str:
         "WATCHLIST": "⚠️",
     }.get(opp.category, "🔹")
 
-    bucket_tag = " [JUTRO]" if getattr(opp, "horizon_bucket", "TODAY") == "TOMORROW" else ""
+    hb = getattr(opp, "horizon_bucket", "TODAY")
+    if hb == "TOMORROW":
+        bucket_tag = " [JUTRO]"
+    elif hb == "DAY_AFTER_TOMORROW":
+        bucket_tag = " [POJUTRZE]"
+    else:
+        bucket_tag = ""
     lines = []
     lines.append(f"<b>{idx}. {cat_emoji} {_esc(opp.market_display)}</b>")
     lines.append(f"   ⚽ {_esc(opp.match_name)} | <i>{_esc(opp.competition)}</i>{bucket_tag}")
@@ -79,17 +85,28 @@ def format_ultra_scan_report(result: UltraScanResult) -> List[str]:
     bc_badge = "✅ Dostępny" if bc_status == "AVAILABLE" else f"⚠️ {_esc(bc_status)}"
 
     disc_tomorrow = getattr(fn, "discovered_tomorrow_events", 0)
+    disc_day_after = getattr(fn, "discovered_day_after_tomorrow_events", 0)
     sb_tomorrow = getattr(fn, "discovered_superbet_tomorrow", 0)
+    sb_day_after = getattr(fn, "discovered_superbet_day_after_tomorrow", 0)
     bc_tomorrow = getattr(fn, "discovered_betclic_tomorrow", 0)
+    bc_day_after = getattr(fn, "discovered_betclic_day_after_tomorrow", 0)
     tomorrow_date = (
         result.diagnostics.get("tomorrow_date")
+        if hasattr(result, "diagnostics") and isinstance(result.diagnostics, dict)
+        else None
+    )
+    day_after_date = (
+        result.diagnostics.get("day_after_tomorrow_date")
         if hasattr(result, "diagnostics") and isinstance(result.diagnostics, dict)
         else None
     )
 
     date_label = f"📅 Data: <b>{_esc(result.target_date)}</b>"
     if disc_tomorrow > 0 and tomorrow_date:
-        date_label += f" (+ jutro: <b>{_esc(tomorrow_date)}</b>)"
+        if disc_day_after > 0 and day_after_date:
+            date_label += f" (+ jutro: <b>{_esc(tomorrow_date)}</b>, pojutrze: <b>{_esc(day_after_date)}</b>)"
+        else:
+            date_label += f" (+ jutro: <b>{_esc(tomorrow_date)}</b>)"
 
     # ─────────────────────────────────────────────────────────────────────────
     # Header & Coverage Section
@@ -107,11 +124,19 @@ def format_ultra_scan_report(result: UltraScanResult) -> List[str]:
         header_section.append(
             f"• Zdarzenia jutro: <b>{disc_tomorrow}</b> odkrytych (Superbet: {sb_tomorrow}, Betclic: {bc_tomorrow})"
         )
+    if disc_day_after > 0:
+        header_section.append(
+            f"• Zdarzenia pojutrze: <b>{disc_day_after}</b> odkrytych (Superbet: {sb_day_after}, Betclic: {bc_day_after})"
+        )
 
     sel_today = getattr(fn, "selected_today_events", 0)
     sel_tomorrow = getattr(fn, "selected_tomorrow_events", 0)
-    if sel_tomorrow > 0:
-        header_section.append(f"• Wybrane do detali: dzisiaj {sel_today}, jutro {sel_tomorrow}")
+    sel_day_after = getattr(fn, "selected_day_after_tomorrow_events", 0)
+    if sel_tomorrow > 0 or sel_day_after > 0:
+        if sel_day_after > 0:
+            header_section.append(f"• Wybrane do detali: dzisiaj {sel_today}, jutro {sel_tomorrow}, pojutrze {sel_day_after}")
+        else:
+            header_section.append(f"• Wybrane do detali: dzisiaj {sel_today}, jutro {sel_tomorrow}")
 
     header_section.extend([
         f"• Detale Superbet: próbowano {fn.detail_fetch_attempted_superbet}, sukces {fn.detail_fetch_success_superbet}, błędy {fn.detail_fetch_failed_superbet}",
@@ -121,12 +146,21 @@ def format_ultra_scan_report(result: UltraScanResult) -> List[str]:
         header_section.append(f"• Pominięte przez budżet: <b>{fn.detail_fetch_skipped}</b> zdarzeń")
 
     matched_tomorrow = getattr(fn, "matched_events_tomorrow", 0)
-    if matched_tomorrow > 0:
-        matched_str = (
-            f"• Zmatchowane mecze: <b>{fn.matched_events_today + matched_tomorrow}</b> "
-            f"(Dzisiaj: {fn.matched_events_today}, Jutro: {matched_tomorrow} | "
-            f"Wspólne: {fn.overlap_events_count}, Pojedyncze: {fn.single_provider_events_count})"
-        )
+    matched_day_after = getattr(fn, "matched_events_day_after_tomorrow", 0)
+    total_matched = fn.matched_events_today + matched_tomorrow + matched_day_after
+    if matched_tomorrow > 0 or matched_day_after > 0:
+        if matched_day_after > 0:
+            matched_str = (
+                f"• Zmatchowane mecze: <b>{total_matched}</b> "
+                f"(Dzisiaj: {fn.matched_events_today}, Jutro: {matched_tomorrow}, Pojutrze: {matched_day_after} | "
+                f"Wspólne: {fn.overlap_events_count}, Pojedyncze: {fn.single_provider_events_count})"
+            )
+        else:
+            matched_str = (
+                f"• Zmatchowane mecze: <b>{total_matched}</b> "
+                f"(Dzisiaj: {fn.matched_events_today}, Jutro: {matched_tomorrow} | "
+                f"Wspólne: {fn.overlap_events_count}, Pojedyncze: {fn.single_provider_events_count})"
+            )
     else:
         matched_str = f"• Zmatchowane mecze: <b>{fn.matched_events_today}</b> (Wspólne: {fn.overlap_events_count}, Pojedyncze: {fn.single_provider_events_count})"
 

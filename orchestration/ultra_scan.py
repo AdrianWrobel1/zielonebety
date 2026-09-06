@@ -170,15 +170,16 @@ def is_today_in_warsaw(start_time: Any, evaluation_time: Optional[datetime] = No
 
 @dataclass(frozen=True)
 class UltraHorizon:
-    """Explicit, bounded Europe/Warsaw event horizon for ULTRA SCAN.
+    """Explicit, auditable event horizon for ULTRA SCAN in Europe/Warsaw timezone.
 
     Manages daytime vs late-day (evening) horizon semantics:
     - Daytime: strictly bounded to today's calendar slate in Europe/Warsaw.
     - Evening (late in the day, >= evening_start_hour): bounded forward horizon covering
-      today's remaining slate + tomorrow's available events through end-of-tomorrow (or max_forward_hours).
+      today's remaining slate + tomorrow + day after tomorrow (POJUTRZE) through end of D+2 (or max_forward_hours).
     """
     target_date: date
     tomorrow_date: Optional[date]
+    day_after_tomorrow_date: Optional[date]
     start_time: datetime
     end_time: datetime
     is_evening_horizon: bool
@@ -192,7 +193,7 @@ class UltraHorizon:
 
         Returns:
             (is_eligible, bucket_label)
-            bucket_label is one of: "TODAY", "TOMORROW", "STALE", "OUTSIDE_HORIZON"
+            bucket_label is one of: "TODAY", "TOMORROW", "DAY_AFTER_TOMORROW", "STALE", "OUTSIDE_HORIZON"
         """
         k_dt = parse_kickoff_datetime(start_time)
         if k_dt is None:
@@ -209,10 +210,15 @@ class UltraHorizon:
         if kickoff_date == self.target_date:
             return True, "TODAY"
 
-        if self.is_evening_horizon and self.tomorrow_date and kickoff_date == self.tomorrow_date:
-            if k_dt <= self.end_time:
-                return True, "TOMORROW"
-            return False, "OUTSIDE_HORIZON"
+        if self.is_evening_horizon:
+            if self.tomorrow_date and kickoff_date == self.tomorrow_date:
+                if k_dt <= self.end_time:
+                    return True, "TOMORROW"
+                return False, "OUTSIDE_HORIZON"
+            if self.day_after_tomorrow_date and kickoff_date == self.day_after_tomorrow_date:
+                if k_dt <= self.end_time:
+                    return True, "DAY_AFTER_TOMORROW"
+                return False, "OUTSIDE_HORIZON"
 
         return False, "OUTSIDE_HORIZON"
 
@@ -258,13 +264,14 @@ def resolve_ultra_horizon(
         is_evening = now_warsaw.hour >= evening_start_hour
 
     tomorrow_d = (target_d + timedelta(days=1)) if is_evening else None
+    day_after_tomorrow_d = (target_d + timedelta(days=2)) if is_evening else None
 
     # Earliest eligible time (with freshness buffer)
     start_time = eval_dt - timedelta(minutes=5)
 
-    # End boundary: if evening horizon, includes all of tomorrow in Warsaw (up to 23:59:59.999999)
-    if is_evening and tomorrow_d:
-        end_warsaw = datetime.combine(tomorrow_d, dt_time.max, tzinfo=WARSAW_TZ)
+    # End boundary: if evening horizon, includes all of day after tomorrow in Warsaw (up to 23:59:59.999999)
+    if is_evening and day_after_tomorrow_d:
+        end_warsaw = datetime.combine(day_after_tomorrow_d, dt_time.max, tzinfo=WARSAW_TZ)
         end_time = end_warsaw.astimezone(timezone.utc)
     else:
         end_warsaw = datetime.combine(target_d, dt_time.max, tzinfo=WARSAW_TZ)
@@ -278,6 +285,7 @@ def resolve_ultra_horizon(
     return UltraHorizon(
         target_date=target_d,
         tomorrow_date=tomorrow_d,
+        day_after_tomorrow_date=day_after_tomorrow_d,
         start_time=start_time,
         end_time=end_time,
         is_evening_horizon=is_evening,
@@ -362,19 +370,24 @@ class UltraScanFunnelMetrics:
     discovered_events_total: int = 0
     discovered_today_events: int = 0
     discovered_tomorrow_events: int = 0
+    discovered_day_after_tomorrow_events: int = 0
     discovered_superbet_today: int = 0
     discovered_superbet_tomorrow: int = 0
+    discovered_superbet_day_after_tomorrow: int = 0
     discovered_betclic_today: int = 0
     discovered_betclic_tomorrow: int = 0
+    discovered_betclic_day_after_tomorrow: int = 0
     discovered_statshub_today: int = 0
     # 2. Matching
     matched_events_today: int = 0
     matched_events_tomorrow: int = 0
+    matched_events_day_after_tomorrow: int = 0
     overlap_events_count: int = 0
     single_provider_events_count: int = 0
     # 3. Acquisition & Detailed Accounting
     selected_today_events: int = 0
     selected_tomorrow_events: int = 0
+    selected_day_after_tomorrow_events: int = 0
     detail_fetch_attempted_superbet: int = 0
     detail_fetch_attempted_betclic: int = 0
     detail_fetch_success_superbet: int = 0
@@ -425,17 +438,22 @@ class UltraScanFunnelMetrics:
             "discovered_events_total": self.discovered_events_total,
             "discovered_today_events": self.discovered_today_events,
             "discovered_tomorrow_events": self.discovered_tomorrow_events,
+            "discovered_day_after_tomorrow_events": self.discovered_day_after_tomorrow_events,
             "discovered_superbet_today": self.discovered_superbet_today,
             "discovered_superbet_tomorrow": self.discovered_superbet_tomorrow,
+            "discovered_superbet_day_after_tomorrow": self.discovered_superbet_day_after_tomorrow,
             "discovered_betclic_today": self.discovered_betclic_today,
             "discovered_betclic_tomorrow": self.discovered_betclic_tomorrow,
+            "discovered_betclic_day_after_tomorrow": self.discovered_betclic_day_after_tomorrow,
             "discovered_statshub_today": self.discovered_statshub_today,
             "matched_events_today": self.matched_events_today,
             "matched_events_tomorrow": self.matched_events_tomorrow,
+            "matched_events_day_after_tomorrow": self.matched_events_day_after_tomorrow,
             "overlap_events_count": self.overlap_events_count,
             "single_provider_events_count": self.single_provider_events_count,
             "selected_today_events": self.selected_today_events,
             "selected_tomorrow_events": self.selected_tomorrow_events,
+            "selected_day_after_tomorrow_events": self.selected_day_after_tomorrow_events,
             "detail_fetch_attempted_superbet": self.detail_fetch_attempted_superbet,
             "detail_fetch_attempted_betclic": self.detail_fetch_attempted_betclic,
             "detail_fetch_success_superbet": self.detail_fetch_success_superbet,
@@ -496,7 +514,7 @@ class UltraOpportunity:
     is_watchlist: bool = False
     watchlist_reason: Optional[str] = None
     pass_number: int = 1  # 1 for Breadth, 2 for Depth
-    horizon_bucket: str = "TODAY"  # "TODAY" or "TOMORROW"
+    horizon_bucket: str = "TODAY"  # "TODAY", "TOMORROW", or "DAY_AFTER_TOMORROW"
     details: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -652,14 +670,16 @@ class UltraScanOrchestrator:
         )
         target_date_str = str(horizon.target_date)
         tomorrow_date_str = str(horizon.tomorrow_date) if horizon.tomorrow_date else None
+        day_after_tomorrow_date_str = str(horizon.day_after_tomorrow_date) if horizon.day_after_tomorrow_date else None
 
         execution_id = f"ultra_{now_warsaw.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
         logger.info(
-            "Starting ULTRA SCAN [%s] for target date %s (Warsaw TZ, evening_horizon=%s, tomorrow=%s)",
+            "Starting ULTRA SCAN [%s] for target date %s (Warsaw TZ, evening_horizon=%s, tomorrow=%s, day_after_tomorrow=%s)",
             execution_id,
             target_date_str,
             horizon.is_evening_horizon,
             tomorrow_date_str,
+            day_after_tomorrow_date_str,
         )
 
         funnel = UltraScanFunnelMetrics()
@@ -669,6 +689,7 @@ class UltraScanOrchestrator:
             "execution_id": execution_id,
             "target_date": target_date_str,
             "tomorrow_date": tomorrow_date_str,
+            "day_after_tomorrow_date": day_after_tomorrow_date_str,
             "is_evening_horizon": horizon.is_evening_horizon,
             "horizon_start": horizon.start_time.isoformat(),
             "horizon_end": horizon.end_time.isoformat(),
@@ -745,9 +766,10 @@ class UltraScanOrchestrator:
         funnel.discovered_events_total = len(sb_discovered_all) + len(bc_discovered_all)
 
         # Strict horizon and freshness filtering in Europe/Warsaw
-        def _filter_slate(items: List[Any], provider_name: str) -> Tuple[List[Any], List[Any], List[Any]]:
+        def _filter_slate(items: List[Any], provider_name: str) -> Tuple[List[Any], List[Any], List[Any], List[Any]]:
             today_items = []
             tomorrow_items = []
+            day_after_tomorrow_items = []
             all_valid = []
             for item in items:
                 st = getattr(item, "start_time", None)
@@ -764,20 +786,25 @@ class UltraScanOrchestrator:
                     today_items.append(item)
                 elif bucket == "TOMORROW":
                     tomorrow_items.append(item)
-            return all_valid, today_items, tomorrow_items
+                elif bucket == "DAY_AFTER_TOMORROW":
+                    day_after_tomorrow_items.append(item)
+            return all_valid, today_items, tomorrow_items, day_after_tomorrow_items
 
-        sb_today_all, sb_today, sb_tomorrow = _filter_slate(sb_discovered_all, "superbet")
-        bc_today_all, bc_today, bc_tomorrow = _filter_slate(bc_discovered_all, "betclic")
+        sb_today_all, sb_today, sb_tomorrow, sb_day_after = _filter_slate(sb_discovered_all, "superbet")
+        bc_today_all, bc_today, bc_tomorrow, bc_day_after = _filter_slate(bc_discovered_all, "betclic")
 
         funnel.discovered_superbet_today = len(sb_today)
         funnel.discovered_superbet_tomorrow = len(sb_tomorrow)
+        funnel.discovered_superbet_day_after_tomorrow = len(sb_day_after)
         funnel.discovered_betclic_today = len(bc_today)
         funnel.discovered_betclic_tomorrow = len(bc_tomorrow)
+        funnel.discovered_betclic_day_after_tomorrow = len(bc_day_after)
         funnel.discovered_today_events = len(sb_today) + len(bc_today)
         funnel.discovered_tomorrow_events = len(sb_tomorrow) + len(bc_tomorrow)
+        funnel.discovered_day_after_tomorrow_events = len(sb_day_after) + len(bc_day_after)
 
         logger.info(
-            "ULTRA SCAN Discovery: %d total events, %d in horizon (Today: %d [SB: %d, BC: %d], Tomorrow: %d [SB: %d, BC: %d])",
+            "ULTRA SCAN Discovery: %d total events, %d in horizon (Today: %d [SB: %d, BC: %d], Tomorrow: %d [SB: %d, BC: %d], DayAfterTomorrow: %d [SB: %d, BC: %d])",
             funnel.discovered_events_total,
             len(sb_today_all) + len(bc_today_all),
             funnel.discovered_today_events,
@@ -786,6 +813,9 @@ class UltraScanOrchestrator:
             funnel.discovered_tomorrow_events,
             funnel.discovered_superbet_tomorrow,
             funnel.discovered_betclic_tomorrow,
+            funnel.discovered_day_after_tomorrow_events,
+            funnel.discovered_superbet_day_after_tomorrow,
+            funnel.discovered_betclic_day_after_tomorrow,
         )
 
         funnel.phase_durations_seconds["discovery"] = time.perf_counter() - t_phase_0
@@ -831,6 +861,10 @@ class UltraScanOrchestrator:
             funnel.selected_tomorrow_events = (
                 sum(1 for it in sb_selected if horizon.classify_kickoff(it.start_time, eval_dt)[1] == "TOMORROW") +
                 sum(1 for it in bc_selected if horizon.classify_kickoff(it.start_time, eval_dt)[1] == "TOMORROW")
+            )
+            funnel.selected_day_after_tomorrow_events = (
+                sum(1 for it in sb_selected if horizon.classify_kickoff(it.start_time, eval_dt)[1] == "DAY_AFTER_TOMORROW") +
+                sum(1 for it in bc_selected if horizon.classify_kickoff(it.start_time, eval_dt)[1] == "DAY_AFTER_TOMORROW")
             )
 
             funnel.detail_fetch_attempted_superbet = len(selected_sb_ids)
@@ -984,6 +1018,10 @@ class UltraScanOrchestrator:
                     funnel.matched_events_tomorrow = sum(
                         1 for ce in validation_result.canonical_events
                         if horizon.classify_kickoff(ce.scheduled_start, eval_dt)[1] == "TOMORROW"
+                    )
+                    funnel.matched_events_day_after_tomorrow = sum(
+                        1 for ce in validation_result.canonical_events
+                        if horizon.classify_kickoff(ce.scheduled_start, eval_dt)[1] == "DAY_AFTER_TOMORROW"
                     )
                     funnel.matched_markets_total = validation_result.metrics.matched_market_count
                     funnel.overlap_events_count = sum(
@@ -1331,7 +1369,7 @@ class UltraScanOrchestrator:
                     cached_execution_events=cached_for_props,
                 )
 
-                time_horizon_days = 2 if horizon.is_evening_horizon else 1
+                time_horizon_days = 3 if horizon.is_evening_horizon else 1
                 props_scope = GlobalScanScope(
                     time_horizon_days=time_horizon_days,
                     props_scope="ALL",

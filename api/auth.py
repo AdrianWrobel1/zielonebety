@@ -206,8 +206,24 @@ def _bearer_token_from_request(request: object) -> Optional[str]:
     return token or None
 
 
+def is_auth_enabled() -> bool:
+    """True when control-plane authentication is enforced.
+    
+    Can be explicitly disabled via AUTH_DISABLED=true or REQUIRE_AUTH=false
+    for private/personal single-operator deployments without a login UI
+    (per Product Requirement #1). Defaults to True to maintain security regression safety.
+    """
+    if os.environ.get("AUTH_DISABLED", "").lower() in ("true", "1", "yes"):
+        return False
+    if os.environ.get("REQUIRE_AUTH", "").lower() in ("false", "0", "no"):
+        return False
+    return True
+
+
 def get_current_user(request: Request) -> Dict[str, str]:
     """FastAPI dependency: valid bearer session or 401 (never logs the token)."""
+    if not is_auth_enabled():
+        return {"username": get_admin_username(), "role": "Admin"}
     token = _bearer_token_from_request(request)
     identity = verify_token(token) if token else None
     if identity is None:

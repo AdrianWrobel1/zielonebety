@@ -225,14 +225,35 @@ class TaxEngine:
         Gross S = sum(1 / raw_odds_i)
         Net S = sum(1 / effective_net_odds_i)
         Net Margin = (1 / Net_S) - 1
+
+        Requires at least 2 distinct complementary outcome legs to qualify as arbitrage.
+        Quotes on the same outcome (e.g. quote comparison) are rejected.
         """
         gross_s = DECIMAL_ZERO
         net_s = DECIMAL_ZERO
         processed_legs = []
 
+        if not legs:
+            return {
+                "gross_implied_probability_sum": DECIMAL_ZERO,
+                "gross_margin": DECIMAL_ZERO,
+                "gross_margin_percent": DECIMAL_ZERO,
+                "is_gross_surebet": False,
+                "net_implied_probability_sum": DECIMAL_ZERO,
+                "net_margin": DECIMAL_ZERO,
+                "net_margin_percent": DECIMAL_ZERO,
+                "is_net_surebet": False,
+                "legs": [],
+                "rejection_reason": "EMPTY_LEGS",
+            }
+
+        outcomes = []
         for leg in legs:
             raw_odds = Decimal(str(leg.get("odds", 1.0)))
-            provider = str(leg.get("provider", "unknown"))
+            provider = str(leg.get("provider", leg.get("bookmaker", "unknown")))
+            sel_type = leg.get("selection_type") or leg.get("outcome") or leg.get("side") or leg.get("name")
+            if sel_type:
+                outcomes.append(str(sel_type).strip().upper())
 
             net_res = self.calculate_net_odds(
                 raw_odds=raw_odds,
@@ -253,20 +274,40 @@ class TaxEngine:
                 "is_tax_applied": net_res.is_tax_applied,
             })
 
-        gross_margin = ((DECIMAL_ONE / gross_s) - DECIMAL_ONE) if gross_s > DECIMAL_ZERO else DECIMAL_ZERO
-        net_margin = ((DECIMAL_ONE / net_s) - DECIMAL_ONE) if net_s > DECIMAL_ZERO else DECIMAL_ZERO
+        distinct_outcomes = set(outcomes)
+        has_valid_coverage = (
+            len(legs) >= 2
+            and len(outcomes) == len(legs)
+            and len(distinct_outcomes) >= 2
+            and len(distinct_outcomes) == len(legs)
+        )
 
-        return {
+        rejection_reason = None
+        if not has_valid_coverage:
+            rejection_reason = "SAME_OR_INSUFFICIENT_OUTCOMES"
+        elif net_s >= DECIMAL_ONE or net_s <= DECIMAL_ZERO:
+            rejection_reason = "NO_ARBITRAGE_EDGE"
+
+        is_gross = (gross_s > DECIMAL_ZERO and gross_s < DECIMAL_ONE and has_valid_coverage)
+        is_net = (net_s > DECIMAL_ZERO and net_s < DECIMAL_ONE and has_valid_coverage)
+
+        gross_margin = ((DECIMAL_ONE / gross_s) - DECIMAL_ONE) if (gross_s > DECIMAL_ZERO and has_valid_coverage) else DECIMAL_ZERO
+        net_margin = ((DECIMAL_ONE / net_s) - DECIMAL_ONE) if (net_s > DECIMAL_ZERO and has_valid_coverage) else DECIMAL_ZERO
+
+        res = {
             "gross_implied_probability_sum": gross_s,
             "gross_margin": gross_margin,
             "gross_margin_percent": gross_margin * DECIMAL_HUNDRED,
-            "is_gross_surebet": gross_s < DECIMAL_ONE,
+            "is_gross_surebet": is_gross,
             "net_implied_probability_sum": net_s,
             "net_margin": net_margin,
             "net_margin_percent": net_margin * DECIMAL_HUNDRED,
-            "is_net_surebet": net_s < DECIMAL_ONE,
+            "is_net_surebet": is_net,
             "legs": processed_legs,
         }
+        if rejection_reason:
+            res["rejection_reason"] = rejection_reason
+        return res
 
     def calculate_stake_distribution(
         self,
@@ -290,6 +331,7 @@ class TaxEngine:
             return {
                 "total_stake": tot_stake_dec,
                 "is_surebet": False,
+                "rejection_reason": "EMPTY_LEGS",
                 "net_implied_probability_sum": DECIMAL_ZERO,
                 "roi_percentage": DECIMAL_ZERO,
                 "guaranteed_payout": DECIMAL_ZERO,
@@ -299,11 +341,14 @@ class TaxEngine:
 
         calc_legs = []
         net_s = DECIMAL_ZERO
+        outcomes = []
 
         for leg in legs:
             raw_odds = Decimal(str(leg.get("odds", leg.get("decimal_odds", 1.0))))
             provider = str(leg.get("provider", leg.get("bookmaker", "unknown")))
-            sel_type = leg.get("selection_type", "")
+            sel_type = leg.get("selection_type") or leg.get("outcome") or leg.get("side") or leg.get("name") or ""
+            if sel_type:
+                outcomes.append(str(sel_type).strip().upper())
 
             net_res = self.calculate_net_odds(
                 raw_odds=raw_odds,
@@ -327,14 +372,23 @@ class TaxEngine:
                 "original_leg": leg,
             })
 
-        is_sb = (net_s > DECIMAL_ZERO and net_s < DECIMAL_ONE)
-        roi_pct = (((DECIMAL_ONE / net_s) - DECIMAL_ONE) * DECIMAL_HUNDRED) if net_s > DECIMAL_ZERO else DECIMAL_ZERO
+        distinct_outcomes = set(outcomes)
+        has_valid_coverage = (
+            len(legs) >= 2
+            and len(outcomes) == len(legs)
+            and len(distinct_outcomes) >= 2
+            and len(distinct_outcomes) == len(legs)
+        )
+
+        is_sb = (net_s > DECIMAL_ZERO and net_s < DECIMAL_ONE and has_valid_coverage)
+        roi_pct = (((DECIMAL_ONE / net_s) - DECIMAL_ONE) * DECIMAL_HUNDRED) if (net_s > DECIMAL_ZERO and has_valid_coverage) else DECIMAL_ZERO
 
         if not is_sb or net_s <= DECIMAL_ZERO:
             # Invalid or non-surebet state: do not compute false guaranteed profit
             return {
                 "total_stake": tot_stake_dec,
                 "is_surebet": False,
+                "rejection_reason": "SAME_OR_INSUFFICIENT_OUTCOMES" if not has_valid_coverage else "NO_ARBITRAGE_EDGE",
                 "net_implied_probability_sum": net_s,
                 "roi_percentage": roi_pct,
                 "guaranteed_payout": DECIMAL_ZERO,

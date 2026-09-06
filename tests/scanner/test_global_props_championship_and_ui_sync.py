@@ -188,7 +188,8 @@ class TestGlobalPropsChampionshipAndUISync(unittest.TestCase):
         mock_sb_p,
     ):
         """Championship match (Millwall vs Bolton) is discovered, scored by markets, selected, and evaluated."""
-        now_str = datetime.now(timezone.utc).isoformat()
+        from datetime import timedelta
+        now_str = (datetime.now(timezone.utc) + timedelta(hours=18)).isoformat()
 
         # 1. Superbet discovers Championship fixture
         sb_item = SuperbetDiscoveredItem(

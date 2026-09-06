@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Zielone Bety — Betting Opportunities & Quantitative Analytics Platform</title>
   <meta name="description" content="Production-grade monitoring dashboard for sports betting surebets, valuebets, and provider framework status.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,8 +28,8 @@
       </div>
 
       <div class="connection-status" id="connection-status">
-        <span class="status-dot pulsing"></span>
-        <span class="status-text">API REST Connected</span>
+        <span class="status-dot pulsing" style="background-color: #94A3B8;"></span>
+        <span class="status-text">Connecting...</span>
       </div>
 
       <nav class="nav-menu" role="navigation" aria-label="Main Navigation">
@@ -87,7 +87,34 @@
 
     <!-- Main Content Area -->
     <div class="main-wrapper">
-      <!-- Top Header -->
+      <!-- Mobile Top Header (<= 900px) -->
+      <header class="mobile-header" id="mobile-header">
+        <div class="mobile-brand">
+          <div class="brand-logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <div class="mobile-brand-info">
+            <span class="mobile-brand-name">Zielone Bety</span>
+            <span class="mobile-section-indicator" id="mobile-section-indicator">Dashboard</span>
+          </div>
+        </div>
+
+        <div class="mobile-header-actions">
+          <div class="mobile-status-dot-wrap" title="System Connection Status">
+            <span class="status-dot pulsing" id="mobile-connection-dot"></span>
+          </div>
+          <button class="btn btn-icon mobile-header-btn" id="mobile-theme-toggle" title="Toggle Theme" aria-label="Toggle Theme">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </button>
+          <button class="btn btn-icon mobile-header-btn" id="mobile-more-btn-header" title="Open Navigation Menu" aria-label="Open Navigation Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Top Header (Desktop >= 901px) -->
       <header class="top-header">
         <div class="header-search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -487,6 +514,10 @@
                   <span class="radar-tab-name">Team Props</span>
                   <span class="radar-tab-count" id="tab-count-team">0</span>
                 </button>
+                <button class="opp-radar-tab" data-type="QUOTE_DISCREPANCY" role="tab" aria-selected="false" id="tab-opp-discrepancy">
+                  <span class="radar-tab-name">Quote Discrepancy</span>
+                  <span class="radar-tab-count" id="tab-count-discrepancy">0</span>
+                </button>
                 <button class="opp-radar-tab" data-type="WATCHLIST" role="tab" aria-selected="false" id="tab-opp-watchlist">
                   <span class="radar-tab-name">Watchlist (Near-Arb)</span>
                   <span class="radar-tab-count" id="tab-count-watchlist">0</span>
@@ -855,45 +886,48 @@
             <div class="card metric-card border-accent">
               <div class="metric-icon">📡</div>
               <div class="metric-details">
-                <span class="metric-title">Trends Discovered</span>
+                <span class="metric-title">Raw Trends Discovered</span>
                 <span class="metric-num mono" id="props-stat-scanned">0</span>
-                <span class="metric-foot" id="props-stat-source-total">Complete StatsHub Dataset</span>
+                <span class="metric-foot" id="props-stat-source-total">Ingested StatsHub Trends</span>
+              </div>
+            </div>
+
+            <div class="card metric-card">
+              <div class="metric-icon">🔍</div>
+              <div class="metric-details">
+                <span class="metric-title">Candidates Scanned</span>
+                <span class="metric-num mono" id="props-stat-unique">0</span>
+                <span class="metric-foot">Unique Canonical Props</span>
               </div>
             </div>
 
             <div class="card metric-card">
               <div class="metric-icon">🇵🇱</div>
               <div class="metric-details">
-                <span class="metric-title">Polish Odds</span>
-                <span class="metric-num mono text-info" id="props-stat-polish-odds">0</span>
-                <span class="metric-foot">Superbet &bull; Betclic Quotes</span>
+                <span class="metric-title">Matched — Betclic + Superbet</span>
+                <span class="metric-num mono text-info" id="props-stat-matched-both">0</span>
+                <span id="props-stat-polish-odds" style="display:none;">0</span>
+                <span class="metric-foot">Verified Quotes on Both</span>
+              </div>
+            </div>
+
+            <div class="card metric-card">
+              <div class="metric-icon">🏆</div>
+              <div class="metric-details">
+                <span class="metric-title">Top Valuebets</span>
+                <span class="metric-num mono text-success" id="props-stat-bettable">0</span>
+                <span class="metric-foot">Qualified (Net EV &ge; Min)</span>
               </div>
             </div>
 
             <div class="card metric-card">
               <div class="metric-icon">⚡</div>
               <div class="metric-details">
-                <span class="metric-title">Bettable Now</span>
-                <span class="metric-num mono text-success" id="props-stat-bettable">0</span>
-                <span class="metric-foot">Active Verified Polish Odds</span>
-              </div>
-            </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">🌐</div>
-              <div class="metric-details">
-                <span class="metric-title">Reference Only</span>
-                <span class="metric-num mono text-warning" id="props-stat-ref-only">0</span>
-                <span class="metric-foot">Bet365 / Global Baseline</span>
-              </div>
-            </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">⚠️</div>
-              <div class="metric-details">
-                <span class="metric-title">Match Uncertain</span>
-                <span class="metric-num mono text-danger" id="props-stat-uncertain">0</span>
-                <span class="metric-foot">Unverified Cross-Mapping</span>
+                <span class="metric-title">Quote Discrepancy</span>
+                <span class="metric-num mono text-warning" id="props-stat-discrepancy">0</span>
+                <span id="props-stat-ref-only" style="display:none;">0</span>
+                <span id="props-stat-uncertain" style="display:none;">0</span>
+                <span class="metric-foot">Relative Price Diff &ge; 10%</span>
               </div>
             </div>
           </div>
@@ -1017,10 +1051,12 @@
                 </select>
               </div>
 
-              <div class="filter-group" style="width: 140px;">
+              <div class="filter-group" style="min-width: 175px;">
                 <label for="props-filter-sortby">Sort By</label>
                 <select id="props-filter-sortby" class="form-control form-control-sm">
                   <option value="net_ev" selected>Net EV (High)</option>
+                  <option value="discrepancy_pct">Discrepancy % (High → Low)</option>
+                  <option value="discrepancy_pct_asc">Discrepancy % (Low → High)</option>
                   <option value="hit_rate">Hit Rate (High)</option>
                   <option value="odds">Odds (High)</option>
                   <option value="sample_size">Sample Size</option>
@@ -1044,6 +1080,38 @@
             <!-- Tier 2: Secondary / Collapsible Controls -->
             <div id="props-advanced-filters-panel" style="display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle);">
               <div class="props-controls-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.65rem;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-match-status">Match Status</label>
+                  <select id="props-filter-match-status" class="form-control form-control-sm">
+                    <option value="" selected>All</option>
+                    <option value="MATCHED">Matched — Betclic + Superbet</option>
+                    <option value="UNMATCHED">Partial / Unmatched</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-bookmaker">Bookmaker</label>
+                  <select id="props-filter-bookmaker" class="form-control form-control-sm">
+                    <option value="" selected>All Bookmakers</option>
+                    <option value="Betclic">Betclic (Involving Betclic)</option>
+                    <option value="Superbet">Superbet (Involving Superbet)</option>
+                    <option value="Bet365">Bet365 (Ref)</option>
+                    <option value="Unibet">Unibet (Ref)</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="props-filter-exec-status">Pipeline / Diagnostics</label>
+                  <select id="props-filter-exec-status" class="form-control form-control-sm">
+                    <option value="" selected>All Statuses</option>
+                    <option value="QUALIFIED">Qualified (Value Bet)</option>
+                    <option value="BELOW_VALUE_THRESHOLD">Below Threshold</option>
+                    <option value="INSUFFICIENT_REFERENCE_SOURCES">Reference Gap</option>
+                    <option value="POLISH_ODDS_UNAVAILABLE">No Polish Odds</option>
+                    <option value="MATCHING_FAILURE">Matching Failure</option>
+                  </select>
+                </div>
+
                 <div class="form-group" style="margin-bottom:0;">
                   <label for="props-filter-tournaments">Competition / League</label>
                   <select id="props-filter-tournaments" class="form-control form-control-sm">
@@ -1089,28 +1157,6 @@
                 </div>
 
                 <div class="form-group" style="margin-bottom:0;">
-                  <label for="props-filter-bookmaker">Bookmaker</label>
-                  <select id="props-filter-bookmaker" class="form-control form-control-sm">
-                    <option value="" selected>All Bookmakers</option>
-                    <option value="Superbet">Superbet (Exec)</option>
-                    <option value="Betclic">Betclic (Exec)</option>
-                    <option value="Bet365">Bet365 (Ref)</option>
-                    <option value="Unibet">Unibet (Ref)</option>
-                  </select>
-                </div>
-
-                <div class="form-group" style="margin-bottom:0;">
-                  <label for="props-filter-exec-status">Status / Pipeline Result</label>
-                  <select id="props-filter-exec-status" class="form-control form-control-sm">
-                    <option value="" selected>All Statuses</option>
-                    <option value="QUALIFIED">QUALIFIED (Value Bet)</option>
-                    <option value="BELOW_VALUE_THRESHOLD">BELOW_VALUE_THRESHOLD</option>
-                    <option value="INSUFFICIENT_REFERENCE_SOURCES">REF_GAP</option>
-                    <option value="POLISH_ODDS_UNAVAILABLE">NO_POLISH_ODDS</option>
-                  </select>
-                </div>
-
-                <div class="form-group" style="margin-bottom:0;">
                   <label for="props-filter-limit">Max Results</label>
                   <select id="props-filter-limit" class="form-control form-control-sm">
                     <option value="10">10</option>
@@ -1129,43 +1175,36 @@
             <input type="hidden" id="props-filter-min-exec-edge" value="">
             <input type="hidden" id="props-filter-min-stat-edge" value="">
 
-            <!-- Category Filter Tabs -->
-            <div class="market-tabs-container" style="margin-top: 0.85rem; border-top: 1px solid var(--border-subtle); padding-top: 0.65rem;">
-              <button class="market-tab-btn active" id="props-tab-top-value" data-category="top_value">
-                🏆 Top Valuebets <span class="badge badge-accent" id="tab-count-valuebet">0</span>
+            <!-- Category Filter Tabs (User Intent Primary Navigation) -->
+            <div class="market-tabs-container" style="margin-top: 0.85rem; border-top: 1px solid var(--border-subtle); padding-top: 0.65rem;" role="tablist" aria-label="Opportunity Categories">
+              <button type="button" class="market-tab-btn active" id="props-tab-top-value" data-category="top_value" role="tab" aria-selected="true">
+                🏆 TOP VALUEBETS <span class="badge badge-accent" id="tab-count-valuebet">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-diagnostics" data-category="diagnostics">
-                🔬 All Candidates / Diagnostics <span class="badge badge-outline" id="tab-count-diagnostics">0</span>
+              <button type="button" class="market-tab-btn" id="props-tab-player" data-category="player" role="tab" aria-selected="false">
+                👤 PLAYER PROPS <span class="badge badge-outline" id="tab-count-player">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-player" data-category="player">
-                👤 Player Props <span class="badge badge-outline" id="tab-count-player">0</span>
+              <button type="button" class="market-tab-btn" id="props-tab-team" data-category="team" role="tab" aria-selected="false">
+                🛡️ TEAM PROPS <span class="badge badge-outline" id="tab-count-team">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-team" data-category="team">
-                🛡️ Team Props <span class="badge badge-outline" id="tab-count-team">0</span>
+              <button type="button" class="market-tab-btn" id="props-tab-discrepancy" data-category="discrepancy" role="tab" aria-selected="false" title="Large price differences between Betclic and Superbet">
+                ⚡ QUOTE DISCREPANCY <span class="badge badge-warning" id="tab-count-discrepancy">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-superbet" data-category="superbet">
-                🔴 Superbet <span class="badge badge-info" id="tab-count-superbet">0</span>
+              <button type="button" class="market-tab-btn" id="props-tab-all" data-category="all" role="tab" aria-selected="false">
+                ALL <span class="badge badge-outline" id="tab-count-all">0</span>
               </button>
-              <button class="market-tab-btn" id="props-tab-betclic" data-category="betclic">
-                🔵 Betclic <span class="badge badge-info" id="tab-count-betclic">0</span>
-              </button>
-              <button class="market-tab-btn" id="props-tab-below-threshold" data-category="below_threshold">
-                ⚠️ Below Threshold <span class="badge badge-outline" id="tab-count-below-threshold">0</span>
-              </button>
-              <button class="market-tab-btn" id="props-tab-ref-gap" data-category="ref_gap">
-                🌐 Reference Gap <span class="badge badge-outline" id="tab-count-ref-gap">0</span>
-              </button>
-              <button class="market-tab-btn" id="props-tab-no-polish" data-category="no_polish">
-                ⚪ No Polish Odds <span class="badge badge-outline" id="tab-count-no-polish">0</span>
-              </button>
-              <!-- Hidden compatibility buttons -->
-              <button class="market-tab-btn" id="props-tab-all" data-category="all" style="display:none;"></button>
-              <button class="market-tab-btn" id="props-tab-valuebet" data-category="valuebets" style="display:none;"></button>
-              <button class="market-tab-btn" id="props-tab-bettable" data-category="bettable" style="display:none;"></button>
-              <button class="market-tab-btn" id="props-tab-polish" data-category="with_polish_odds" style="display:none;"></button>
-              <button class="market-tab-btn" id="props-tab-ref" data-category="reference_only" style="display:none;"></button>
-              <button class="market-tab-btn" id="props-tab-no-exec" data-category="no_execution_market" style="display:none;"></button>
-              <button class="market-tab-btn" id="props-tab-uncertain" data-category="match_uncertain" style="display:none;"></button>
+              <!-- Hidden compatibility buttons for programmatic callers / diagnostics -->
+              <button type="button" class="market-tab-btn" id="props-tab-diagnostics" data-category="diagnostics" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-superbet" data-category="superbet" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-betclic" data-category="betclic" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-below-threshold" data-category="below_threshold" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-ref-gap" data-category="ref_gap" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-no-polish" data-category="no_polish" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-valuebet" data-category="valuebets" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-bettable" data-category="bettable" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-polish" data-category="with_polish_odds" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-ref" data-category="reference_only" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-no-exec" data-category="no_execution_market" style="display:none;"></button>
+              <button type="button" class="market-tab-btn" id="props-tab-uncertain" data-category="match_uncertain" style="display:none;"></button>
             </div>
           </div>
 
@@ -1899,6 +1938,94 @@
       <!-- Dynamically rendered by buildOpportunityInspectorMarkup -->
     </div>
   </div>
+
+  <!-- Mobile More Navigation Drawer / Sheet -->
+  <div class="mobile-more-backdrop" id="mobile-more-backdrop"></div>
+  <div class="mobile-more-sheet" id="mobile-more-sheet" role="dialog" aria-modal="true" aria-label="More Destinations">
+    <div class="mobile-sheet-drag-handle"></div>
+    <div class="mobile-sheet-header">
+      <div class="mobile-sheet-brand">
+        <span class="mobile-sheet-title">More Destinations</span>
+        <span class="badge badge-accent" style="font-size: 0.65rem;">v2.1 PRO</span>
+      </div>
+      <button type="button" class="btn-close mobile-sheet-close" id="btn-close-mobile-more" aria-label="Close menu">&times;</button>
+    </div>
+    
+    <div class="mobile-sheet-nav-grid">
+      <a href="#playerprops" class="mobile-sheet-nav-item nav-item" data-view="playerprops">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/><circle cx="19" cy="4" r="2"/></svg>
+        <div class="mobile-sheet-nav-text">
+          <span class="sheet-item-name">Player Props</span>
+          <span class="sheet-item-sub">StatsHub edge intelligence</span>
+        </div>
+      </a>
+      <a href="#history" class="mobile-sheet-nav-item nav-item" data-view="history">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <div class="mobile-sheet-nav-text">
+          <span class="sheet-item-name">Historical Analytics</span>
+          <span class="sheet-item-sub">Odds time-series & decay</span>
+        </div>
+      </a>
+      <a href="#profiler" class="mobile-sheet-nav-item nav-item" data-view="profiler">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <div class="mobile-sheet-nav-text">
+          <span class="sheet-item-name">Scan Profiler</span>
+          <span class="sheet-item-sub">Latency & bottleneck trace</span>
+        </div>
+      </a>
+      <a href="#notifications" class="mobile-sheet-nav-item nav-item" data-view="notifications">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <div class="mobile-sheet-nav-text">
+          <span class="sheet-item-name">Notifications</span>
+          <span class="sheet-item-sub">Telegram alerting channel</span>
+        </div>
+      </a>
+      <a href="#settings" class="mobile-sheet-nav-item nav-item" data-view="settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <div class="mobile-sheet-nav-text">
+          <span class="sheet-item-name">Settings</span>
+          <span class="sheet-item-sub">Thresholds, filters & bookmakers</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="mobile-sheet-footer">
+      <div class="mobile-sheet-telemetry">
+        <span class="text-muted">API Latency:</span>
+        <strong id="mobile-api-latency" class="mono text-primary">—</strong>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" id="mobile-role-switch-btn">
+        Role: <strong id="mobile-role-text">Admin</strong>
+      </button>
+    </div>
+  </div>
+
+  <!-- Fixed Mobile Bottom Navigation (Visible on <= 900px only) -->
+  <nav class="mobile-bottom-nav" id="mobile-bottom-nav" aria-label="Mobile Navigation">
+    <a href="#dashboard" class="mobile-nav-item nav-item active" data-view="dashboard">
+      <svg class="mobile-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="#opportunities" class="mobile-nav-item nav-item" data-view="opportunities">
+      <div class="mobile-nav-icon-wrap">
+        <svg class="mobile-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span class="mobile-nav-badge" id="mobile-nav-opp-count" style="display: none;">0</span>
+      </div>
+      <span>Opps</span>
+    </a>
+    <a href="#events" class="mobile-nav-item nav-item" data-view="events">
+      <svg class="mobile-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Events</span>
+    </a>
+    <a href="#providers" class="mobile-nav-item nav-item" data-view="providers">
+      <svg class="mobile-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      <span>Providers</span>
+    </a>
+    <button type="button" class="mobile-nav-item mobile-nav-more-btn" id="btn-open-mobile-more" aria-label="More navigation options">
+      <svg class="mobile-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>
+      <span>More</span>
+    </button>
+  </nav>
 
   <script src="app.js?v=25.4.1"></script>
 </body>

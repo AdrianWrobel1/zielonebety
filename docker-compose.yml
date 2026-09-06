@@ -46,6 +46,9 @@ services:
       retries: 5
 
   redis:
+    # Optional service: not required by current application architecture.
+    # Set to profile 'optional' to save ~50MB RAM on memory-constrained Azure VM.
+    profiles: ["optional"]
     image: redis:7-alpine
     container_name: zielonebety_redis
     restart: always

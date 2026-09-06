@@ -251,6 +251,14 @@ class GlobalScanOpportunity:
     tier: int = 2
     position: Optional[str] = None
 
+    # Polish Quote Discrepancy Opportunity Fields
+    is_discrepancy: bool = False
+    relative_price_difference_pct: Optional[float] = None
+    odds_difference: Optional[float] = None
+    lower_executable_odds: Optional[float] = None
+    lower_executable_bookmaker: Optional[str] = None
+    discrepancy_details: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "canonical_prop_key": self.canonical_prop_key,
@@ -301,6 +309,12 @@ class GlobalScanOpportunity:
             "action": self.action,
             "fair_odds": self.reference_fair_odds,
             "tier": self.tier,
+            "is_discrepancy": self.is_discrepancy,
+            "relative_price_difference_pct": self.relative_price_difference_pct,
+            "odds_difference": self.odds_difference,
+            "lower_executable_odds": self.lower_executable_odds,
+            "lower_executable_bookmaker": self.lower_executable_bookmaker,
+            "discrepancy_details": self.discrepancy_details,
         }
 
 
@@ -562,6 +576,13 @@ def _build_opportunity_contract_data(
     else:
         action = "NO VALUE"
 
+    is_disc = bool(getattr(odds_comparison, "is_discrepancy", False)) if odds_comparison else False
+    rel_diff = getattr(odds_comparison, "relative_price_difference_pct", None) if odds_comparison else None
+    odds_diff = getattr(odds_comparison, "odds_difference", None) if odds_comparison else None
+    lower_odds = getattr(odds_comparison, "lower_executable_odds", None) if odds_comparison else None
+    lower_bm = getattr(odds_comparison, "lower_executable_bookmaker", None) if odds_comparison else None
+    disc_details = getattr(odds_comparison, "discrepancy_details", None) if odds_comparison else None
+
     return {
         "confidence": confidence,
         "superbet_odds": sb_odds,
@@ -570,6 +591,12 @@ def _build_opportunity_contract_data(
         "betclic_status": bc_status,
         "reference_probability_pct": ref_prob_pct,
         "action": action,
+        "is_discrepancy": is_disc,
+        "relative_price_difference_pct": rel_diff,
+        "odds_difference": odds_diff,
+        "lower_executable_odds": lower_odds,
+        "lower_executable_bookmaker": lower_bm,
+        "discrepancy_details": disc_details,
     }
 
 
@@ -1341,6 +1368,12 @@ class GlobalPropsScanner:
                 reference_probability_pct=contract_data["reference_probability_pct"],
                 action=contract_data["action"],
                 tier=p_tier,
+                is_discrepancy=contract_data.get("is_discrepancy", False),
+                relative_price_difference_pct=contract_data.get("relative_price_difference_pct"),
+                odds_difference=contract_data.get("odds_difference"),
+                lower_executable_odds=contract_data.get("lower_executable_odds"),
+                lower_executable_bookmaker=contract_data.get("lower_executable_bookmaker"),
+                discrepancy_details=contract_data.get("discrepancy_details"),
             )
 
             if effective_status == "QUALIFIED":
@@ -1523,6 +1556,12 @@ class GlobalPropsScanner:
                 reference_probability_pct=t_contract_data["reference_probability_pct"],
                 action=t_contract_data["action"],
                 tier=t_tier,
+                is_discrepancy=t_contract_data.get("is_discrepancy", False),
+                relative_price_difference_pct=t_contract_data.get("relative_price_difference_pct"),
+                odds_difference=t_contract_data.get("odds_difference"),
+                lower_executable_odds=t_contract_data.get("lower_executable_odds"),
+                lower_executable_bookmaker=t_contract_data.get("lower_executable_bookmaker"),
+                discrepancy_details=t_contract_data.get("discrepancy_details"),
             )
 
             if effective_status == "QUALIFIED":
@@ -1534,8 +1573,8 @@ class GlobalPropsScanner:
 
         # 6. Deterministic Multi-Factor Ranking (Stage B.1)
         profiler.start_phase("ranking", counters={"qualified": len(qualified_opportunities), "diagnostic": len(diagnostic_candidates)})
-        qualified_ranked = sorted(qualified_opportunities, key=_build_ranking_sort_key)[:scan_scope.max_results]
-        diagnostic_ranked = sorted(diagnostic_candidates, key=_build_ranking_sort_key)[:scan_scope.max_results]
+        qualified_ranked = sorted(qualified_opportunities, key=_build_ranking_sort_key)
+        diagnostic_ranked = sorted(diagnostic_candidates, key=_build_ranking_sort_key)
         profiler.finish_phase("ranking", counters={"qualified_ranked": len(qualified_ranked), "diagnostic_ranked": len(diagnostic_ranked)})
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0

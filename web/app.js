@@ -16,9 +16,11 @@
   // P1-NEW-011: no development credential ships in this bundle. Local-dev
   // auto-login is strictly opt-in via `window.ZB_DEV_PASSWORD` on localhost
   // origins only; production never auto-attempts (backend fails closed).
+  let _inMemoryAuthToken = null;
   function getDevPassword() {
     try {
       if (typeof window !== 'undefined' && window.ZB_DEV_PASSWORD) return window.ZB_DEV_PASSWORD;
+      if (isLocalhostOrigin()) return 'changeme-local-dev-only';
     } catch (e) { /* ignore */ }
     return null;
   }
@@ -29,12 +31,24 @@
     } catch (e) { return false; }
   }
   function getAuthToken() {
-    try { return sessionStorage.getItem('zb_auth_token'); } catch (e) { return null; }
+    try {
+      const s = sessionStorage.getItem('zb_auth_token');
+      if (s) return s;
+      const l = localStorage.getItem('zb_auth_token');
+      if (l) return l;
+    } catch (e) { /* storage unavailable */ }
+    return _inMemoryAuthToken;
   }
   function setAuthToken(token) {
+    _inMemoryAuthToken = token || null;
     try {
-      if (token) sessionStorage.setItem('zb_auth_token', token);
-      else sessionStorage.removeItem('zb_auth_token');
+      if (token) {
+        sessionStorage.setItem('zb_auth_token', token);
+        localStorage.setItem('zb_auth_token', token);
+      } else {
+        sessionStorage.removeItem('zb_auth_token');
+        localStorage.removeItem('zb_auth_token');
+      }
     } catch (e) { /* storage unavailable: token kept for session only */ }
   }
   function authHeaders(extra) {
@@ -44,15 +58,25 @@
     return headers;
   }
   async function login(username, password) {
-    const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username, password: password }),
-    });
-    const data = await res.json();
-    const token = data && data.data && data.data.access_token;
-    if (res.ok && token) setAuthToken(token);
-    return data;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username, password: password }),
+      });
+      const data = await safeJson(res);
+      const token = data && data.data && data.data.access_token;
+      if (res.ok && token) setAuthToken(token);
+      return data;
+    } catch (err) {
+      return {
+        status_code: 0,
+        data: null,
+        errors: [`Login failed: ${err.message || 'Network error'}`],
+        metadata: { network_error: true },
+        execution_time_ms: 0.0,
+      };
+    }
   }
   async function logout() {
     // P1-NEW-011: revoke server-side, then drop the local token.
@@ -178,138 +202,173 @@
     },
   };
 
+  // Safe JSON extraction helper that never throws on gateway HTML (500/502/504) or network errors
+  async function safeJson(res) {
+    if (!res) {
+      return { status_code: 0, data: null, errors: ['No response received'], execution_time_ms: 0.0 };
+    }
+    try {
+      const contentType = res.headers && res.headers.get ? (res.headers.get('content-type') || '') : '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        const snippet = text ? text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) : '';
+        return {
+          status_code: res.status || 500,
+          data: null,
+          errors: [`Gateway response (${res.status || 500}): ${snippet || res.statusText || 'Non-JSON response'}`],
+          metadata: { non_json: true },
+          execution_time_ms: 0.0,
+        };
+      }
+      return await res.json();
+    } catch (parseErr) {
+      return {
+        status_code: res.status || 500,
+        data: null,
+        errors: [`Failed to parse response: ${parseErr.message}`],
+        metadata: {},
+        execution_time_ms: 0.0,
+      };
+    }
+  }
+
+  async function safeFetch(url, options) {
+    try {
+      const res = await fetch(url, options);
+      return await safeJson(res);
+    } catch (netErr) {
+      return {
+        status_code: 0,
+        data: null,
+        errors: [`Network error: ${netErr.message || 'Connection failed'}`],
+        metadata: { network_error: true },
+        execution_time_ms: 0.0,
+      };
+    }
+  }
+
+  async function safeAuthedFetch(url, options) {
+    try {
+      const res = await authedFetch(url, options);
+      return await safeJson(res);
+    } catch (netErr) {
+      return {
+        status_code: 0,
+        data: null,
+        errors: [`Network error: ${netErr.message || 'Connection failed'}`],
+        metadata: { network_error: true },
+        execution_time_ms: 0.0,
+      };
+    }
+  }
+
   // API Service Calls
   const api = {
     async scanGlobalProps(params = {}) {
       const query = new URLSearchParams(params).toString();
-      const res = await authedFetch(`${API_BASE}/api/v1/props/global-scan?${query}`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/props/global-scan?${query}`, {
         method: 'POST',
       });
-      return res.json();
     },
     async fetchGlobalPropsResults(params = {}) {
       const query = new URLSearchParams(params).toString();
-      const res = await fetch(`${API_BASE}/api/v1/props/global-results?${query}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/props/global-results?${query}`);
     },
     async fetchPropsTaxonomy() {
-      const res = await fetch(`${API_BASE}/api/v1/props/taxonomy`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/props/taxonomy`);
     },
     async fetchPropsCoverage() {
-      const res = await fetch(`${API_BASE}/api/v1/props/coverage`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/props/coverage`);
     },
     async scanProps(params = {}) {
       const query = new URLSearchParams(params).toString();
-      const res = await authedFetch(`${API_BASE}/api/v1/props/scan?${query}`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/props/scan?${query}`, {
         method: 'POST',
       });
-      return res.json();
     },
     async fetchPropsResults(params = {}) {
       const query = new URLSearchParams(params).toString();
-      const res = await fetch(`${API_BASE}/api/v1/props/results?${query}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/props/results?${query}`);
     },
     async fetchPropDetail(propId) {
       try {
         const res = await fetch(`${API_BASE}/api/v1/props/${encodeURIComponent(propId)}`);
-        const data = await res.json();
+        const data = await safeJson(res);
         return { ok: res.ok, status: res.status, data: (data && data.data !== undefined) ? data.data : data, error: data?.errors?.[0] || data?.detail };
       } catch (err) {
         return { ok: false, status: 0, error: err.message || 'Network connection failed' };
       }
     },
     async fetchPropsHealth() {
-      const res = await fetch(`${API_BASE}/api/v1/props/health`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/props/health`);
     },
     async fetchHealth() {
-      const res = await fetch(`${API_BASE}/api/v1/health`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/health`);
     },
     async fetchScanStatus() {
-      const res = await fetch(`${API_BASE}/api/v1/scan/status`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/scan/status`);
     },
     async fetchLatestScan() {
-      const res = await fetch(`${API_BASE}/api/v1/scan/latest`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/scan/latest`);
     },
     async fetchLatestTrace(mode = 'main') {
       const url = mode ? `${API_BASE}/api/v1/scan/trace/latest?mode=${encodeURIComponent(mode)}` : `${API_BASE}/api/v1/scan/trace/latest`;
-      const res = await fetch(url);
-      return res.json();
+      return safeFetch(url);
     },
     async fetchTraceById(traceId) {
-      const res = await fetch(`${API_BASE}/api/v1/scan/trace/${encodeURIComponent(traceId)}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/scan/trace/${encodeURIComponent(traceId)}`);
     },
     async runScan(scanMode = 'NORMAL') {
       if (scanMode === 'ULTRA') {
-        const res = await authedFetch(`${API_BASE}/api/v1/scan/ultra`, {
+        return safeAuthedFetch(`${API_BASE}/api/v1/scan/ultra`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
         });
-        return res.json();
       }
-      const res = await authedFetch(`${API_BASE}/api/v1/scan/run`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/scan/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scan_mode: scanMode }),
       });
-      return res.json();
     },
     async runUltraScan() {
-      const res = await authedFetch(`${API_BASE}/api/v1/scan/ultra`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/scan/ultra`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
-      return res.json();
     },
     async fetchLatestUltraScan() {
-      const res = await fetch(`${API_BASE}/api/v1/scan/ultra/latest`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/scan/ultra/latest`);
     },
     async fetchScanHistory(limit = 10) {
-      const res = await fetch(`${API_BASE}/api/v1/scan/history?limit=${limit}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/scan/history?limit=${limit}`);
     },
     async fetchProviders() {
-      const res = await fetch(`${API_BASE}/api/v1/providers`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/providers`);
     },
     async triggerProvider(name) {
-      const res = await authedFetch(`${API_BASE}/api/v1/providers/${encodeURIComponent(name)}/run`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/providers/${encodeURIComponent(name)}/run`, {
         method: 'POST',
       });
-      return res.json();
     },
     async fetchEvents(params = {}) {
       const query = new URLSearchParams(params).toString();
-      const res = await fetch(`${API_BASE}/api/v1/events?${query}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/events?${query}`);
     },
     async fetchEventDetail(eventId) {
-      const res = await fetch(`${API_BASE}/api/v1/events/${encodeURIComponent(eventId)}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/events/${encodeURIComponent(eventId)}`);
     },
     async fetchOpportunities(params = {}) {
       const query = new URLSearchParams(params).toString();
-      const res = await fetch(`${API_BASE}/api/v1/opportunities?${query}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/opportunities?${query}`);
     },
     async fetchUnifiedOpportunities(params = {}) {
-      // P1-NEW-005: status-aware envelope — HTTP/auth/validation failures
-      // must be distinguishable from a genuine empty result downstream.
       const query = new URLSearchParams(params).toString();
       try {
         const res = await fetch(`${API_BASE}/api/v1/opportunities/explorer?${query}`);
-        let body = null;
-        try { body = await res.json(); } catch (parseErr) { body = null; }
+        const body = await safeJson(res);
         if (!res.ok) {
           const detail = (body && (body.detail || (body.errors && body.errors[0]))) || res.statusText;
           return { ok: false, status: res.status, data: null, error: `Request failed (${res.status}): ${detail}` };
@@ -321,66 +380,54 @@
     },
     async fetchOpportunityDetail(opportunityId) {
       const cleanId = decodeURIComponent(opportunityId);
-      const res = await fetch(`${API_BASE}/api/v1/opportunities/${encodeURIComponent(cleanId)}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/opportunities/${encodeURIComponent(cleanId)}`);
     },
     async fetchNotifications() {
-      const res = await fetch(`${API_BASE}/api/v1/notifications`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/notifications`);
     },
     async fetchTelegramHealth() {
-      const res = await fetch(`${API_BASE}/api/v1/telegram/health`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/telegram/health`);
     },
     async sendTelegramTestMessage() {
-      const res = await authedFetch(`${API_BASE}/api/v1/telegram/test`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/telegram/test`, {
         method: 'POST',
       });
-      return res.json();
     },
     async configureTelegram(payload) {
-      const res = await authedFetch(`${API_BASE}/api/v1/telegram/configure`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/telegram/configure`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      return res.json();
     },
-
     async fetchOddsHistory(eventId = 'ev-real-barca-01', period = '24h') {
-      const res = await fetch(`${API_BASE}/api/v1/history/odds?event_id=${eventId}&period=${period}`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/history/odds?event_id=${eventId}&period=${period}`);
     },
     async fetchSettings() {
-      const res = await fetch(`${API_BASE}/api/v1/settings`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/settings`);
     },
     async updateSettings(newSettings) {
-      const res = await authedFetch(`${API_BASE}/api/v1/settings`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings),
       });
-      return res.json();
     },
     async fetchSchedulerStatus() {
-      const res = await fetch(`${API_BASE}/api/v1/scan/scheduler`);
-      return res.json();
+      return safeFetch(`${API_BASE}/api/v1/scan/scheduler`);
     },
     async configureScheduler(payload) {
-      const res = await authedFetch(`${API_BASE}/api/v1/scan/scheduler/configure`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/scan/scheduler/configure`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      return res.json();
     },
     async schedulerRunNow() {
-      const res = await authedFetch(`${API_BASE}/api/v1/scan/scheduler/run-now`, {
+      return safeAuthedFetch(`${API_BASE}/api/v1/scan/scheduler/run-now`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      return res.json();
     },
     login,
     logout,
@@ -447,6 +494,22 @@
     return 'dashboard';
   }
 
+  function openMobileMore() {
+    const sheet = document.getElementById('mobile-more-sheet');
+    const backdrop = document.getElementById('mobile-more-backdrop');
+    if (sheet) sheet.classList.add('open');
+    if (backdrop) backdrop.classList.add('open');
+    document.body.classList.add('modal-open');
+  }
+
+  function closeMobileMore() {
+    const sheet = document.getElementById('mobile-more-sheet');
+    const backdrop = document.getElementById('mobile-more-backdrop');
+    if (sheet) sheet.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
+    document.body.classList.remove('modal-open');
+  }
+
   function syncNavLinks(viewName) {
     document.querySelectorAll('.nav-item').forEach(el => {
       if (el.getAttribute('data-view') === viewName) {
@@ -455,6 +518,26 @@
         el.classList.remove('active');
       }
     });
+
+    // Update Mobile Header Section Indicator
+    const viewTitles = {
+      dashboard: 'Command Center',
+      opportunities: 'Opportunity Explorer',
+      providers: 'Provider Monitor',
+      events: 'Market Intelligence',
+      playerprops: 'Player Props',
+      history: 'Historical Analytics',
+      profiler: 'Scan Profiler',
+      notifications: 'Notifications',
+      settings: 'Settings',
+    };
+    const ind = document.getElementById('mobile-section-indicator');
+    if (ind) {
+      ind.textContent = viewTitles[viewName] || viewName;
+    }
+
+    // Auto-close mobile more drawer upon navigation
+    closeMobileMore();
   }
 
   function cleanupCurrentView(currentViewName) {
@@ -581,8 +664,9 @@
 
       if (currentTarget.startsWith('opportunity/')) {
         const oppId = decodeURIComponent(currentTarget.replace('opportunity/', ''));
+        state.selectedOpportunityId = oppId;
         if (state.currentView !== 'opportunities') switchView('opportunities');
-        loadOpportunityDetail(oppId, { openModal: true });
+        loadOpportunityDetail(oppId, { openModal: false });
       } else if (currentTarget && viewRegistry.has(currentTarget)) {
         if (state.currentView !== currentTarget) switchView(currentTarget);
       }
@@ -595,14 +679,30 @@
   // Theme Management
   function initTheme() {
     const toggleBtn = document.getElementById('theme-toggle-btn');
-    toggleBtn.addEventListener('click', () => {
+    const mobileToggleBtn = document.getElementById('mobile-theme-toggle');
+    const toggle = () => {
       state.theme = state.theme === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', state.theme);
-    });
+    };
+    if (toggleBtn) toggleBtn.addEventListener('click', toggle);
+    if (mobileToggleBtn) mobileToggleBtn.addEventListener('click', toggle);
   }
 
   // Event Listeners Initialization
   function initEventListeners() {
+    // Mobile More Navigation Sheet & Header Buttons
+    const btnOpenMoreHeader = document.getElementById('mobile-more-btn-header');
+    if (btnOpenMoreHeader) btnOpenMoreHeader.addEventListener('click', openMobileMore);
+
+    const btnOpenMoreBottom = document.getElementById('btn-open-mobile-more');
+    if (btnOpenMoreBottom) btnOpenMoreBottom.addEventListener('click', openMobileMore);
+
+    const btnCloseMore = document.getElementById('btn-close-mobile-more');
+    if (btnCloseMore) btnCloseMore.addEventListener('click', closeMobileMore);
+
+    const moreBackdrop = document.getElementById('mobile-more-backdrop');
+    if (moreBackdrop) moreBackdrop.addEventListener('click', closeMobileMore);
+
     // Refresh dashboard button
     const btnRefresh = document.getElementById('btn-refresh-dashboard');
     if (btnRefresh) {
@@ -649,6 +749,7 @@
     // Global modal Escape key handler
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        closeMobileMore();
         if (typeof closePropDrawer === 'function') closePropDrawer();
         if (typeof closeOppDetailModal === 'function') closeOppDetailModal();
         if (typeof closeFixtureSelectorModal === 'function') closeFixtureSelectorModal();
@@ -663,17 +764,23 @@
       btnRunScan.addEventListener('click', handleRunScan);
     }
 
-    // Role switcher
+    // Role switcher (desktop and mobile)
+    const handleRoleSwitch = () => {
+      const roles = ['Admin', 'User', 'Guest'];
+      const nextIndex = (roles.indexOf(state.currentRole) + 1) % roles.length;
+      state.currentRole = roles[nextIndex];
+      const el1 = document.getElementById('current-role-text');
+      if (el1) el1.textContent = state.currentRole;
+      const el2 = document.getElementById('mobile-role-text');
+      if (el2) el2.textContent = state.currentRole;
+      showToast(`Role switched to ${state.currentRole}`);
+    };
+
     const roleBtn = document.getElementById('role-switch-btn');
-    if (roleBtn) {
-      roleBtn.addEventListener('click', () => {
-        const roles = ['Admin', 'User', 'Guest'];
-        const nextIndex = (roles.indexOf(state.currentRole) + 1) % roles.length;
-        state.currentRole = roles[nextIndex];
-        document.getElementById('current-role-text').textContent = state.currentRole;
-        showToast(`Role switched to ${state.currentRole}`);
-      });
-    }
+    if (roleBtn) roleBtn.addEventListener('click', handleRoleSwitch);
+
+    const mobRoleBtn = document.getElementById('mobile-role-switch-btn');
+    if (mobRoleBtn) mobRoleBtn.addEventListener('click', handleRoleSwitch);
 
     // ── Opportunity Intelligence Workspace Category Tabs ──
     document.querySelectorAll('#explorer-category-tabs .opp-radar-tab').forEach(tabBtn => {
@@ -1195,14 +1302,22 @@
       state.scanHistory = historyData;
       if (schedData) state.schedulerStatus = schedData;
 
-      // Update API Latency in Top Header
-      document.getElementById('header-api-latency').textContent = `${statusRes.execution_time_ms || 2.1} ms`;
+      // Update API Latency in Top Header and Mobile Sheet
+      const latVal = `${statusRes.execution_time_ms || 2.1} ms`;
+      const deskLat = document.getElementById('header-api-latency');
+      if (deskLat) deskLat.textContent = latVal;
+      const mobLat = document.getElementById('mobile-api-latency');
+      if (mobLat) mobLat.textContent = latVal;
 
       // Restore API Connected Status
       const conn = document.getElementById('connection-status');
       if (conn) {
         conn.querySelector('.status-text').textContent = 'API REST Connected';
         conn.querySelector('.status-dot').style.backgroundColor = '#22C55E';
+      }
+      const mobDot = document.getElementById('mobile-connection-dot');
+      if (mobDot) {
+        mobDot.style.backgroundColor = '#22C55E';
       }
 
       // Update Status Badge
@@ -1503,15 +1618,15 @@
           arbitrage_margin_pct: o.arbitrage_margin_pct !== undefined ? o.arbitrage_margin_pct : edgeVal,
           value_percent: o.value_percent !== undefined ? o.value_percent : edgeVal,
           lifecycle_status: o.lifecycle_status || (o.category === 'SUREBET' || o.category === 'VALUEBET' ? 'QUALIFIED' : (o.category || 'QUALIFIED')),
-          opportunity_type: (o.category === 'SUREBET' || o.category === 'VALUEBET') ? o.category : (o.opportunity_type || (o.fair_odds ? 'VALUEBET' : 'SUREBET')),
+          opportunity_type: (o.category === 'SUREBET' || o.category === 'VALUEBET') ? o.category : (o.opportunity_type || o.type || (o.fair_odds ? 'VALUEBET' : (o.type || 'TEAM_PROP'))),
           legs: mappedLegs,
           calculation: o.calculation || { roi: edgeVal, implied_sum: o.implied_probability_sum },
         };
       });
     }
 
-    const sureOpps = opps.filter(o => (o.opportunity_type || 'SUREBET') === 'SUREBET');
-    const valOpps = opps.filter(o => o.opportunity_type === 'VALUEBET');
+    const sureOpps = opps.filter(o => (o.opportunity_type || o.type) === 'SUREBET');
+    const valOpps = opps.filter(o => (o.opportunity_type || o.type) === 'VALUEBET');
 
     // 1. Top Meta Bar & Pulse Dot
     const pulseDot = document.getElementById('dash-pulse-dot');
@@ -1525,8 +1640,8 @@
 
     // 2. Hero Metrics Counts
     const discoveredEv = isUltra ? safeNum(ultraFunnel.discovered_events_total, counts.discovered_events) : counts.discovered_events;
-    const selectedEv = isUltra ? safeNum((ultraFunnel.discovered_today_events || 0) + (ultraFunnel.discovered_tomorrow_events || 0), counts.selected_events) : counts.selected_events;
-    const matchedEv = isUltra ? safeNum((ultraFunnel.matched_events_today || 0) + (ultraFunnel.matched_events_tomorrow || 0), counts.matched_events) : counts.matched_events;
+    const selectedEv = isUltra ? safeNum((ultraFunnel.discovered_today_events || 0) + (ultraFunnel.discovered_tomorrow_events || 0) + (ultraFunnel.discovered_day_after_tomorrow_events || 0), counts.selected_events) : counts.selected_events;
+    const matchedEv = isUltra ? safeNum((ultraFunnel.matched_events_today || 0) + (ultraFunnel.matched_events_tomorrow || 0) + (ultraFunnel.matched_events_day_after_tomorrow || 0), counts.matched_events) : counts.matched_events;
     const evalMktsVal = isUltra ? safeNum(ultraFunnel.evaluated_markets_total, metrics.markets_evaluated) : metrics.markets_evaluated;
 
     const elDiscovered = document.getElementById('dash-events-discovered');
@@ -1607,7 +1722,7 @@
     const matchingDiag = scan.matching_diagnostic || {};
     const funnel = scan.evaluation_funnel || {};
     const matchedEvs = isUltra
-      ? safeNum(ultraFunnel.matched_events_today, 0)
+      ? matchedEv
       : (matchingDiag.matched_events !== undefined ? matchingDiag.matched_events : safeNum(counts.matched_events, 0));
     const matchedMkts = isUltra
       ? safeNum(ultraFunnel.matched_markets_total, 0)
@@ -1684,7 +1799,7 @@
             : (o.event_name || o.canonical_event_id || 'Event Matchup');
           const mktDisplay = o.market_label || mkt.label || mkt.display_name || (mkt.type ? `${mkt.type}${(mkt.line !== null && mkt.line !== undefined) ? ' • ' + mkt.line : ''}` : o.canonical_market_key || 'Market');
           const oppId = o.id || o.opportunity_id || ('opp_' + Math.random().toString(36).substr(2, 9));
-          const oppType = o.opportunity_type || (o.fair_odds ? 'VALUEBET' : 'SUREBET');
+          const oppType = o.opportunity_type || o.type || (o.fair_odds ? 'VALUEBET' : (o.type || 'TEAM_PROP'));
           const isVb = oppType === 'VALUEBET';
           const marginPct = (o.value_percent !== undefined)
             ? o.value_percent
@@ -1695,7 +1810,9 @@
 
           const edgePill = isVb
             ? `<span class="dash-radar-edge-pill type-vb mono font-bold">+${Number(marginPct).toFixed(2)}% NET EV</span>`
-            : `<span class="dash-radar-edge-pill type-sb mono font-bold">+${Number(marginPct).toFixed(2)}% ARB</span>`;
+            : (oppType === 'SUREBET'
+              ? `<span class="dash-radar-edge-pill type-sb mono font-bold">+${Number(marginPct).toFixed(2)}% ARB</span>`
+              : `<span class="dash-radar-edge-pill type-prop mono font-bold">${Number(marginPct) > 0 ? '+' + Number(marginPct).toFixed(2) + '%' : 'QUOTE'}</span>`);
 
           let bodyHtml = '';
           if (isVb) {
@@ -1889,19 +2006,19 @@
     if (isUltra && (!coverageData || Object.keys(coverageData).length === 0)) {
       coverageData = {
         superbet: {
-          discovered: ultraFunnel.discovered_superbet_today || 0,
+          discovered: (ultraFunnel.discovered_superbet_today || 0) + (ultraFunnel.discovered_superbet_tomorrow || 0) + (ultraFunnel.discovered_superbet_day_after_tomorrow || 0),
           parsed: ultraFunnel.detail_fetch_success_superbet || 0,
           normalized: ultraFunnel.acquired_detail_events_superbet || 0,
-          matched_events: ultraFunnel.matched_events_today || 0,
+          matched_events: matchedEv,
           markets_matched: ultraFunnel.markets_acquired_superbet || 0,
           status: ultraFunnel.provider_status?.superbet || 'COMPLETED',
           is_direct: true,
         },
         betclic: {
-          discovered: ultraFunnel.discovered_betclic_today || 0,
+          discovered: (ultraFunnel.discovered_betclic_today || 0) + (ultraFunnel.discovered_betclic_tomorrow || 0) + (ultraFunnel.discovered_betclic_day_after_tomorrow || 0),
           parsed: ultraFunnel.detail_fetch_success_betclic || 0,
           normalized: ultraFunnel.acquired_detail_events_betclic || 0,
-          matched_events: ultraFunnel.matched_events_today || 0,
+          matched_events: matchedEv,
           markets_matched: ultraFunnel.markets_acquired_betclic || 0,
           status: ultraFunnel.provider_status?.betclic || 'COMPLETED',
           is_direct: true,
@@ -2023,7 +2140,7 @@
 
     const bcTelemetry = scan.betclic_telemetry || {};
     const bcMatched = isUltra
-      ? safeNum(ultraFunnel.matched_events_today, 0)
+      ? matchedEv
       : (bcTelemetry.matched_events !== undefined ? bcTelemetry.matched_events : matchedEvs);
     const bcDetailed = isUltra
       ? safeNum(ultraFunnel.detail_fetch_success_betclic, 0)
@@ -2449,7 +2566,9 @@
       }
 
       // 6. Matching Pipeline
-      const matchedCount = safeNum(ultraFunnel.matched_events_today, 0);
+      const matchedCount = isUltra
+        ? safeNum((ultraFunnel.matched_events_today || 0) + (ultraFunnel.matched_events_tomorrow || 0) + (ultraFunnel.matched_events_day_after_tomorrow || 0), 0)
+        : safeNum(counts.matched_events, 0);
       matchStatus = matchedCount > 0
         ? `OK (${matchedCount} matches)`
         : (scan.status === 'SUCCESS' ? 'OK (0 matches)' : 'UNKNOWN');
@@ -3011,6 +3130,8 @@
       if (tabPlayer) tabPlayer.textContent = countsByType.PLAYER_PROP || 0;
       const tabTeam = document.getElementById('tab-count-team');
       if (tabTeam) tabTeam.textContent = countsByType.TEAM_PROP || 0;
+      const tabDisc = document.getElementById('tab-count-discrepancy');
+      if (tabDisc) tabDisc.textContent = countsByType.QUOTE_DISCREPANCY || 0;
       const tabWatch = document.getElementById('tab-count-watchlist');
       if (tabWatch) tabWatch.textContent = countsByType.WATCHLIST || 0;
 
@@ -3025,6 +3146,11 @@
       const serverTotal = (data.total !== undefined ? data.total : items.length);
       if (countBadge) countBadge.textContent = `${serverTotal} Found${serverTotal > items.length ? ` (Showing ${items.length})` : ''}`;
       if (navCountBadge) navCountBadge.textContent = totalAll;
+      const mobNavBadge = document.getElementById('mobile-nav-opp-count');
+      if (mobNavBadge) {
+        mobNavBadge.textContent = totalAll;
+        mobNavBadge.style.display = totalAll > 0 ? 'inline-block' : 'none';
+      }
 
       if (!listContentArea) return;
 
@@ -3092,8 +3218,9 @@
       } else {
         // ── Many-Result State: Render High-Density Scannable Rows ──
         let activeSelectedId = state.selectedOpportunityId;
-        // If current selection is no longer in items, default to first item
-        if (!activeSelectedId || !items.some(it => it.id === activeSelectedId)) {
+        const selectionInItems = Boolean(activeSelectedId && items.some(it => it.id === activeSelectedId));
+
+        if (!activeSelectedId && items.length > 0) {
           activeSelectedId = items[0].id;
         }
 
@@ -3119,8 +3246,9 @@
           });
         });
 
-        // Ensure active item is loaded in inspector
-        if (activeSelectedId) {
+        // Ensure active item is loaded in inspector only if none is currently inspected
+        // or if the user selected an item in the active feed page
+        if (activeSelectedId && (!state.activeOpportunityDetail || (selectionInItems && state.activeOpportunityDetail?.id !== activeSelectedId))) {
           selectOpportunity(activeSelectedId, false);
         }
 
@@ -3166,9 +3294,12 @@
     const typeBadges = {
       SUREBET: { cls: 'badge-success', label: 'SUREBET ARBITRAGE' },
       VALUEBET: { cls: 'badge-info', label: 'VALUE BET' },
+      QUOTE_DISCREPANCY: { cls: 'badge-warning', label: 'QUOTE DISCREPANCY' },
       BOOSTER: { cls: 'badge-warning', label: 'PRICE BOOSTER' },
       PLAYER_PROP: { cls: 'badge-accent', label: 'PLAYER PROP' },
       TEAM_PROP: { cls: 'badge-outline', label: 'TEAM PROP' },
+      QUOTE_COMPARISON: { cls: 'badge-outline', label: 'QUOTE COMPARISON' },
+      WATCHLIST: { cls: 'badge-warning', label: 'WATCHLIST' },
     };
     const badgeInfo = typeBadges[item.type] || { cls: 'badge-outline', label: item.type };
 
@@ -3176,13 +3307,37 @@
     const fixtureText = item.event && item.event !== entityName ? item.event : (item.competition || 'Football Match');
     const compText = item.competition ? `• ${item.competition}` : '';
 
-    const evNum = item.net_ev_pct !== null && item.net_ev_pct !== undefined
-      ? Number(item.net_ev_pct)
-      : (item.gross_ev_pct !== null && item.gross_ev_pct !== undefined ? Number(item.gross_ev_pct) : Number(item.execution_edge_pct || 0));
+    const isDisc = item.type === 'QUOTE_DISCREPANCY';
+    const discPct = item.price_discrepancy_pct != null ? Number(item.price_discrepancy_pct) : null;
+    const oddsDiff = item.odds_difference != null ? Number(item.odds_difference) : null;
 
-    const isEvPositive = evNum > 0;
-    const evFormatted = `${isEvPositive ? '+' : ''}${evNum.toFixed(2)}%`;
-    const evLabel = item.type === 'SUREBET' ? 'NET ARB MARGIN' : (item.net_ev_pct !== null ? 'NET EV' : 'EDGE');
+    let evFormatted = '—';
+    let evLabel = 'NET EV';
+    let isEvPositive = false;
+    let hasEv = false;
+
+    if (isDisc) {
+      evLabel = 'PRICE DELTA';
+      hasEv = true;
+      if (discPct != null) {
+        evFormatted = `+${discPct.toFixed(1)}%`;
+        isEvPositive = true;
+      } else if (oddsDiff != null) {
+        evFormatted = `+${oddsDiff.toFixed(2)}`;
+        isEvPositive = true;
+      }
+    } else {
+      hasEv = (item.net_ev_pct !== null && item.net_ev_pct !== undefined) ||
+              (item.gross_ev_pct !== null && item.gross_ev_pct !== undefined) ||
+              (item.execution_edge_pct !== null && item.execution_edge_pct !== undefined);
+      const evNum = item.net_ev_pct !== null && item.net_ev_pct !== undefined
+        ? Number(item.net_ev_pct)
+        : (item.gross_ev_pct !== null && item.gross_ev_pct !== undefined ? Number(item.gross_ev_pct) : Number(item.execution_edge_pct || 0));
+
+      isEvPositive = evNum > 0;
+      evFormatted = !hasEv ? '—' : `${isEvPositive ? '+' : ''}${evNum.toFixed(2)}%`;
+      evLabel = item.type === 'SUREBET' ? 'NET ARB MARGIN' : (item.net_ev_pct !== null ? 'NET EV' : 'EDGE');
+    }
 
     const execOdds = item.execution_odds ? Number(item.execution_odds).toFixed(2) : '—';
     const fairOdds = item.fair_odds ? Number(item.fair_odds).toFixed(2) : '—';
@@ -3195,6 +3350,11 @@
       explanation = `Guaranteed cross-bookmaker arbitrage margin of <strong class="text-success">${evFormatted}</strong> detected across <strong>${bookmakersText}</strong>. Placing mathematically proportional stakes eliminates bookmaker margin.`;
     } else if (item.type === 'VALUEBET') {
       explanation = `Actionable price edge: Bookmaker price <strong>${execOdds}</strong> exceeds model fair price <strong>${fairOdds}</strong> by <strong class="text-success">${evFormatted}</strong> value margin.`;
+    } else if (item.type === 'QUOTE_DISCREPANCY') {
+      const lowerText = item.lower_bookmaker && item.lower_execution_odds ? ` vs <strong>${item.lower_bookmaker}</strong> (${Number(item.lower_execution_odds).toFixed(2)})` : '';
+      explanation = `Polish bookmaker quote discrepancy: Best execution price of <strong>${execOdds}</strong> available at <strong>${bookmakersText}</strong>${lowerText}. Large price difference detected. NOT a surebet; single-leg execution.`;
+    } else if (item.type === 'QUOTE_COMPARISON') {
+      explanation = `Bookmaker quote comparison: Best execution price of <strong>${execOdds}</strong> available at <strong>${bookmakersText}</strong> across Polish bookmakers. No model valuation or arbitrage guarantee.`;
     } else {
       explanation = `Verified statistical edge: Executable price of <strong>${execOdds}</strong> at <strong>${bookmakersText}</strong> offers actionable advantage on <strong>${mktText}</strong>.`;
     }
@@ -3205,7 +3365,7 @@
           <span class="opp-spotlight-eyebrow">OPPORTUNITY SPOTLIGHT</span>
           <div style="display: flex; gap: 0.4rem; align-items: center;">
             <span class="badge ${badgeInfo.cls}" style="font-weight: 700; letter-spacing: 0.04em;">${badgeInfo.label}</span>
-            <span class="badge badge-outline">${item.status}</span>
+            <span class="badge ${item.status === 'AVAILABLE' ? 'badge-outline' : (item.status === 'BETTABLE' ? 'badge-success' : 'badge-outline')}">${item.status}</span>
           </div>
         </div>
 
@@ -3219,7 +3379,7 @@
           </div>
 
           <div class="opp-spotlight-metrics">
-            <div class="opp-metric-block primary-ev ${isEvPositive ? '' : 'negative'}">
+            <div class="opp-metric-block primary-ev ${!hasEv ? 'neutral' : (isEvPositive ? '' : 'negative')}">
               <span class="metric-lbl">${evLabel}</span>
               <span class="metric-val">${evFormatted}</span>
             </div>
@@ -3240,8 +3400,8 @@
 
             <div class="opp-metric-block">
               <span class="metric-lbl">QUALITY SCORE</span>
-              <span class="metric-val mono text-accent">${Number(item.score || 0).toFixed(0)}</span>
-              <span style="font-size: 0.65rem; color: var(--text-muted);">Ranking Rank</span>
+              <span class="metric-val mono text-accent">${item.score != null ? Number(item.score).toFixed(0) : '—'}</span>
+              <span style="font-size: 0.65rem; color: var(--text-muted);">${item.score != null ? 'Ranking Rank' : 'Unscored'}</span>
             </div>
           </div>
         </div>
@@ -3267,20 +3427,46 @@
     const typeColors = {
       SUREBET: { cls: 'badge-success', code: 'ARB' },
       VALUEBET: { cls: 'badge-info', code: 'VAL' },
+      QUOTE_DISCREPANCY: { cls: 'badge-warning', code: 'DISC' },
       BOOSTER: { cls: 'badge-warning', code: 'BOOST' },
       PLAYER_PROP: { cls: 'badge-accent', code: 'PROP' },
       TEAM_PROP: { cls: 'badge-outline', code: 'TEAM' },
+      QUOTE_COMPARISON: { cls: 'badge-outline', code: 'QUOTE' },
       WATCHLIST: { cls: 'badge-warning', code: 'WATCH' },
     };
     const tBadge = typeColors[item.type] || { cls: 'badge-outline', code: item.type };
 
-    const evVal = item.net_ev_pct !== null && item.net_ev_pct !== undefined
-      ? Number(item.net_ev_pct)
-      : (item.gross_ev_pct !== null && item.gross_ev_pct !== undefined ? Number(item.gross_ev_pct) : Number(item.execution_edge_pct || 0));
+    const isDisc = item.type === 'QUOTE_DISCREPANCY';
+    const discPct = item.price_discrepancy_pct != null ? Number(item.price_discrepancy_pct) : null;
+    const oddsDiff = item.odds_difference != null ? Number(item.odds_difference) : null;
 
-    const isEvPos = evVal > 0;
-    const evCls = isEvPos ? 'positive' : (evVal < 0 ? 'negative' : 'neutral');
-    const evText = `${isEvPos ? '+' : ''}${evVal.toFixed(1)}%`;
+    let evVal = 0;
+    let isEvPos = false;
+    let evCls = 'neutral';
+    let evText = '—';
+
+    if (isDisc) {
+      if (discPct != null) {
+        evText = `+${discPct.toFixed(1)}%`;
+        evCls = 'positive';
+        isEvPos = true;
+      } else if (oddsDiff != null) {
+        evText = `+${oddsDiff.toFixed(2)}`;
+        evCls = 'positive';
+        isEvPos = true;
+      }
+    } else {
+      const hasEv = (item.net_ev_pct !== null && item.net_ev_pct !== undefined) ||
+                    (item.gross_ev_pct !== null && item.gross_ev_pct !== undefined) ||
+                    (item.execution_edge_pct !== null && item.execution_edge_pct !== undefined);
+      evVal = item.net_ev_pct !== null && item.net_ev_pct !== undefined
+        ? Number(item.net_ev_pct)
+        : (item.gross_ev_pct !== null && item.gross_ev_pct !== undefined ? Number(item.gross_ev_pct) : Number(item.execution_edge_pct || 0));
+
+      isEvPos = evVal > 0;
+      evCls = !hasEv ? 'neutral' : (isEvPos ? 'positive' : (evVal < 0 ? 'negative' : 'neutral'));
+      evText = !hasEv ? '—' : `${isEvPos ? '+' : ''}${evVal.toFixed(1)}%`;
+    }
 
     const entity = item.player || item.team || item.event || 'Selection';
     const fixture = item.event && item.event !== entity ? item.event : (item.competition || 'Match');
@@ -3313,7 +3499,7 @@
         </div>
 
         <div class="opp-feed-col-status">
-          <span class="badge ${item.status === 'VALUEBET' ? 'badge-accent' : (item.status === 'BETTABLE' || item.status === 'AVAILABLE' ? 'badge-success' : (item.status === 'WATCHLIST' ? 'badge-warning' : 'badge-outline'))}" style="font-size: 0.68rem;" title="${escapeHtml(item.status)}">
+          <span class="badge ${item.status === 'VALUEBET' ? 'badge-accent' : (item.status === 'BETTABLE' ? 'badge-success' : (item.status === 'AVAILABLE' ? 'badge-outline' : (item.status === 'WATCHLIST' ? 'badge-warning' : 'badge-outline')))}" style="font-size: 0.68rem;" title="${escapeHtml(item.status)}">
             ${{
               VALUEBET: 'VALUEBET',
               BETTABLE: 'BETTABLE',
@@ -3326,7 +3512,7 @@
               EXPIRED: 'EXPIRED'
             }[item.status] || item.status}
           </span>
-          <span class="opp-feed-score">Score ${Number(item.score || 0).toFixed(0)}</span>
+          <span class="opp-feed-score">${item.score != null ? 'Score ' + Number(item.score).toFixed(0) : 'Score —'}</span>
         </div>
 
         <div class="opp-feed-col-action">
@@ -3476,7 +3662,11 @@
           const legs = (Array.isArray(match.legs) && match.legs.length > 0)
             ? match.legs
             : ((Array.isArray(match.selections) && match.selections.length > 0) ? match.selections : []);
-          const isVb = match.opportunity_type === 'VALUEBET' || match.category === 'VALUEBET';
+          const isVb = match.opportunity_type === 'VALUEBET' || match.type === 'VALUEBET' || match.category === 'VALUEBET';
+          const isSbMatch = match.opportunity_type === 'SUREBET' || match.type === 'SUREBET' || match.category === 'SUREBET';
+          const isTp = match.opportunity_type === 'TEAM_PROP' || match.type === 'TEAM_PROP';
+          const isPp = match.opportunity_type === 'PLAYER_PROP' || match.type === 'PLAYER_PROP';
+          const resolvedType = match.opportunity_type || match.type || (isVb ? 'VALUEBET' : (isSbMatch ? 'SUREBET' : (isTp ? 'TEAM_PROP' : (isPp ? 'PLAYER_PROP' : 'TEAM_PROP'))));
           const margin = (match.value_percent !== undefined)
             ? match.value_percent
             : ((match.calculation?.roi !== undefined) ? match.calculation.roi : (match.margin_pct !== undefined ? match.margin_pct : (match.arbitrage_margin_pct || 0)));
@@ -3484,7 +3674,8 @@
           detail = {
             ...match,
             id: match.id || match.opportunity_id || cleanId,
-            opportunity_type: match.opportunity_type || (isVb ? 'VALUEBET' : 'SUREBET'),
+            opportunity_type: resolvedType,
+            type: resolvedType,
             event_name: match.event_name || (ev.home_team && ev.away_team ? `${ev.home_team} vs ${ev.away_team}` : match.canonical_event_id || 'Event'),
             event: ev,
             market: mkt,
@@ -3496,9 +3687,9 @@
             selections: legs,
             legs: legs,
             mathematical_explanation: match.mathematical_explanation || {
-              implied_probability_sum: match.implied_probability_sum || (match.calculation && match.calculation.implied_sum) || (isVb ? 0.95 : 0.98),
-              is_surebet: !isVb,
-              explanation: match.explanation || `${isVb ? 'Valuebet' : 'Arbitrage opportunity'} with ${margin > 0 ? '+' : ''}${Number(margin).toFixed(2)}% net return.`,
+              implied_probability_sum: match.implied_probability_sum || (match.calculation && match.calculation.implied_sum) || (isVb ? 0.95 : (isSbMatch ? 0.98 : null)),
+              is_surebet: isSbMatch,
+              explanation: match.explanation || `${isVb ? 'Valuebet' : (isSbMatch ? 'Arbitrage opportunity' : 'Market quote comparison')} with ${margin > 0 ? '+' : ''}${Number(margin).toFixed(2)}% net return.`,
             },
             lifecycle: match.lifecycle || {
               status: match.lifecycle_status || 'QUALIFIED',
@@ -3523,9 +3714,11 @@
       const lifecycle = detail.lifecycle || {};
       const legs = detail.selections || detail.legs || detail.odds_comparison || [];
 
-      const oppType = String(detail.opportunity_type || (detail.is_watchlist ? 'WATCHLIST' : 'SUREBET')).toUpperCase();
+      const oppType = String(detail.opportunity_type || detail.type || (detail.is_watchlist ? 'WATCHLIST' : 'TEAM_PROP')).toUpperCase();
       const isSb = oppType === 'SUREBET';
       const isVal = oppType === 'VALUEBET';
+      const isDisc = oppType === 'QUOTE_DISCREPANCY';
+      const isQuote = oppType === 'QUOTE_COMPARISON';
       const isTeam = oppType === 'TEAM_PROP';
       const isPlayer = oppType === 'PLAYER_PROP';
       const isWatch = oppType === 'WATCHLIST' || Boolean(detail.is_watchlist);
@@ -3539,6 +3732,12 @@
       } else if (isVal) {
         typeLabel = 'VALUEBET';
         badgeCls = 'badge badge-info';
+      } else if (isDisc) {
+        typeLabel = 'QUOTE DISCREPANCY';
+        badgeCls = 'badge badge-warning';
+      } else if (isQuote) {
+        typeLabel = 'QUOTE COMPARISON';
+        badgeCls = 'badge badge-outline';
       } else if (isTeam) {
         typeLabel = 'TEAM PROP';
         badgeCls = 'badge badge-outline';
@@ -3615,16 +3814,18 @@
   function buildOpportunityInspectorMarkup(detail, ev, mkt, math, lifecycle, legs, typeInfo) {
     const oppType = (typeof typeInfo === 'object' && typeInfo.oppType)
       ? typeInfo.oppType
-      : String(detail.opportunity_type || (typeInfo === true ? 'VALUEBET' : (detail.is_watchlist ? 'WATCHLIST' : 'SUREBET'))).toUpperCase();
+      : String(detail.opportunity_type || detail.type || (typeInfo === true ? 'VALUEBET' : (detail.is_watchlist ? 'WATCHLIST' : 'TEAM_PROP'))).toUpperCase();
 
     const isVal = oppType === 'VALUEBET';
     const isSb = oppType === 'SUREBET';
+    const isDisc = oppType === 'QUOTE_DISCREPANCY';
+    const isQuote = oppType === 'QUOTE_COMPARISON';
     const isTeam = oppType === 'TEAM_PROP';
     const isPlayer = oppType === 'PLAYER_PROP';
     const isWatch = oppType === 'WATCHLIST' || Boolean(detail.is_watchlist);
     const isBooster = oppType === 'BOOSTER';
 
-    const qScore = detail.quality_score !== undefined ? Number(detail.quality_score).toFixed(0) : '—';
+    const qScore = (detail.quality_score != null && !isNaN(detail.quality_score)) ? Number(detail.quality_score).toFixed(0) : '—';
     const tierName = detail.tier_name || (detail.competition_tier !== undefined ? `Tier ${detail.competition_tier}` : 'Standard Tier');
 
     // ── Price Discovery Matrix ──
@@ -3644,7 +3845,17 @@
       card2Val = (Number(fairOdds) ? Number(fairOdds).toFixed(2) : fairOdds);
       card2Sub = benchmarkBook + ' Sharp Baseline';
       card2Cls = 'text-info';
-    } else if (isTeam || isPlayer) {
+    } else if (isDisc) {
+      const relPct = detail.price_discrepancy_pct != null ? Number(detail.price_discrepancy_pct) : (math.relative_price_difference_pct != null ? Number(math.relative_price_difference_pct) : null);
+      const oDiff = detail.odds_difference != null ? Number(detail.odds_difference) : (math.odds_difference != null ? Number(math.odds_difference) : null);
+      const lowerBmName = detail.lower_bookmaker || math.lower_bookmaker || 'Alternative';
+      const lowerPriceNum = detail.lower_execution_odds != null ? Number(detail.lower_execution_odds) : (math.lower_odds != null ? Number(math.lower_odds) : null);
+
+      card2Label = 'PRICE DISCREPANCY';
+      card2Val = relPct != null ? `+${relPct.toFixed(1)}%` : (oDiff != null ? `+${oDiff.toFixed(2)}` : '—');
+      card2Sub = lowerPriceNum != null ? `${lowerBmName}: ${lowerPriceNum.toFixed(2)} (Δ +${Number(oDiff || 0).toFixed(2)})` : 'Cross-Bookmaker Inefficiency';
+      card2Cls = 'text-warning';
+    } else if (isQuote || isTeam || isPlayer) {
       card2Label = 'MARKET QUOTES';
       card2Val = `${legs.length} Bookmaker${legs.length !== 1 ? 's' : ''}`;
       card2Sub = 'Live Price Discovery';
@@ -3699,8 +3910,12 @@
         </div>
       `;
     } else if (isSb) {
-      const sumS = Number(math.implied_probability_sum || 0).toFixed(4);
-      const isSbVerified = (math.is_surebet !== undefined) ? math.is_surebet : (Number(sumS) < 1.0);
+      const legOutcomes = (legs || []).map(l => String(l.selection_type || l.outcome || l.side || l.selection_outcome || '').trim().toUpperCase()).filter(Boolean);
+      const uniqueOutcomes = new Set(legOutcomes);
+      const hasComplementaryOutcomes = legs.length >= 2 && uniqueOutcomes.size >= 2 && uniqueOutcomes.size === legs.length;
+      const sumSNum = Number(math.implied_probability_sum || detail.implied_probability_sum || 0);
+      const sumS = sumSNum.toFixed(4);
+      const isSbVerified = (math.is_surebet === true) || (math.is_surebet !== false && sumSNum > 0.0001 && sumSNum < 1.0 && hasComplementaryOutcomes);
       const sumCls = isSbVerified ? 'text-success' : 'text-danger';
 
       mathSectionHtml = `
@@ -3711,7 +3926,13 @@
               S = Σ(1 / Net Effective Odds) = <span class="${sumCls} font-bold">${sumS}</span>
             </div>
             <div class="insp-math-desc">
-              ${isSbVerified ? `Strictly below 1.0 threshold (<strong class="text-success">${sumS} &lt; 1.0</strong>). Risk-free net return of <strong class="text-success">+${marginPct}%</strong> is mathematically guaranteed across complementary outcomes.` : `Sum of probabilities is ${sumS} (non-arbitrage).`}
+              ${isSbVerified
+                ? `Strictly below 1.0 threshold (<strong class="text-success">${sumS} &lt; 1.0</strong>). Risk-free net return of <strong class="text-success">+${marginPct}%</strong> is mathematically guaranteed across complementary outcomes.`
+                : (!hasComplementaryOutcomes && legs.length >= 2
+                  ? `<strong class="text-warning">Identical or Non-Complementary Quotes</strong>: Leg selections do not form a mutually exclusive partition of event outcomes. This is a quote comparison, not an arbitrage opportunity.`
+                  : (sumSNum <= 0
+                    ? `No probability sum available for unrated quote comparison.`
+                    : `Sum of net probabilities is ${sumS} ≥ 1.0 (no arbitrage profit possible).`))}
               ${math.explanation ? `<br><small class="text-muted" style="margin-top:0.3rem; display:block;">${escapeHtml(math.explanation)}</small>` : ''}
             </div>
           </div>
@@ -3736,7 +3957,58 @@
           </div>
         </div>
       `;
-    } else if (isTeam || isPlayer) {
+    } else if (isDisc) {
+      const bestOddsNum = Number(bestOdds) || 1.0;
+      const lowerOddsNum = Number(detail.lower_execution_odds || math.lower_odds) || 1.0;
+      const oDiffNum = Number(detail.odds_difference !== undefined && detail.odds_difference !== null ? detail.odds_difference : (math.odds_difference !== undefined && math.odds_difference !== null ? math.odds_difference : (bestOddsNum - lowerOddsNum)));
+      const relPctNum = Number(detail.price_discrepancy_pct !== undefined && detail.price_discrepancy_pct !== null ? detail.price_discrepancy_pct : (math.relative_price_difference_pct !== undefined && math.relative_price_difference_pct !== null ? math.relative_price_difference_pct : (((bestOddsNum / lowerOddsNum) - 1.0) * 100)));
+      const bestBmName = detail.best_bookmaker || (detail.bookmakers && detail.bookmakers[0]) || 'Highest Bookmaker';
+      const lowerBmName = detail.lower_bookmaker || math.lower_bookmaker || 'Alternative Bookmaker';
+
+      const impBest = (100.0 / bestOddsNum).toFixed(1);
+      const impLower = (100.0 / lowerOddsNum).toFixed(1);
+      const impDiff = (Number(impLower) - Number(impBest)).toFixed(1);
+
+      mathSectionHtml = `
+        <div>
+          <div class="insp-section-label">Polish Bookmaker Price Discrepancy Analysis</div>
+          <div class="insp-math-box" style="border-left: 3px solid var(--val-warning);">
+            <div class="insp-math-formula">
+              Δ = ${bestOddsNum.toFixed(2)} − ${lowerOddsNum.toFixed(2)} = <span class="text-warning font-bold">+${oDiffNum.toFixed(2)}</span> (<span class="text-success font-bold">+${relPctNum.toFixed(1)}%</span> relative improvement)
+            </div>
+            <div class="insp-math-desc">
+              <strong>${escapeHtml(bestBmName)}</strong> offers <strong>${bestOddsNum.toFixed(2)}</strong> (implied probability ${impBest}%) vs <strong>${escapeHtml(lowerBmName)}</strong> at <strong>${lowerOddsNum.toFixed(2)}</strong> (implied probability ${impLower}%).
+              This represents a <strong>${impDiff} pp</strong> implied probability discrepancy on the identical proposition.
+              <div style="margin-top: 0.6rem; padding: 0.45rem 0.75rem; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px; font-weight: 700; font-size: 0.76rem; color: var(--val-warning); letter-spacing: 0.03em;">
+                ⚠️ NOT A SUREBET • NO GUARANTEED PROFIT • SINGLE-LEG VALUE DISCOVERY
+              </div>
+              <small class="text-muted" style="margin-top:0.4rem; display:block; line-height: 1.4;">
+                This opportunity exploits cross-bookmaker pricing inefficiency between licensed Polish bookmakers for the exact same bet. It is not an arbitrage surebet as it does not cover complementary outcomes.
+              </small>
+            </div>
+          </div>
+        </div>
+      `;
+
+      if (detail.fair_odds || math.fair_odds) {
+        const fOdds = Number(detail.fair_odds || math.fair_odds);
+        const fProb = Number(math.fair_probability || detail.fair_probability || (1.0 / fOdds));
+        const fProbPct = (fProb * 100).toFixed(1);
+        mathSectionHtml += `
+          <div style="margin-top: 0.75rem;">
+            <div class="insp-section-label">Sharp Reference Benchmark Valuation</div>
+            <div class="insp-math-box">
+              <div class="insp-math-formula">
+                Fair Benchmark Odds: <span class="text-info font-bold">${fOdds.toFixed(2)}</span> (${fProbPct}% Model Probability)
+              </div>
+              <div class="insp-math-desc">
+                Sharp baseline confirms fair pricing without synthetic fallbacks.
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    } else if (isQuote || isTeam || isPlayer) {
       mathSectionHtml = `
         <div>
           <div class="insp-section-label">Best Execution & Price Matrix</div>
@@ -3745,7 +4017,7 @@
               Best Net Odds: <span class="text-success font-bold">${Number(bestOdds).toFixed(2)}</span> (${detail.bookmakers && Array.isArray(detail.bookmakers) ? detail.bookmakers[0] : (detail.bookmaker || 'Best Bookmaker')})
             </div>
             <div class="insp-math-desc">
-              Cross-bookmaker quote comparison for this specific selection. Effective net odds reflect actual payouts after Polish turnover tax (0% for Betclic promo, 12% standard).
+              Cross-bookmaker quote comparison for this specific selection across Polish bookmakers. Effective net odds reflect actual payouts after Polish turnover tax (0% for Betclic promo, 12% standard). No model valuation or arbitrage guarantee.
               ${math.explanation ? `<br><small class="text-muted" style="margin-top:0.3rem; display:block;">${escapeHtml(math.explanation)}</small>` : ''}
             </div>
           </div>
@@ -3756,7 +4028,7 @@
     // ── Cross-Bookmaker Legs Breakdown ──
     let legsSectionHtml = '';
     if (legs && legs.length > 0) {
-      const tableTitle = (isTeam || isPlayer)
+      const tableTitle = (isQuote || isTeam || isPlayer || isDisc)
         ? 'Bookmaker Quote Comparison Matrix (Same Selection)'
         : 'Selections & Cross-Bookmaker Execution';
 
@@ -3860,7 +4132,7 @@
         <div class="insp-section-label">Audit Trail & Identifiers</div>
         <div class="opp-detail-kv-grid" style="font-size: 0.76rem; background: var(--surface-input); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
           <div><span class="kv-label">Lifecycle Status:</span> <strong class="kv-value">${lifecycle.status || detail.lifecycle_status || detail.status || 'NEW'}</strong></div>
-          <div><span class="kv-label">Quality Score:</span> <span class="kv-value mono">${qScore} / 100 (${tierName})</span></div>
+          <div><span class="kv-label">Quality Score:</span> <span class="kv-value mono">${qScore !== '—' ? `${qScore} / 100 (${tierName})` : '— (Unscored)'}</span></div>
           <div><span class="kv-label">First Detected:</span> <span class="kv-value mono">${lifecycle.first_seen_at ? formatTimestamp(lifecycle.first_seen_at) : (detail.detected_at ? formatTimestamp(detail.detected_at) : '—')}</span></div>
           <div><span class="kv-label">Last Verified:</span> <span class="kv-value mono">${lifecycle.last_seen_at ? formatTimestamp(lifecycle.last_seen_at) : '—'}</span></div>
           <div style="grid-column: 1 / -1;"><span class="kv-label">Canonical Opp ID:</span> <span class="kv-value mono" style="word-break: break-all;">${detail.opportunity_id || detail.id}</span></div>
@@ -3995,7 +4267,7 @@
 
     // Safety check: verify that legs represent distinct, mutually exclusive outcomes!
     const distinctOutcomes = new Set(calculatedLegs.map(l => (l.selectionOutcome || l.selectionType || '').toLowerCase().trim()));
-    const hasComplementaryOutcomes = distinctOutcomes.size >= 2;
+    const hasComplementaryOutcomes = distinctOutcomes.size >= 2 && distinctOutcomes.size === calculatedLegs.length;
 
     const netS = calculatedLegs.reduce((acc, l) => acc + l.impliedProb, 0);
     const isSurebet = netS > 0 && netS < 1.0 && hasComplementaryOutcomes;
@@ -5493,21 +5765,36 @@
         const bookieEl = document.getElementById('props-filter-bookmaker');
         const statusEl = document.getElementById('props-filter-exec-status');
         const minEvEl = document.getElementById('props-filter-min-ev');
+        const sortSelect = document.getElementById('props-filter-sortby');
         const scopeBtns = document.querySelectorAll('#props-scope-switcher .scope-btn');
 
         if (cat === 'top_value') {
           if (statusEl) statusEl.value = '';
           if (bookieEl) bookieEl.value = '';
           if (minEvEl && (minEvEl.value === '' || minEvEl.value === '0')) minEvEl.value = '3.0';
-        } else if (cat === 'diagnostics') {
+          if (sortSelect && sortSelect.value.startsWith('discrepancy')) sortSelect.value = 'net_ev';
+        } else if (cat === 'discrepancy') {
           if (statusEl) statusEl.value = '';
           if (bookieEl) bookieEl.value = '';
+          // Requirement 6: Default sort for Quote Discrepancy automatically becomes DISCREPANCY % — HIGH -> LOW
+          if (sortSelect) sortSelect.value = 'discrepancy_pct';
         } else if (cat === 'player') {
           state.playerProps.propsScope = 'PLAYER';
           scopeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-scope') === 'PLAYER'));
+          if (sortSelect && sortSelect.value.startsWith('discrepancy')) sortSelect.value = 'net_ev';
         } else if (cat === 'team') {
           state.playerProps.propsScope = 'TEAM';
           scopeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-scope') === 'TEAM'));
+          if (sortSelect && sortSelect.value.startsWith('discrepancy')) sortSelect.value = 'net_ev';
+        } else if (cat === 'all') {
+          state.playerProps.propsScope = 'ALL';
+          scopeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-scope') === 'ALL'));
+          if (statusEl) statusEl.value = '';
+          if (bookieEl) bookieEl.value = '';
+          if (sortSelect && sortSelect.value.startsWith('discrepancy')) sortSelect.value = 'net_ev';
+        } else if (cat === 'diagnostics') {
+          if (statusEl) statusEl.value = '';
+          if (bookieEl) bookieEl.value = '';
         } else if (cat === 'superbet') {
           if (bookieEl) bookieEl.value = 'Superbet';
         } else if (cat === 'betclic') {
@@ -5520,7 +5807,11 @@
           if (statusEl) statusEl.value = 'POLISH_ODDS_UNAVAILABLE';
         }
 
-        document.querySelectorAll('.market-tabs-container [data-category]').forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('.market-tabs-container [data-category]').forEach(b => {
+          const isActive = (b === btn);
+          b.classList.toggle('active', isActive);
+          b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
         fetchAndRenderPropsFromBackend();
       });
     });
@@ -5552,6 +5843,7 @@
       'props-filter-min-hitrate',
       'props-filter-threshold',
       'props-filter-bookmaker',
+      'props-filter-match-status',
       'props-filter-exec-status',
       'props-filter-limit',
       'props-filter-sortby',
@@ -5594,19 +5886,24 @@
     const scope = state.playerProps.propsScope || 'ALL';
 
     let activeCat = currentPropsCategory;
-    if (status === 'BELOW_VALUE_THRESHOLD') activeCat = 'below_threshold';
+    if (activeCat === 'discrepancy') {
+      // Discrepancy is a primary intent tab
+    } else if (status === 'BELOW_VALUE_THRESHOLD') activeCat = 'below_threshold';
     else if (status === 'INSUFFICIENT_REFERENCE_SOURCES') activeCat = 'ref_gap';
     else if (status === 'POLISH_ODDS_UNAVAILABLE') activeCat = 'no_polish';
     else if (bookie === 'Superbet') activeCat = 'superbet';
     else if (bookie === 'Betclic') activeCat = 'betclic';
     else if (scope === 'PLAYER') activeCat = 'player';
     else if (scope === 'TEAM') activeCat = 'team';
+    else if (currentPropsCategory === 'all') activeCat = 'all';
     else if (currentPropsCategory === 'diagnostics') activeCat = 'diagnostics';
-    else if (activeCat !== 'diagnostics') activeCat = 'top_value';
+    else activeCat = 'top_value';
 
     currentPropsCategory = activeCat;
     document.querySelectorAll('.market-tabs-container [data-category]').forEach(b => {
-      b.classList.toggle('active', b.getAttribute('data-category') === activeCat);
+      const isActive = (b.getAttribute('data-category') === activeCat);
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
   }
 
@@ -5634,6 +5931,8 @@
     if (threshSelect) threshSelect.value = '';
     const bookieSelect = document.getElementById('props-filter-bookmaker');
     if (bookieSelect) bookieSelect.value = '';
+    const matchStatusSelect = document.getElementById('props-filter-match-status');
+    if (matchStatusSelect) matchStatusSelect.value = '';
     const statusSelect = document.getElementById('props-filter-exec-status');
     if (statusSelect) statusSelect.value = '';
     const limitSelect = document.getElementById('props-filter-limit');
@@ -5721,12 +6020,7 @@
         state.playerProps.funnelMetrics = funnel;
         state.playerProps.metadata = scanData;
 
-        updatePropsSummaryMetrics(scanData, allCandidates);
-        renderScanDiagnostics(scanData, allCandidates);
-
-        const isTopValue = (currentPropsCategory === 'top_value' || currentPropsCategory === 'valuebets');
-        const itemsToRender = isTopValue ? qualified : allCandidates;
-        renderPropsTable(itemsToRender, isTopValue ? (scanData.total_qualified_matching_filter ?? qualified.length) : allCandidates.length, funnel);
+        await fetchAndRenderPropsFromBackend();
 
         const durSec = (scanData.duration_ms ? (scanData.duration_ms / 1000).toFixed(2) : '0.00');
         const fixDesc = (funnel.fixtures_selected && funnel.fixtures_discovered && funnel.fixtures_discovered > funnel.fixtures_selected)
@@ -5768,10 +6062,13 @@
 
   function updatePropsSummaryMetrics(scanData, items) {
     const scannedEl = document.getElementById('props-stat-scanned');
+    const uniqueEl = document.getElementById('props-stat-unique');
+    const matchedBothEl = document.getElementById('props-stat-matched-both');
     const polishOddsEl = document.getElementById('props-stat-polish-odds');
     const bettableEl = document.getElementById('props-stat-bettable');
     const refOnlyEl = document.getElementById('props-stat-ref-only');
     const uncertainEl = document.getElementById('props-stat-uncertain');
+    const discrepancyStatEl = document.getElementById('props-stat-discrepancy');
     const pagesEl = document.getElementById('props-pages-count');
     const srcTotalEl = document.getElementById('props-stat-source-total');
 
@@ -5782,18 +6079,34 @@
 
     const qualifiedCount = scanData?.qualified_count ?? qualifiedList.length;
     const totalDiscovered = funnel.trends_discovered || allCandidates.length;
-    const totalDeduped = funnel.trends_deduplicated || totalDiscovered;
-    const matchedProps = funnel.matched_props || allCandidates.filter(i => i.best_bookmaker || i.superbet_odds || i.betclic_odds).length;
+    const totalDeduped = funnel.trends_deduplicated || allCandidates.length;
+
+    // Exact canonical matched Betclic + Superbet count:
+    // Requires BOTH bookmakers to have executable quotes (> 1.0) on the exact same canonical proposition
+    const matchedBothList = allCandidates.filter(i => (
+      i.superbet_odds !== null && i.superbet_odds !== undefined && Number(i.superbet_odds) > 1.0 &&
+      i.betclic_odds !== null && i.betclic_odds !== undefined && Number(i.betclic_odds) > 1.0
+    ));
+    const matchedBothCount = matchedBothList.length;
+
     const matchUncertain = funnel.match_uncertain ?? (funnel.rejection_breakdown?.['MATCH_UNCERTAIN'] ?? (funnel.rejection_breakdown?.['EVENT_AMBIGUOUS'] ?? 0));
     const unavailablePolish = funnel.unavailable_polish_odds || (funnel.rejection_breakdown?.['POLISH_ODDS_UNAVAILABLE'] ?? (funnel.rejection_breakdown?.['NO_POLISH_ODDS'] ?? 0));
     const fixturesSelected = funnel.fixtures_selected || funnel.fixtures_discovered || 0;
     const fixturesDiscovered = funnel.fixtures_discovered || fixturesSelected;
 
+    const discrepancyList = allCandidates.filter(i => (
+      i.is_discrepancy === true ||
+      (i.relative_price_difference_pct !== null && i.relative_price_difference_pct !== undefined && Number(i.relative_price_difference_pct) >= 10.0)
+    ));
+
     if (scannedEl) scannedEl.textContent = totalDiscovered > 0 ? totalDiscovered : totalDeduped;
-    if (polishOddsEl) polishOddsEl.textContent = matchedProps;
+    if (uniqueEl) uniqueEl.textContent = totalDeduped;
+    if (matchedBothEl) matchedBothEl.textContent = matchedBothCount;
+    if (polishOddsEl) polishOddsEl.textContent = matchedBothCount;
     if (bettableEl) bettableEl.textContent = qualifiedCount;
     if (refOnlyEl) refOnlyEl.textContent = unavailablePolish;
     if (uncertainEl) uncertainEl.textContent = matchUncertain;
+    if (discrepancyStatEl) discrepancyStatEl.textContent = discrepancyList.length;
 
     if (pagesEl) {
       if (fixturesSelected > 0) {
@@ -5815,6 +6128,7 @@
     const tabValuebet = document.getElementById('tab-count-valuebet');
     const tabValuebetCompat = document.getElementById('tab-count-valuebet-compat');
     const tabDiagnostics = document.getElementById('tab-count-diagnostics');
+    const tabDiscrepancy = document.getElementById('tab-count-discrepancy');
     const tabPlayer = document.getElementById('tab-count-player');
     const tabTeam = document.getElementById('tab-count-team');
     const tabSuperbet = document.getElementById('tab-count-superbet');
@@ -5832,12 +6146,35 @@
     const refGapList = allCandidates.filter(i => i.reason_code === 'INSUFFICIENT_REFERENCE_SOURCES' || i.reference_fair_odds === null);
     const noPolishList = allCandidates.filter(i => i.reason_code === 'POLISH_ODDS_UNAVAILABLE');
 
-    if (tabAll) tabAll.textContent = allCandidates.length;
+    const limitVal = parseInt(document.getElementById('props-filter-limit')?.value || '50', 10);
+    const isAllTab = (currentPropsCategory === 'all' || currentPropsCategory === 'diagnostics');
+    const isPlayerTab = (currentPropsCategory === 'player' || state.playerProps.propsScope === 'PLAYER');
+    const isTeamTab = (currentPropsCategory === 'team' || state.playerProps.propsScope === 'TEAM');
+    const isDiscrepancyTab = (currentPropsCategory === 'discrepancy');
+
+    if (tabAll) {
+      tabAll.textContent = (isAllTab && limitVal < allCandidates.length)
+        ? `${Math.min(limitVal, allCandidates.length)} / ${allCandidates.length}`
+        : allCandidates.length;
+    }
     if (tabValuebet) tabValuebet.textContent = qualifiedCount;
     if (tabValuebetCompat) tabValuebetCompat.textContent = qualifiedCount;
     if (tabDiagnostics) tabDiagnostics.textContent = allCandidates.length;
-    if (tabPlayer) tabPlayer.textContent = playerList.length;
-    if (tabTeam) tabTeam.textContent = teamList.length;
+    if (tabDiscrepancy) {
+      tabDiscrepancy.textContent = (isDiscrepancyTab && limitVal < discrepancyList.length)
+        ? `${Math.min(limitVal, discrepancyList.length)} / ${discrepancyList.length}`
+        : discrepancyList.length;
+    }
+    if (tabPlayer) {
+      tabPlayer.textContent = (isPlayerTab && limitVal < playerList.length)
+        ? `${Math.min(limitVal, playerList.length)} / ${playerList.length}`
+        : playerList.length;
+    }
+    if (tabTeam) {
+      tabTeam.textContent = (isTeamTab && limitVal < teamList.length)
+        ? `${Math.min(limitVal, teamList.length)} / ${teamList.length}`
+        : teamList.length;
+    }
     if (tabSuperbet) tabSuperbet.textContent = superbetList.length;
     if (tabBetclic) tabBetclic.textContent = betclicList.length;
     if (tabBelowThreshold) tabBelowThreshold.textContent = belowThreshList.length;
@@ -5914,6 +6251,7 @@
     const statVal = document.getElementById('props-filter-stat')?.value || '';
     const statusVal = document.getElementById('props-filter-exec-status')?.value || '';
     const bookmakerVal = document.getElementById('props-filter-bookmaker')?.value || '';
+    const matchStatusVal = (document.getElementById('props-filter-match-status')?.value || '').trim();
     const minOddsVal = parseFloat(document.getElementById('props-filter-min-odds')?.value || '');
     const tournVal = document.getElementById('props-filter-tournaments')?.value || '';
     const posVal = document.getElementById('props-filter-position')?.value || '';
@@ -5923,16 +6261,27 @@
     const limitVal = parseInt(document.getElementById('props-filter-limit')?.value || '50', 10);
 
     const isDiagnosticStatus = statusVal && statusVal !== 'QUALIFIED';
-    const isAllCandidatesMode = currentPropsCategory === 'diagnostics' || isDiagnosticStatus;
+    const isDiscrepancyTab = currentPropsCategory === 'discrepancy';
     const isTopValueTab = (currentPropsCategory === 'top_value' || currentPropsCategory === 'valuebets');
+    const isAllTab = currentPropsCategory === 'all' || currentPropsCategory === 'diagnostics';
+
     let viewMode = isTopValueTab ? 'TOP_VALUE' : 'ALL_CANDIDATES';
-    if (isAllCandidatesMode) viewMode = 'ALL_CANDIDATES';
+    if (isDiscrepancyTab) {
+      viewMode = 'QUOTE_DISCREPANCY';
+    }
+
+    let activeSort = sortByVal;
+    if (isDiscrepancyTab && (!activeSort || activeSort === 'net_ev')) {
+      activeSort = 'discrepancy_pct';
+      const sortEl = document.getElementById('props-filter-sortby');
+      if (sortEl) sortEl.value = 'discrepancy_pct';
+    }
 
     const params = {
       view_mode: viewMode,
       limit: limitVal,
       offset: 0,
-      sort_by: sortByVal,
+      sort_by: activeSort,
     };
 
     if (scopeVal && scopeVal !== 'ALL') {
@@ -5951,6 +6300,10 @@
       params.bookmaker = 'Betclic';
     }
 
+    if (matchStatusVal) {
+      params.match_status = matchStatusVal;
+    }
+
     if (statusVal) {
       params.status = statusVal;
     } else if (currentPropsCategory === 'below_threshold') {
@@ -5963,7 +6316,11 @@
 
     if (statVal) params.stat = statVal;
     if (searchVal) params.search = searchVal;
-    if (!isNaN(minEvVal)) params.min_net_ev = minEvVal;
+    if (!isNaN(minEvVal)) {
+      if (!isDiscrepancyTab || minEvVal !== 3.0) {
+        params.min_net_ev = minEvVal;
+      }
+    }
     if (!isNaN(minOddsVal) && minOddsVal > 1.0) params.min_odds = minOddsVal;
     if (tournVal) params.competition = tournVal;
     if (posVal && posVal !== 'D,M,F' && posVal !== 'ALL') params.position = posVal;
@@ -6019,8 +6376,10 @@
     const metaLine = document.getElementById('props-table-meta-line');
 
     let titleText = '🏆 Top Valuebets Workspace';
-    if (currentPropsCategory === 'diagnostics' || currentPropsCategory === 'all') {
-      titleText = '🔬 All Candidates & Diagnostics (Full Pipeline View)';
+    if (currentPropsCategory === 'discrepancy') {
+      titleText = '⚡ Polish Bookmaker Quote Discrepancy Opportunities';
+    } else if (currentPropsCategory === 'diagnostics' || currentPropsCategory === 'all') {
+      titleText = '🔬 All Opportunities & Candidates (Full Pipeline View)';
     } else if (currentPropsCategory === 'below_threshold') {
       titleText = '⚠️ Evaluated Candidates Below Net EV Threshold';
     } else if (currentPropsCategory === 'ref_gap') {
@@ -6041,18 +6400,41 @@
 
     if (countBadge) {
       const totalMatching = totalScanned || items.length;
-      const totalInAll = totalDatasetCount || (state.playerProps.diagnosticCandidates?.length || 0) + (state.playerProps.results?.length || 0) || totalMatching;
-      if (totalMatching > items.length) {
-        countBadge.textContent = `Showing ${items.length} of ${totalMatching} Candidates`;
-      } else if (totalInAll > items.length && totalMatching < totalInAll) {
-        countBadge.textContent = `${items.length} of ${totalMatching} Candidates (${totalInAll} Scanned)`;
+      const totalInAll = funnelMetrics?.trends_deduplicated || totalDatasetCount || funnelMetrics?.rejected_count || (state.playerProps.diagnosticCandidates?.length || 0) + (state.playerProps.results?.length || 0) || totalMatching;
+
+      let categoryNoun = 'Results';
+      const matchFilterVal = document.getElementById('props-filter-match-status')?.value;
+      if (matchFilterVal === 'MATCHED') {
+        categoryNoun = 'Matched Props';
+      } else if (currentPropsCategory === 'discrepancy') {
+        categoryNoun = 'Quote Discrepancies';
+      } else if (currentPropsCategory === 'top_value' || currentPropsCategory === 'valuebets') {
+        categoryNoun = 'Valuebets';
+      } else if (currentPropsCategory === 'player' || state.playerProps.propsScope === 'PLAYER') {
+        categoryNoun = 'Player Props';
+      } else if (currentPropsCategory === 'team' || state.playerProps.propsScope === 'TEAM') {
+        categoryNoun = 'Team Props';
+      } else if (currentPropsCategory === 'below_threshold') {
+        categoryNoun = 'Below Threshold';
+      } else if (currentPropsCategory === 'ref_gap') {
+        categoryNoun = 'Ref Gap';
+      } else if (currentPropsCategory === 'no_polish') {
+        categoryNoun = 'Unpriced';
+      }
+
+      if (items.length < totalMatching) {
+        countBadge.textContent = `Showing ${items.length} of ${totalMatching} ${categoryNoun} · ${totalInAll} Candidates Scanned`;
+      } else if (totalInAll > totalMatching) {
+        countBadge.textContent = `${totalMatching} ${categoryNoun} · ${totalInAll} Candidates Scanned`;
       } else {
-        countBadge.textContent = `${items.length} Candidates`;
+        countBadge.textContent = `${totalMatching} ${categoryNoun}`;
       }
     }
 
     if (metaLine) {
       const sortLabels = {
+        discrepancy_pct: 'Discrepancy % (High → Low)',
+        discrepancy_pct_asc: 'Discrepancy % (Low → High)',
         net_ev: 'Net EV % (High)',
         hit_rate: 'Hit Rate (High)',
         odds: 'Odds (High)',
@@ -6064,46 +6446,39 @@
       if (items.length > 0) {
         metaLine.textContent = `Ranking sorted by ${activeSortLabel} • Displaying ${items.length} records`;
       } else {
-        metaLine.textContent = `Deterministic Net EV % Ranking (Sorted by ${activeSortLabel})`;
+        metaLine.textContent = `Deterministic Ranking (Sorted by ${activeSortLabel})`;
       }
     }
 
     if (!tbody) return;
 
     if (items.length === 0) {
-      const rejectionCount = funnelMetrics?.rejected_count || 0;
-      const isScanRun = state.playerProps.metadata?.scanned_at || (state.playerProps.metadata?.status && state.playerProps.metadata?.status !== 'NOT_RUN') || (funnelMetrics?.fixtures_selected > 0);
-      if (!isScanRun) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="5" class="text-center text-muted" style="padding: 2.5rem;">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.5rem; opacity: 0.5;"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/></svg>
-              <div>No player props scanned yet. Click <strong>Scan Props</strong> to run a global multi-fixture scan.</div>
-            </td>
-          </tr>
-        `;
-      } else {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="5" class="text-center text-muted" style="padding: 2.5rem;">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.5rem; opacity: 0.5;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">No player props match the current filters. Brak zakwalifikowanych propsów w wybranym zakresie.</div>
-              <div style="font-size: 0.8rem; margin-bottom: 0.5rem;">Przeanalizowano kandydatów (${rejectionCount} odrzuconych w kolejnych etapach lejka).</div>
-              <div style="font-size: 0.78rem; margin-bottom: 0.75rem;">Przełącz na zakładkę <strong>🔬 All Candidates / Diagnostics</strong>, aby zobaczyć wszystkie pozycje i powody odrzucenia.</div>
-              <button type="button" class="btn btn-outline btn-sm" id="btn-empty-jump-diagnostics" style="cursor: pointer;">
-                🔬 Przejdź do All Candidates / Diagnostics
-              </button>
-            </td>
-          </tr>
-        `;
-        const emptyJumpBtn = document.getElementById('btn-empty-jump-diagnostics');
-        if (emptyJumpBtn) {
-          emptyJumpBtn.addEventListener('click', () => {
-            const diagTab = document.getElementById('props-tab-diagnostics');
-            if (diagTab) diagTab.click();
-          });
-        }
+      let emptyHeading = 'No opportunities match the current filters.';
+      let emptySub = 'Try adjusting your search query, stat type, odds, or status filters.';
+
+      if (currentPropsCategory === 'discrepancy') {
+        emptyHeading = 'No significant Polish bookmaker price discrepancies found.';
+        emptySub = 'Discrepancies require the same player, market, line and period to be matched across Betclic and Superbet and to exceed the configured threshold.';
+      } else if (currentPropsCategory === 'player' || state.playerProps.propsScope === 'PLAYER') {
+        emptyHeading = 'No player prop opportunities match the current filters.';
+        emptySub = 'Try broadening your player filters or search query.';
+      } else if (currentPropsCategory === 'team' || state.playerProps.propsScope === 'TEAM') {
+        emptyHeading = 'No team prop opportunities match the current filters.';
+        emptySub = 'Try broadening your team filters or search query.';
+      } else if (currentPropsCategory === 'top_value') {
+        emptyHeading = 'No valuebets meet the current criteria.';
+        emptySub = 'No opportunities currently exceed the required positive expected value threshold against reference models. <!-- Brak zakwalifikowanych propsów w wybranym zakresie. -->';
       }
+
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="text-center text-muted" style="padding: 2.5rem;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.5rem; opacity: 0.5;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">${emptyHeading}</div>
+            <div style="font-size: 0.8rem; margin-bottom: 0.5rem;">${emptySub}</div>
+          </td>
+        </tr>
+      `;
       return;
     }
 
@@ -6147,8 +6522,14 @@
         rank: rankNum,
       });
 
+      const isDiscrepancyRow = item.is_discrepancy === true || (item.relative_price_difference_pct !== null && item.relative_price_difference_pct !== undefined && Number(item.relative_price_difference_pct) >= 10.0);
+      const relDiffPct = item.relative_price_difference_pct !== null && item.relative_price_difference_pct !== undefined ? Number(item.relative_price_difference_pct).toFixed(1) : null;
+      const oddsDiff = item.odds_difference !== null && item.odds_difference !== undefined ? Number(item.odds_difference).toFixed(2) : null;
+
       let statusBadgeHtml = '';
-      if (isValueBetOpportunity) {
+      if (isDiscrepancyRow) {
+        statusBadgeHtml = '<span class="badge badge-warning" style="font-weight: 700; font-size: 0.70rem; letter-spacing: 0.02em;">QUOTE DISCREPANCY</span>';
+      } else if (isValueBetOpportunity) {
         statusBadgeHtml = '<span class="badge badge-success" style="font-weight: 700; font-size: 0.70rem;">VALUE BET</span>';
       } else if (reasonCode === 'BELOW_VALUE_THRESHOLD') {
         statusBadgeHtml = '<span class="badge badge-warning" style="font-weight: 600; font-size: 0.68rem;">BELOW THRESHOLD</span>';
@@ -6162,29 +6543,50 @@
 
       const rankPrefix = (rankDeltaClass === 'rank-improved') ? `<span class="rank-delta-arrow">▲</span> ` : '';
 
-      const evHtml = hasNetEv ? `
-        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-          <div style="display: flex; align-items: center; gap: 0.35rem;">
-            <span class="mono text-muted ${rankDeltaClass}" style="font-size: 0.74rem; font-weight: 700; min-width: 1.6rem;">${rankPrefix}#${rankNum}</span>
-            <div class="net-ev-pill ${isHighEv ? 'high-ev' : (isPositiveEv ? '' : 'negative-ev')} ${evDeltaClass}">
-              <span>${Number(netEv) >= 0 ? `+${netEv}%` : `${netEv}%`}</span>
+      let evHtml = '';
+      if (isDiscrepancyRow) {
+        const netEvSub = hasNetEv ? ` • Net EV: ${Number(netEv) >= 0 ? `+${netEv}%` : `${netEv}%`}` : ' • Score —';
+        evHtml = `
+          <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span class="mono text-muted ${rankDeltaClass}" style="font-size: 0.74rem; font-weight: 700; min-width: 1.6rem;">${rankPrefix}#${rankNum}</span>
+              <div class="net-ev-pill" style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #F59E0B; font-weight: 700;">
+                <span>+${relDiffPct}% DISC</span>
+              </div>
+              ${statusBadgeHtml}
             </div>
-            ${statusBadgeHtml}
+            <div class="text-muted" style="font-size: 0.70rem; padding-left: 1.95rem;">
+              Δ +${oddsDiff || '0.00'}${netEvSub}
+            </div>
           </div>
-          <div class="text-muted" style="font-size: 0.70rem; padding-left: 1.95rem;">
-            ${grossEv !== null ? `Gross: ${Number(grossEv) >= 0 ? `+${grossEv}%` : `${grossEv}%`}` : ''}${edgeVal !== null ? ` • Edge: ${edgeVal}` : ''}
+        `;
+      } else if (hasNetEv) {
+        evHtml = `
+          <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span class="mono text-muted ${rankDeltaClass}" style="font-size: 0.74rem; font-weight: 700; min-width: 1.6rem;">${rankPrefix}#${rankNum}</span>
+              <div class="net-ev-pill ${isHighEv ? 'high-ev' : (isPositiveEv ? '' : 'negative-ev')} ${evDeltaClass}">
+                <span>${Number(netEv) >= 0 ? `+${netEv}%` : `${netEv}%`}</span>
+              </div>
+              ${statusBadgeHtml}
+            </div>
+            <div class="text-muted" style="font-size: 0.70rem; padding-left: 1.95rem;">
+              ${grossEv !== null ? `Gross: ${Number(grossEv) >= 0 ? `+${grossEv}%` : `${grossEv}%`}` : ''}${edgeVal !== null ? ` • Edge: ${edgeVal}` : ''}
+            </div>
           </div>
-        </div>
-      ` : `
-        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-          <div style="display: flex; align-items: center; gap: 0.35rem;">
-            <span class="mono text-muted ${rankDeltaClass}" style="font-size: 0.74rem; font-weight: 700; min-width: 1.6rem;">${rankPrefix}#${rankNum}</span>
-            <span class="badge badge-outline" style="font-size: 0.75rem; color: #94a3b8;">N/A (GAP)</span>
-            ${statusBadgeHtml}
+        `;
+      } else {
+        evHtml = `
+          <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span class="mono text-muted ${rankDeltaClass}" style="font-size: 0.74rem; font-weight: 700; min-width: 1.6rem;">${rankPrefix}#${rankNum}</span>
+              <span class="badge badge-outline" style="font-size: 0.75rem; color: #94a3b8;">N/A (GAP)</span>
+              ${statusBadgeHtml}
+            </div>
+            <div class="text-muted" style="font-size: 0.70rem; padding-left: 1.95rem;">${item.reason || 'Brak wyceny EV'}</div>
           </div>
-          <div class="text-muted" style="font-size: 0.70rem; padding-left: 1.95rem;">${item.reason || 'Brak wyceny EV'}</div>
-        </div>
-      `;
+        `;
+      }
 
       // 2. Candidate & Market Column
       let subjectHtml = '';
@@ -6232,6 +6634,14 @@
 
       let polishOddsHtml = '';
       if (sbOdds || bcOdds) {
+        const bestLabel = bestBookie === 'superbet' ? 'Superbet' : (bestBookie === 'betclic' ? 'Betclic' : (item.best_bookmaker || ''));
+        const bestVal = bestBookie === 'superbet' ? sbOdds : (bestBookie === 'betclic' ? bcOdds : (item.best_raw_odds ? Number(item.best_raw_odds).toFixed(2) : ''));
+        const bestIndicator = (isDiscrepancyRow && bestLabel && bestVal)
+          ? `<div style="font-size: 0.68rem; color: #10B981; font-weight: 600; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
+               <span>⚡ Best executable: <strong>${bestLabel} ${bestVal}</strong></span>
+             </div>`
+          : '';
+
         polishOddsHtml = `
           <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
             ${sbOdds ? `
@@ -6249,6 +6659,7 @@
               </div>
             ` : ''}
           </div>
+          ${bestIndicator}
         `;
       } else {
         polishOddsHtml = `
@@ -6523,6 +6934,47 @@
     `;
   }
 
+  function renderDiscrepancyDrawerSection(item) {
+    const isDisc = item.is_discrepancy === true || (item.relative_price_difference_pct !== null && item.relative_price_difference_pct !== undefined && Number(item.relative_price_difference_pct) >= 10.0);
+    if (!isDisc) return '';
+
+    const bestOdds = item.best_raw_odds ? Number(item.best_raw_odds) : 1.0;
+    const lowerOdds = item.lower_executable_odds ? Number(item.lower_executable_odds) : (item.superbet_odds && item.betclic_odds ? Math.min(Number(item.superbet_odds), Number(item.betclic_odds)) : 1.0);
+    const oDiff = item.odds_difference !== null && item.odds_difference !== undefined ? Number(item.odds_difference) : (bestOdds - lowerOdds);
+    const relPct = item.relative_price_difference_pct !== null && item.relative_price_difference_pct !== undefined ? Number(item.relative_price_difference_pct) : (((bestOdds / lowerOdds) - 1.0) * 100);
+
+    const bestBm = item.best_bookmaker || 'Highest Bookmaker';
+    const lowerBm = item.lower_executable_bookmaker || (bestBm.toLowerCase() === 'superbet' ? 'Betclic' : 'Superbet');
+
+    const impBest = (100.0 / bestOdds).toFixed(1);
+    const impLower = (100.0 / lowerOdds).toFixed(1);
+    const impDiff = (Number(impLower) - Number(impBest)).toFixed(1);
+
+    return `
+      <div class="card" style="background: var(--surface-input); border: 1px solid var(--val-warning); margin-bottom: 1rem; padding: 0.85rem; border-left: 4px solid var(--val-warning);">
+        <div style="font-size: 0.80rem; font-weight: 700; color: #F59E0B; text-transform: uppercase; margin-bottom: 0.4rem; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 0.4rem;">
+            <span>⚡ POLISH BOOKMAKER PRICE DISCREPANCY ANALYSIS</span>
+          </div>
+          <span class="badge badge-warning" style="font-size: 0.70rem; font-weight: 700;">+${relPct.toFixed(1)}% DISC</span>
+        </div>
+        <div class="mono" style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.35rem;">
+          Δ = ${bestOdds.toFixed(2)} − ${lowerOdds.toFixed(2)} = <span class="text-warning font-bold">+${oDiff.toFixed(2)}</span> (<span class="text-success font-bold">+${relPct.toFixed(1)}%</span> relative improvement)
+        </div>
+        <div style="font-size: 0.78rem; line-height: 1.45; color: var(--text-primary); margin-bottom: 0.6rem;">
+          <strong>${bestBm}</strong> offers <strong>${bestOdds.toFixed(2)}</strong> (implied probability ${impBest}%) vs <strong>${lowerBm}</strong> at <strong>${lowerOdds.toFixed(2)}</strong> (implied probability ${impLower}%).
+          This represents a <strong>${impDiff} pp</strong> implied probability discrepancy on the identical proposition.
+        </div>
+        <div style="padding: 0.45rem 0.65rem; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-sm); font-weight: 700; font-size: 0.72rem; color: #F59E0B; letter-spacing: 0.02em;">
+          ⚠️ NOT A SUREBET • NO GUARANTEED PROFIT • SINGLE-LEG VALUE DISCOVERY
+        </div>
+        <div class="text-muted" style="font-size: 0.70rem; margin-top: 0.4rem; line-height: 1.4;">
+          This opportunity exploits cross-bookmaker pricing inefficiency between licensed Polish bookmakers for the exact same bet. It is not an arbitrage surebet as it does not cover complementary outcomes.
+        </div>
+      </div>
+    `;
+  }
+
   async function showPropDetail(propId) {
     if (!propId) return;
     state.playerProps.selectedPropId = propId;
@@ -6777,6 +7229,9 @@
             <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 0.15rem;">True Prob: <strong class="mono" style="color: var(--text-primary);">${fairProbVal}</strong></div>
           </div>
         </div>
+
+        <!-- Polish Price Discrepancy Matrix (if discrepancy detected) -->
+        ${renderDiscrepancyDrawerSection(item)}
 
         <!-- Quantitative Valuation Flow Visualization -->
         ${renderDrawerDecisionPipeline(item)}

@@ -35,6 +35,8 @@ class OpportunityType(str, Enum):
     SUREBET = "SUREBET"
     BOOSTER = "BOOSTER"
     WATCHLIST = "WATCHLIST"
+    QUOTE_COMPARISON = "QUOTE_COMPARISON"
+    QUOTE_DISCREPANCY = "QUOTE_DISCREPANCY"
 
 
 class UnifiedExecutionStatus(str, Enum):
@@ -42,6 +44,9 @@ class UnifiedExecutionStatus(str, Enum):
     VALUEBET = "VALUEBET"
     BETTABLE = "BETTABLE"
     AVAILABLE = "AVAILABLE"
+    MARKET_AVAILABLE = "MARKET_AVAILABLE"
+    QUOTE_COMPARISON = "QUOTE_COMPARISON"
+    QUOTE_DISCREPANCY = "QUOTE_DISCREPANCY"
     REFERENCE_ONLY = "REFERENCE_ONLY"
     NO_EXECUTION_MARKET = "NO_EXECUTION_MARKET"
     NO_EXECUTION_ODDS = "NO_EXECUTION_ODDS"
@@ -92,8 +97,14 @@ class UnifiedOpportunityDTO:
     value_edge_pp: Optional[float] = None         # P_model * 100 - (1 / execution_odds) * 100
     is_valuebet: bool = False                     # True iff verified execution odds yield positive EV
 
-    # Quality & Ranking (Provided by source engine)
-    score: float = 0.0
+    # Polish Bookmaker Quote Discrepancy Presentation Fields
+    price_discrepancy_pct: Optional[float] = None # Relative price difference ((best / lower) - 1) * 100
+    odds_difference: Optional[float] = None       # best_odds - lower_odds
+    lower_execution_odds: Optional[float] = None  # Lower alternative executable price
+    lower_bookmaker: Optional[str] = None         # Alternative bookmaker offering lower price
+
+    # Quality & Ranking (Provided by source engine, None for unrated raw quotes)
+    score: Optional[float] = None
     status: str = "AVAILABLE"
     quality_flags: List[str] = field(default_factory=list)
 
@@ -104,10 +115,16 @@ class UnifiedOpportunityDTO:
     # Engine-specific detailed payload
     details: Dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def opportunity_type(self) -> str:
+        """Alias for type to maintain dual contract between backend and frontend."""
+        return self.type
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "type": self.type,
+            "opportunity_type": self.type,
             "source": self.source,
             "player": self.player,
             "team": self.team,
@@ -131,6 +148,10 @@ class UnifiedOpportunityDTO:
             "model_probability_pct": self.model_probability_pct,
             "value_edge_pp": self.value_edge_pp,
             "is_valuebet": self.is_valuebet,
+            "price_discrepancy_pct": self.price_discrepancy_pct,
+            "odds_difference": self.odds_difference,
+            "lower_execution_odds": self.lower_execution_odds,
+            "lower_bookmaker": self.lower_bookmaker,
             "score": self.score,
             "status": self.status,
             "quality_flags": self.quality_flags,
@@ -179,20 +200,14 @@ class OpportunityExplorerAdapter:
         # zero recalculation here, per this layer's contract.
         net_ev = prop.get("net_ev_pct") or edges.get("net_execution_pct") or edges.get("net_pct")
 
-        # Extract Value Bet fields
+        # Extract Value Bet fields (Strict: no silent hit rate fallback)
         fair_odds_val = prop.get("fair_odds")
-        if fair_odds_val is None:
-            p_hist = prop.get("historical_probability") or (prop.get("hit_rate_pct", 0.0) / 100.0 if prop.get("hit_rate_pct") else 0.0)
-            if p_hist and p_hist > 0.0:
-                fair_odds_val = round(1.0 / float(p_hist), 4)
 
         model_p_pct = None
         if prop.get("model_probability_pct") is not None:
             model_p_pct = float(prop["model_probability_pct"])
-        elif prop.get("historical_probability") is not None:
-            model_p_pct = round(float(prop["historical_probability"]) * 100.0, 1)
-        elif prop.get("hit_rate_pct") is not None:
-            model_p_pct = round(float(prop["hit_rate_pct"]), 1)
+        elif prop.get("model_probability") is not None:
+            model_p_pct = round(float(prop["model_probability"]) * 100.0, 1)
 
         val_edge_pp = prop.get("value_edge_pp")
         if val_edge_pp is None and prop.get("execution_edge_pct") is not None:
@@ -208,13 +223,83 @@ class OpportunityExplorerAdapter:
                 and (net_ev is None or float(net_ev) > 0.0))
         )
 
+        # Check Polish Bookmaker Price Discrepancy
+        disc_details = prop.get("discrepancy_details") or prop.get("discrepancy")
+        is_disc = bool(
+            prop.get("is_discrepancy")
+            or (disc_details and disc_details.get("is_discrepancy"))
+            or (prop.get("relative_price_difference_pct") is not None and float(prop["relative_price_difference_pct"]) >= 10.0)
+        )
+        odds_diff = prop.get("odds_difference")
+        rel_diff_pct = prop.get("relative_price_difference_pct")
+        lower_odds = prop.get("lower_executable_odds")
+        lower_bm = prop.get("lower_executable_bookmaker")
+
+        if disc_details:
+            if odds_diff is None:
+                odds_diff = disc_details.get("odds_difference")
+            if rel_diff_pct is None:
+                rel_diff_pct = disc_details.get("relative_price_difference_pct")
+            if lower_odds is None:
+                lower_odds = disc_details.get("lower_odds")
+            if lower_bm is None:
+                lower_bm = disc_details.get("lower_bookmaker")
+
+        # Fallback check on exec_odds_dict if not already evaluated
+        if not is_disc and isinstance(exec_odds_dict, dict) and len(exec_odds_dict) >= 2:
+            extracted_prices = []
+            for bm_name, q_val in exec_odds_dict.items():
+                p_val = None
+                if isinstance(q_val, dict):
+                    p_val = q_val.get("decimal_odds") or q_val.get("odds")
+                elif isinstance(q_val, (int, float)):
+                    p_val = float(q_val)
+                if p_val and float(p_val) > 1.0:
+                    extracted_prices.append((bm_name, float(p_val)))
+            if len(extracted_prices) >= 2:
+                extracted_prices.sort(key=lambda x: x[1], reverse=True)
+                high_bm, high_price = extracted_prices[0]
+                low_bm, low_price = extracted_prices[-1]
+                diff = round(high_price - low_price, 4)
+                pct = round(((high_price / low_price) - 1.0) * 100.0, 2)
+                if pct >= 10.0:
+                    is_disc = True
+                    odds_diff = diff
+                    rel_diff_pct = pct
+                    lower_odds = low_price
+                    lower_bm = low_bm
+                    disc_details = {
+                        "is_discrepancy": True,
+                        "threshold_pct": 10.0,
+                        "best_bookmaker": high_bm,
+                        "best_odds": high_price,
+                        "lower_bookmaker": low_bm,
+                        "lower_odds": low_price,
+                        "odds_difference": diff,
+                        "relative_price_difference_pct": pct,
+                        "implied_prob_best_pct": round((1.0 / high_price) * 100.0, 2),
+                        "implied_prob_lower_pct": round((1.0 / low_price) * 100.0, 2),
+                        "implied_prob_diff_pp": round(((1.0 / low_price) - (1.0 / high_price)) * 100.0, 2),
+                        "is_surebet": False,
+                        "is_guaranteed_profit": False,
+                        "note": "Polish bookmaker price discrepancy on identical canonical outcome.",
+                    }
+
+        dto_type = OpportunityType.QUOTE_DISCREPANCY.value if is_disc else OpportunityType.PLAYER_PROP.value
+
         status_str = str(prop.get("actionability") or prop.get("execution_status") or prop.get("status") or "REFERENCE_ONLY")
-        if is_val and status_str in ("BETTABLE", "AVAILABLE"):
+        if is_disc and status_str in ("AVAILABLE", "BETTABLE"):
+            status_str = "BETTABLE"
+        elif is_val and status_str in ("BETTABLE", "AVAILABLE"):
             status_str = "VALUEBET"
+
+        details_dict = dict(prop)
+        if disc_details:
+            details_dict["discrepancy"] = disc_details
 
         return UnifiedOpportunityDTO(
             id=str(prop.get("prop_id") or prop.get("canonical_prop_key") or "prop_unknown"),
-            type=OpportunityType.PLAYER_PROP.value,
+            type=dto_type,
             source="statshub",
             player=prop.get("player_name"),
             team=prop.get("team"),
@@ -238,12 +323,16 @@ class OpportunityExplorerAdapter:
             model_probability_pct=float(model_p_pct) if model_p_pct is not None else None,
             value_edge_pp=float(val_edge_pp) if val_edge_pp is not None else None,
             is_valuebet=is_val,
-            score=float(prop.get("score") or 0.0),
+            price_discrepancy_pct=float(rel_diff_pct) if rel_diff_pct is not None else None,
+            odds_difference=float(odds_diff) if odds_diff is not None else None,
+            lower_execution_odds=float(lower_odds) if lower_odds is not None else None,
+            lower_bookmaker=lower_bm,
+            score=float(prop["score"]) if prop.get("score") is not None else None,
             status=status_str,
             quality_flags=list(prop.get("data_quality_flags") or []),
             created_at=prop.get("created_at") or prop.get("detected_at"),
             expires_at=None,
-            details=prop,
+            details=details_dict,
         )
 
     @staticmethod
@@ -260,20 +349,14 @@ class OpportunityExplorerAdapter:
         # P1-NEW-004: net EV from the source engine; no recalculation here.
         net_ev = prop.get("net_ev_pct") or edges.get("net_execution_pct") or edges.get("net_pct")
 
-        # Extract Value Bet fields
+        # Extract Value Bet fields (Strict: no silent hit rate fallback)
         fair_odds_val = prop.get("fair_odds")
-        if fair_odds_val is None:
-            p_hist = prop.get("historical_probability") or (prop.get("hit_rate_pct", 0.0) / 100.0 if prop.get("hit_rate_pct") else 0.0)
-            if p_hist and p_hist > 0.0:
-                fair_odds_val = round(1.0 / float(p_hist), 4)
 
         model_p_pct = None
         if prop.get("model_probability_pct") is not None:
             model_p_pct = float(prop["model_probability_pct"])
-        elif prop.get("historical_probability") is not None:
-            model_p_pct = round(float(prop["historical_probability"]) * 100.0, 1)
-        elif prop.get("hit_rate_pct") is not None:
-            model_p_pct = round(float(prop["hit_rate_pct"]), 1)
+        elif prop.get("model_probability") is not None:
+            model_p_pct = round(float(prop["model_probability"]) * 100.0, 1)
 
         val_edge_pp = prop.get("value_edge_pp")
         if val_edge_pp is None and prop.get("execution_edge_pct") is not None:
@@ -318,7 +401,7 @@ class OpportunityExplorerAdapter:
             model_probability_pct=float(model_p_pct) if model_p_pct is not None else None,
             value_edge_pp=float(val_edge_pp) if val_edge_pp is not None else None,
             is_valuebet=is_val,
-            score=float(prop.get("score") or 0.0),
+            score=float(prop["score"]) if prop.get("score") is not None else None,
             status=status_str,
             quality_flags=list(prop.get("data_quality_flags") or []),
             created_at=prop.get("created_at") or prop.get("detected_at"),
@@ -357,12 +440,12 @@ class OpportunityExplorerAdapter:
         best_bm = best_o.get("bookmaker") or (books[0] if books else None)
         exec_odds = float(best_o.get("odds")) if best_o.get("odds") else (float(odds_map[best_bm]) if best_bm and best_bm in odds_map else None)
 
-        status_str = "BETTABLE" if exec_odds is not None else "AVAILABLE"
+        status_str = "AVAILABLE" if exec_odds is not None else "NO_EXECUTION_ODDS"
         can_id = f"ctp_scan_{event.get('id') or event.get('canonical_event_id')}_{team}_{m_type}_{line}_{side}"
 
         return UnifiedOpportunityDTO(
             id=can_id,
-            type=OpportunityType.TEAM_PROP.value,
+            type=OpportunityType.QUOTE_COMPARISON.value,
             source="scanner",
             player=None,
             team=team,
@@ -386,7 +469,7 @@ class OpportunityExplorerAdapter:
             model_probability_pct=None,
             value_edge_pp=None,
             is_valuebet=False,
-            score=50.0 if exec_odds else 10.0,
+            score=None,
             status=status_str,
             quality_flags=[],
             details={
@@ -415,6 +498,148 @@ class OpportunityExplorerAdapter:
         )
 
     @staticmethod
+    def from_matched_prop_market(
+        event: Dict[str, Any],
+        market: Dict[str, Any],
+        selection: Dict[str, Any],
+        discrepancy_threshold_pct: float = 10.0,
+    ) -> UnifiedOpportunityDTO:
+        """Adapts a matched Player Prop market selection from scan results into UnifiedOpportunityDTO.
+
+        If a large price difference between Polish bookmaker executable quotes exists (>= threshold),
+        it is classified as QUOTE_DISCREPANCY. Otherwise, it is classified as PLAYER_PROP.
+        """
+        home = event.get("home_team") or ""
+        away = event.get("away_team") or ""
+        player_name = selection.get("player_name") or selection.get("player") or selection.get("participant") or ""
+        team = selection.get("team") or home
+        opp = away if team == home else home
+
+        ev_name = f"{home} vs {away}" if home and away else str(event.get("match_name") or "Match")
+        m_type = str(market.get("market_type") or "PLAYER_PROP")
+        line = selection.get("line") if selection.get("line") is not None else market.get("line")
+        side = str(selection.get("selection_type") or selection.get("side") or "OVER").upper()
+
+        odds_map = selection.get("odds") or {}
+        books = list(odds_map.keys()) if isinstance(odds_map, dict) else list(market.get("participating_bookmakers") or [])
+
+        # Parse quotes and detect discrepancy
+        valid_quotes = []
+        if isinstance(odds_map, dict):
+            for b, o in odds_map.items():
+                try:
+                    ov = float(o)
+                    if ov > 1.0:
+                        valid_quotes.append((b, ov))
+                except (ValueError, TypeError):
+                    continue
+
+        best_bm = None
+        best_odds = None
+        lower_bm = None
+        lower_odds = None
+        odds_diff = None
+        rel_diff_pct = None
+        is_discrepancy = False
+        discrepancy_details = None
+
+        if valid_quotes:
+            valid_quotes.sort(key=lambda x: x[1], reverse=True)
+            best_bm, best_odds = valid_quotes[0]
+            if len(valid_quotes) >= 2:
+                lower_bm, lower_odds = valid_quotes[-1]
+                odds_diff = round(best_odds - lower_odds, 4)
+                rel_diff_pct = round(((best_odds / lower_odds) - 1.0) * 100.0, 2)
+
+                imp_prob_best = round((1.0 / best_odds) * 100.0, 2)
+                imp_prob_lower = round((1.0 / lower_odds) * 100.0, 2)
+                prob_diff_pp = round(imp_prob_lower - imp_prob_best, 2)
+
+                if rel_diff_pct >= discrepancy_threshold_pct:
+                    is_discrepancy = True
+
+                discrepancy_details = {
+                    "is_discrepancy": is_discrepancy,
+                    "threshold_pct": discrepancy_threshold_pct,
+                    "best_bookmaker": best_bm,
+                    "best_odds": best_odds,
+                    "lower_bookmaker": lower_bm,
+                    "lower_odds": lower_odds,
+                    "odds_difference": odds_diff,
+                    "relative_price_difference_pct": rel_diff_pct,
+                    "implied_prob_best_pct": imp_prob_best,
+                    "implied_prob_lower_pct": imp_prob_lower,
+                    "implied_prob_diff_pp": prob_diff_pp,
+                    "is_surebet": False,
+                    "is_guaranteed_profit": False,
+                    "note": "Polish bookmaker price discrepancy on identical canonical outcome.",
+                }
+
+        opp_type = OpportunityType.QUOTE_DISCREPANCY.value if is_discrepancy else OpportunityType.PLAYER_PROP.value
+        status_str = "AVAILABLE" if best_odds is not None else "NO_EXECUTION_ODDS"
+        p_slug = player_name.replace(" ", "_") if player_name else "prop"
+        can_id = f"cpp_scan_{event.get('id') or event.get('canonical_event_id')}_{p_slug}_{m_type}_{line}_{side}"
+
+        return UnifiedOpportunityDTO(
+            id=can_id,
+            type=opp_type,
+            source="scanner_props",
+            player=player_name,
+            team=team,
+            opponent=opp,
+            event=ev_name,
+            kickoff=event.get("kickoff"),
+            sport=event.get("sport", "football"),
+            competition=event.get("competition"),
+            market=m_type,
+            line=float(line) if line is not None else None,
+            side=side,
+            reference_odds=None,
+            execution_odds=best_odds,
+            best_bookmaker=best_bm,
+            all_bookmakers=books,
+            statistical_edge_pct=None,
+            execution_edge_pct=None,
+            gross_ev_pct=None,
+            net_ev_pct=None,
+            fair_odds=None,
+            model_probability_pct=None,
+            value_edge_pp=None,
+            is_valuebet=False,
+            price_discrepancy_pct=float(rel_diff_pct) if rel_diff_pct is not None else None,
+            odds_difference=float(odds_diff) if odds_diff is not None else None,
+            lower_execution_odds=float(lower_odds) if lower_odds is not None else None,
+            lower_bookmaker=lower_bm,
+            score=None,
+            status=status_str,
+            quality_flags=[],
+            details={
+                "event": {
+                    "id": event.get("id") or event.get("canonical_event_id"),
+                    "home_team": home,
+                    "away_team": away,
+                    "competition": event.get("competition"),
+                    "kickoff": event.get("kickoff"),
+                    "sport": event.get("sport", "football"),
+                },
+                "market": {
+                    "market_type": m_type,
+                    "line": line,
+                    "period": market.get("period", "FULL_TIME"),
+                    "scope": market.get("scope", "PLAYER"),
+                },
+                "selection": {
+                    "player": player_name,
+                    "participant": player_name,
+                    "selection_type": side,
+                    "line": line,
+                    "odds": odds_map,
+                },
+                "discrepancy": discrepancy_details,
+            },
+        )
+
+    @staticmethod
     def from_valuebet(val: Dict[str, Any]) -> UnifiedOpportunityDTO:
         """Adapts a ValueBet candidate / record into UnifiedOpportunityDTO."""
         ev_data = val.get("event") or {}
@@ -428,7 +653,9 @@ class OpportunityExplorerAdapter:
         net_val_pct = val.get("net_value_percent")
 
         bm = val.get("bookmaker") or (val.get("bookmakers", ["superbet"])[0] if val.get("bookmakers") else "superbet")
-        ref_odds = val.get("fair_odds") or val.get("reference_raw_odds")
+        fair_odds_val = val.get("fair_odds")
+        ref_raw_val = val.get("reference_raw_odds")
+        ref_odds = ref_raw_val if ref_raw_val is not None else fair_odds_val
 
         mkt_dict = val.get("market") if isinstance(val.get("market"), dict) else {}
         scope_val = val.get("market_scope") or mkt_dict.get("scope") or (val.get("market_key", {}) or {}).get("scope", "MATCH")
@@ -472,11 +699,11 @@ class OpportunityExplorerAdapter:
             execution_edge_pct=None,
             gross_ev_pct=float(val_pct) if val_pct is not None else None,
             net_ev_pct=float(net_val_pct) if net_val_pct is not None else None,
-            fair_odds=float(ref_odds) if ref_odds is not None else None,
+            fair_odds=float(fair_odds_val) if fair_odds_val is not None else None,
             model_probability_pct=model_pct,
             value_edge_pp=float(val_pct) if val_pct is not None else None,
             is_valuebet=bool(is_q),
-            score=float(val.get("quality_score") or (float(val_pct) * 5.0 if val_pct else 50.0)),
+            score=float(val["quality_score"]) if val.get("quality_score") is not None else (float(val_pct) * 5.0 if val_pct is not None else None),
             status="VALUEBET" if val.get("is_qualified", True) else "REFERENCE_ONLY",
             quality_flags=list(val.get("quality_flags") or []),
             created_at=val.get("detected_at") or val.get("first_seen_at"),
@@ -555,7 +782,7 @@ class OpportunityExplorerAdapter:
             model_probability_pct=None,
             value_edge_pp=None,
             is_valuebet=False,
-            score=float(sb.get("quality_score") or (float(margin_pct) * 10.0 if margin_pct else 70.0)),
+            score=float(sb["quality_score"]) if sb.get("quality_score") is not None else (float(margin_pct) * 10.0 if margin_pct is not None else None),
             status="AVAILABLE" if sb.get("is_qualified", True) else "EXPIRED",
             quality_flags=list(sb.get("quality_flags") or []),
             created_at=sb.get("detected_at") or sb.get("first_seen_at"),
@@ -665,7 +892,7 @@ class OpportunityExplorerAdapter:
         if cat in ("WATCHLIST", "NEAR_SUREBET"):
             score_val = float(raw_score) if raw_score is not None else 10.0
         else:
-            score_val = float(raw_score) if raw_score is not None else (float(edge) * 5.0 if edge else 50.0)
+            score_val = float(raw_score) if raw_score is not None else (float(edge) * 5.0 if edge is not None else None)
 
         fair_odds_val = float(fair_odds) if fair_odds is not None else None
         model_prob = round(100.0 / fair_odds_val, 1) if (fair_odds_val and fair_odds_val > 0) else None

@@ -307,10 +307,15 @@ class BetclicNormalizer(BaseNormalizer):
 
         "PLAYER_TACKLES": "PLAYER_TACKLES",
         "ODBIORY ZAWODNIKA": "PLAYER_TACKLES",
+        "ODBIORY ZAWODNIKA (OPTA)": "PLAYER_TACKLES",
         "LICZBA ODBIORÓW ZAWODNIKA": "PLAYER_TACKLES",
         "LICZBA ODBIOROW ZAWODNIKA": "PLAYER_TACKLES",
         "LICZBA ODBIORÓW ZAWODNIKA (OPTA)": "PLAYER_TACKLES",
         "LICZBA ODBIOROW ZAWODNIKA (OPTA)": "PLAYER_TACKLES",
+        "ZAWODNIK - LICZBA ODBIORÓW": "PLAYER_TACKLES",
+        "ZAWODNIK - LICZBA ODBIOROW": "PLAYER_TACKLES",
+        "ZAWODNIK LICZBA ODBIORÓW": "PLAYER_TACKLES",
+        "ZAWODNIK LICZBA ODBIOROW": "PLAYER_TACKLES",
     }
 
     SELECTION_TYPE_MAP: Dict[str, str] = {
@@ -865,6 +870,21 @@ class BetclicNormalizer(BaseNormalizer):
             return "HANDICAP"
 
         return name_raw
+
+    def normalize_market_name(self, market_name: str) -> str:
+        """Resolve a market name string directly to canonical market type."""
+        name_raw = market_name.strip().upper()
+        if name_raw in self.MARKET_TYPE_MAP:
+            return self.MARKET_TYPE_MAP[name_raw]
+        clean_name = self._sanitize_text(name_raw).upper()
+        if clean_name in self.MARKET_TYPE_MAP:
+            return self.MARKET_TYPE_MAP[clean_name]
+        for separator in (":", " - "):
+            if separator in clean_name:
+                prefix = clean_name.split(separator)[0].strip()
+                if prefix in self.MARKET_TYPE_MAP:
+                    return self.MARKET_TYPE_MAP[prefix]
+        return self.MARKET_TYPE_MAP.get(clean_name, name_raw)
 
     def _resolve_selection_type(
         self,

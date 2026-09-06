@@ -4,77 +4,22 @@
     "agent-browser": {
       "source": "vercel-labs/agent-browser",
       "sourceType": "github",
-      "skillPath": "skills/agent-browser/SKILL.md",
-      "computedHash": "a674b7d81066e3cc471a7512ddb4ae724418cbfefa75cbb050b0dc430e4d57a0"
-    },
-    "anti-ui-slop": {
-      "source": "uizze.com",
-      "sourceUrl": "https://uizze.com/",
-      "sourceType": "well-known",
-      "computedHash": "cdb9293f9d8461b525a42949d5f3509754c42efa2eab11f20d406b16270eb867",
-      "wellKnownDigest": "sha256:c3dc1a035894db5e60d3cde5e06147c660220f1cffacf8b7469b80f12309bc08"
-    },
-    "codebase-memory-mcp": {
-      "source": "github/awesome-copilot",
-      "sourceType": "github",
-      "skillPath": "skills/codebase-memory-mcp/SKILL.md",
-      "computedHash": "23b4c79dcd477d878d33e3c169b97409a761a6057d7a71dc817a7baca25a42ee"
-    },
-    "find-skills": {
-      "source": "vercel-labs/skills",
-      "sourceType": "github",
-      "skillPath": "skills/find-skills/SKILL.md",
-      "computedHash": "b146008599c31057cef1c145774cea5d5afb30e8f43fa802e47a4b461419aaaf"
-    },
-    "grill-with-docs": {
-      "source": "mattpocock/skills",
-      "sourceType": "github",
-      "skillPath": "skills/engineering/grill-with-docs/SKILL.md",
-      "computedHash": "a610223c9796f755b603f15ec114849a4b38b9ba3006acfa9bdf3cc56dd44dad"
-    },
-    "improve-codebase-architecture": {
-      "source": "mattpocock/skills",
-      "sourceType": "github",
-      "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
-      "computedHash": "016f12709bff30a27419e8add978a9be70f5ca1fb6738b3be6793038e0aba631"
-    },
-    "setup-matt-pocock-skills": {
-      "source": "mattpocock/skills",
-      "sourceType": "github",
-      "skillPath": "skills/engineering/setup-matt-pocock-skills/SKILL.md",
-      "computedHash": "a45163cba56f72f5f224c46557c047d51547147a29e383e5a769ec39eecd1188"
+      "skillPath": "skills/agent-browser/SKILL.md"
     },
     "tdd": {
       "source": "mattpocock/skills",
       "sourceType": "github",
-      "skillPath": "skills/engineering/tdd/SKILL.md",
-      "computedHash": "c1ed8cd854c64d4d226097255d3fa662dae4a758a1462fadd63cc10e413d88d7"
+      "skillPath": "skills/engineering/tdd/SKILL.md"
     },
     "thermo-nuclear-code-quality-review": {
       "source": "cursor/plugins",
       "sourceType": "github",
-      "skillPath": "cursor-team-kit/skills/thermo-nuclear-code-quality-review/SKILL.md",
-      "computedHash": "1be9e8126d5b4bd3000f1e654622faf1493c7df204f9460ba0c1e41e7227497f"
+      "skillPath": "cursor-team-kit/skills/thermo-nuclear-code-quality-review/SKILL.md"
     },
     "ui-design": {
       "source": "uizze.com",
       "sourceUrl": "https://uizze.com/",
-      "sourceType": "well-known",
-      "computedHash": "fe14d1158abb50fdece6abe03ade1d8d6d5b2ef8b7f6914d65193a30a3d48712",
-      "wellKnownDigest": "sha256:31db513e7c2d956be22792661e840c44cee474f220d2cce885fa93333a0e8bae"
-    },
-    "ui-radar": {
-      "source": "uizze.com",
-      "sourceUrl": "https://uizze.com/",
-      "sourceType": "well-known",
-      "computedHash": "34305420bba52f3fe7d1d3b2dd355b64ccf12de7411cbbf4557a1231e8ef8ddb",
-      "wellKnownDigest": "sha256:461cf4d25b9e74840cb6f20ab81751ec5352dbcb28dac8e3bce001602965279e"
-    },
-    "unlazy": {
-      "source": "leonxlnx/unlazy",
-      "sourceType": "github",
-      "skillPath": "SKILL.md",
-      "computedHash": "66e0b3d2bf0587afb5db62ddd717128e83993ddb40958506f1ae00d634d7f4df"
+      "sourceType": "well-known"
     }
   }
 }

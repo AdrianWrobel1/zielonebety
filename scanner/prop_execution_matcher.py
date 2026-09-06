@@ -16,7 +16,7 @@ import re
 import unicodedata
 
 from normalization.market_identity import normalize_player_name, normalize_line
-from normalization.identity import normalize_team_name
+from normalization.identity import normalize_team_name, WEAK_TOKENS
 from normalization.aliases import resolve_canonical_team_name
 from scanner.execution_providers import NormalizedExecutionQuote
 
@@ -83,14 +83,24 @@ class CanonicalPropKey:
         norm_p = normalize_player_name(self.player_name) or self.player_name.lower().strip()
         norm_t, t_tok = normalize_team_name(self.team)
         norm_o, o_tok = normalize_team_name(self.opponent)
-        canon_t, _ = resolve_canonical_team_name(norm_t, t_tok)
-        canon_o, _ = resolve_canonical_team_name(norm_o, o_tok)
+        canon_t, c_tok = resolve_canonical_team_name(norm_t, t_tok)
+        canon_o, o_tok2 = resolve_canonical_team_name(norm_o, o_tok)
+
+        def _clean_team_key(t_name: str, tokens: Tuple[str, ...]) -> str:
+            sig = [t for t in tokens if t not in WEAK_TOKENS]
+            if sig:
+                return " ".join(sig)
+            return t_name
+
+        team_key = _clean_team_key(canon_t or norm_t, c_tok or t_tok)
+        opp_key = _clean_team_key(canon_o or norm_o, o_tok2 or o_tok)
+
         norm_st = STAT_TYPE_CANONICAL_MAP.get(self.stat_type.lower().replace(" ", "_"), self.stat_type.upper())
         norm_line = normalize_line(self.line) or Decimal("0.5")
 
         object.__setattr__(self, "player_name", norm_p)
-        object.__setattr__(self, "team", canon_t or norm_t)
-        object.__setattr__(self, "opponent", canon_o or norm_o)
+        object.__setattr__(self, "team", team_key)
+        object.__setattr__(self, "opponent", opp_key)
         object.__setattr__(self, "stat_type", norm_st)
         object.__setattr__(self, "line", norm_line)
         object.__setattr__(self, "side", self.side.upper())
@@ -190,6 +200,13 @@ class PropOddsComparison:
     execution_status: str = "REFERENCE_ONLY"  # "BETTABLE", "NO_EXECUTION_MARKET", "NO_EXECUTION_ODDS", "MATCH_UNCERTAIN", "REFERENCE_ONLY"
     primary_reason_code: str = MatchingReasonCode.MARKET_UNMATCHED.value
     match_confidence: float = 0.0
+    odds_difference: Optional[float] = None
+    relative_price_difference_pct: Optional[float] = None
+    lower_executable_odds: Optional[float] = None
+    lower_executable_bookmaker: Optional[str] = None
+    is_discrepancy: bool = False
+    discrepancy_threshold_pct: float = 10.0
+    discrepancy_details: Optional[Dict[str, Any]] = None
     canonical_prop_key: Optional[str] = None
     provenance: Dict[str, Any] = field(default_factory=dict)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
@@ -202,6 +219,13 @@ class PropOddsComparison:
             "execution_odds": {k: v.to_dict() for k, v in self.execution_odds.items()},
             "best_executable_odds": self.best_executable_odds,
             "best_executable_bookmaker": self.best_executable_bookmaker,
+            "odds_difference": self.odds_difference,
+            "relative_price_difference_pct": self.relative_price_difference_pct,
+            "lower_executable_odds": self.lower_executable_odds,
+            "lower_executable_bookmaker": self.lower_executable_bookmaker,
+            "is_discrepancy": self.is_discrepancy,
+            "discrepancy_threshold_pct": self.discrepancy_threshold_pct,
+            "discrepancy_details": self.discrepancy_details,
             "execution_status": self.execution_status,
             "primary_reason_code": self.primary_reason_code,
             "match_confidence": self.match_confidence,
@@ -221,9 +245,11 @@ class PropExecutionMatcher:
         self,
         canonical_events: Optional[List[Any]] = None,
         normalized_quotes: Optional[List[NormalizedExecutionQuote]] = None,
+        discrepancy_threshold_pct: float = 10.0,
     ):
         self.canonical_events = canonical_events or []
         self.normalized_quotes = normalized_quotes or []
+        self.discrepancy_threshold_pct = float(discrepancy_threshold_pct)
 
         # Diagnostics telemetry
         self.telemetry = {
@@ -237,6 +263,7 @@ class PropExecutionMatcher:
             "no_execution_market": 0,
             "no_execution_odds": 0,
             "match_uncertain": 0,
+            "quote_discrepancies": 0,
         }
 
     @staticmethod
@@ -933,6 +960,52 @@ class PropExecutionMatcher:
         best_exec_bookie: Optional[str] = None
         primary_reason = MatchingReasonCode.MARKET_UNMATCHED.value
 
+        # Polish bookmaker price discrepancy detection
+        odds_diff: Optional[float] = None
+        rel_diff_pct: Optional[float] = None
+        lower_exec_odds: Optional[float] = None
+        lower_exec_bookie: Optional[str] = None
+        is_discrepancy: bool = False
+        discrepancy_details: Optional[Dict[str, Any]] = None
+        threshold_pct: float = getattr(self, "discrepancy_threshold_pct", 10.0)
+
+        if len(avail_quotes) >= 2:
+            sorted_quotes = sorted(avail_quotes, key=lambda x: (x.decimal_odds or 0.0), reverse=True)
+            highest_q = sorted_quotes[0]
+            lowest_q = sorted_quotes[-1]
+            if highest_q.decimal_odds and lowest_q.decimal_odds and lowest_q.decimal_odds > 0:
+                best_raw = float(highest_q.decimal_odds)
+                lower_raw = float(lowest_q.decimal_odds)
+                lower_exec_odds = lower_raw
+                lower_exec_bookie = lowest_q.bookmaker
+                odds_diff = round(best_raw - lower_raw, 4)
+                rel_diff_pct = round(((best_raw / lower_raw) - 1.0) * 100.0, 2)
+
+                imp_prob_highest = round((1.0 / best_raw) * 100.0, 2)
+                imp_prob_lowest = round((1.0 / lower_raw) * 100.0, 2)
+                prob_diff_pp = round(imp_prob_lowest - imp_prob_highest, 2)
+
+                if rel_diff_pct >= threshold_pct:
+                    is_discrepancy = True
+                    self.telemetry["quote_discrepancies"] += 1
+
+                discrepancy_details = {
+                    "is_discrepancy": is_discrepancy,
+                    "threshold_pct": threshold_pct,
+                    "best_bookmaker": highest_q.bookmaker,
+                    "best_odds": best_raw,
+                    "lower_bookmaker": lowest_q.bookmaker,
+                    "lower_odds": lower_raw,
+                    "odds_difference": odds_diff,
+                    "relative_price_difference_pct": rel_diff_pct,
+                    "implied_prob_best_pct": imp_prob_highest,
+                    "implied_prob_lower_pct": imp_prob_lowest,
+                    "implied_prob_diff_pp": prob_diff_pp,
+                    "is_surebet": False,
+                    "is_guaranteed_profit": False,
+                    "note": "Polish bookmaker price discrepancy on identical canonical outcome.",
+                }
+
         if avail_quotes:
             best_q = max(avail_quotes, key=lambda x: (x.decimal_odds or 0.0, x.match_confidence))
             best_exec_odds = best_q.decimal_odds
@@ -1005,6 +1078,13 @@ class PropExecutionMatcher:
             execution_odds=exec_odds_map,
             best_executable_odds=best_exec_odds,
             best_executable_bookmaker=best_exec_bookie,
+            odds_difference=odds_diff,
+            relative_price_difference_pct=rel_diff_pct,
+            lower_executable_odds=lower_exec_odds,
+            lower_executable_bookmaker=lower_exec_bookie,
+            is_discrepancy=is_discrepancy,
+            discrepancy_threshold_pct=threshold_pct,
+            discrepancy_details=discrepancy_details,
             execution_status=overall_status,
             primary_reason_code=primary_reason,
             match_confidence=match_confidence,

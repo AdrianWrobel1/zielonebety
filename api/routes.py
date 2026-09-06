@@ -172,10 +172,14 @@ class APIRouter:
                 execution_time_ms=round(elapsed_ms, 2),
             )
 
+        clean_latest = latest
+        if isinstance(latest, dict) and "_events_detail_map" in latest:
+            clean_latest = {k: v for k, v in latest.items() if k != "_events_detail_map"}
+
         return APIResponse(
             status_code=200,
-            data=latest,
-            metadata={"status": latest.get("cycle_status")},
+            data=clean_latest,
+            metadata={"status": clean_latest.get("cycle_status")},
             execution_time_ms=round(elapsed_ms, 2),
         )
 
@@ -208,7 +212,7 @@ class APIRouter:
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             return APIResponse(
                 status_code=500,
-                errors=[f"ULTRA SCAN execution error: {str(exc)}"],
+                errors=[str(exc)],
                 execution_time_ms=round(elapsed_ms, 2),
             )
 
@@ -224,10 +228,13 @@ class APIRouter:
                 metadata={"status": "NOT_RUN", "message": "No ULTRA scan has been executed yet."},
                 execution_time_ms=round(elapsed_ms, 2),
             )
+        clean_latest = latest
+        if isinstance(latest, dict) and "_events_detail_map" in latest:
+            clean_latest = {k: v for k, v in latest.items() if k != "_events_detail_map"}
         return APIResponse(
             status_code=200,
-            data=latest,
-            metadata={"execution_id": latest.get("execution_id")},
+            data=clean_latest,
+            metadata={"execution_id": clean_latest.get("execution_id")},
             execution_time_ms=round(elapsed_ms, 2),
         )
 
@@ -827,6 +834,7 @@ class APIRouter:
         competition: Optional[str] = None,
         position: Optional[str] = None,
         threshold: Optional[float] = None,
+        match_status: Optional[str] = None,
     ) -> APIResponse:
         """GET /api/v1/props/global-results"""
         start = time.perf_counter()
@@ -854,6 +862,8 @@ class APIRouter:
             kwargs["position"] = position
         if threshold is not None:
             kwargs["threshold"] = threshold
+        if match_status is not None:
+            kwargs["match_status"] = match_status
 
         results = self.service.get_global_props_results(**kwargs)
         elapsed_ms = (time.perf_counter() - start) * 1000.0

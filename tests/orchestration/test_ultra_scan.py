@@ -1029,24 +1029,24 @@ class TestUltraScanExecution(unittest.TestCase):
 
 
 class TestUltraEveningHorizon(unittest.TestCase):
-    """Phase: Bounded Europe/Warsaw Event Horizon for ULTRA SCAN.
+    """Phase: Bounded Europe/Warsaw Event Horizon for ULTRA SCAN (Today + Tomorrow + Day After Tomorrow).
 
     Verifies:
-    1. 10:00 Warsaw: Daytime horizon includes today's events and excludes tomorrow's events.
-    2. 15:00 Warsaw: Daytime horizon includes today's events and excludes tomorrow's events.
-    3. 20:00 Warsaw: Evening horizon boundary triggers, including today and tomorrow.
-    4. 23:00 Warsaw: Evening horizon includes tomorrow's events across early morning, afternoon, evening.
-    5. 23:59 Warsaw: Evening horizon includes tomorrow's events up to 23:59:59.
-    6. 00:00 Warsaw: Calendar day rolls over, new day is TODAY, D+2 is excluded.
-    7. 00:30 Warsaw: Early morning run treats current day as TODAY, D+2 is excluded.
-    8. Events beyond tomorrow (> 23:59 Warsaw of tomorrow) are excluded.
+    1. 10:00 Warsaw: Daytime horizon includes today's events and excludes tomorrow and day after tomorrow.
+    2. 15:00 Warsaw: Daytime horizon includes today's events and excludes tomorrow and day after tomorrow.
+    3. 20:00 Warsaw: Evening horizon boundary triggers, including today, tomorrow, and day after tomorrow.
+    4. 23:00 Warsaw: Evening horizon includes day-after-tomorrow events across early morning, afternoon, evening.
+    5. 23:59 Warsaw: Evening horizon includes day-after-tomorrow events up to 23:59:59.
+    6. 00:00 Warsaw: Calendar day rolls over, new day is TODAY, D+2/D+3 are excluded.
+    7. 00:30 Warsaw: Early morning run treats current day as TODAY, D+2/D+3 are excluded.
+    8. Events beyond day after tomorrow (> 23:59 Warsaw of D+2) are excluded.
     9. Max forward hours cap properly restricts the forward boundary.
     10. Manual include_tomorrow override works for both forcing True and forcing False.
     11. Convenience function is_in_ultra_horizon matches horizon behavior.
     12. Invalid dates and past dates outside buffer return proper rejection reasons.
-    13. Full pipeline execution in evening horizon captures both today and tomorrow events in funnel metrics.
-    14. Opportunities generated from today and tomorrow are correctly tagged with horizon_bucket.
-    15. Telegram report formatter correctly shows [JUTRO] tag and separate today/tomorrow counts.
+    13. Full pipeline execution in evening horizon captures today, tomorrow, and day-after-tomorrow events in funnel metrics.
+    14. Opportunities generated from all 3 days are correctly tagged with horizon_bucket.
+    15. Telegram report formatter correctly shows [POJUTRZE] tag and separate today/tomorrow/day-after counts.
     """
 
     def test_01_daytime_10am_warsaw_includes_today_excludes_tomorrow(self):
@@ -1056,6 +1056,7 @@ class TestUltraEveningHorizon(unittest.TestCase):
         self.assertFalse(horizon.is_evening_horizon)
         self.assertEqual(horizon.target_date, date(2026, 9, 4))
         self.assertIsNone(horizon.tomorrow_date)
+        self.assertIsNone(horizon.day_after_tomorrow_date)
 
         # Today 14:00 Warsaw (12:00 UTC) -> TODAY
         ok, bucket = horizon.classify_kickoff("2026-09-04T12:00:00Z", evaluation_time=eval_time)
@@ -1067,11 +1068,17 @@ class TestUltraEveningHorizon(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(bucket, "OUTSIDE_HORIZON")
 
+        # Day after tomorrow 15:00 Warsaw (13:00 UTC) -> OUTSIDE_HORIZON
+        ok, bucket = horizon.classify_kickoff("2026-09-06T13:00:00Z", evaluation_time=eval_time)
+        self.assertFalse(ok)
+        self.assertEqual(bucket, "OUTSIDE_HORIZON")
+
     def test_02_daytime_15pm_warsaw_includes_today_excludes_tomorrow(self):
         # 15:00 Warsaw CEST = 13:00 UTC
         eval_time = datetime(2026, 9, 4, 13, 0, 0, tzinfo=timezone.utc)
         horizon = resolve_ultra_horizon(evaluation_time=eval_time)
         self.assertFalse(horizon.is_evening_horizon)
+        self.assertIsNone(horizon.day_after_tomorrow_date)
 
         # Today 20:45 Warsaw (18:45 UTC) -> TODAY
         ok, bucket = horizon.classify_kickoff("2026-09-04T18:45:00Z", evaluation_time=eval_time)
@@ -1083,13 +1090,19 @@ class TestUltraEveningHorizon(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(bucket, "OUTSIDE_HORIZON")
 
-    def test_03_evening_20pm_warsaw_includes_today_and_tomorrow(self):
+        # Day after tomorrow 18:00 Warsaw -> OUTSIDE_HORIZON
+        ok, bucket = horizon.classify_kickoff("2026-09-06T16:00:00Z", evaluation_time=eval_time)
+        self.assertFalse(ok)
+        self.assertEqual(bucket, "OUTSIDE_HORIZON")
+
+    def test_03_evening_20pm_warsaw_includes_today_tomorrow_and_day_after(self):
         # 20:00 Warsaw CEST = 18:00 UTC
         eval_time = datetime(2026, 9, 4, 18, 0, 0, tzinfo=timezone.utc)
         horizon = resolve_ultra_horizon(evaluation_time=eval_time)
         self.assertTrue(horizon.is_evening_horizon)
         self.assertEqual(horizon.target_date, date(2026, 9, 4))
         self.assertEqual(horizon.tomorrow_date, date(2026, 9, 5))
+        self.assertEqual(horizon.day_after_tomorrow_date, date(2026, 9, 6))
 
         # Today 21:00 Warsaw (19:00 UTC) -> TODAY
         ok, bucket = horizon.classify_kickoff("2026-09-04T19:00:00Z", evaluation_time=eval_time)
@@ -1101,41 +1114,53 @@ class TestUltraEveningHorizon(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(bucket, "TOMORROW")
 
-    def test_04_evening_23pm_warsaw_includes_tomorrow_throughout_day(self):
+        # Day after tomorrow 14:00 Warsaw (12:00 UTC) -> DAY_AFTER_TOMORROW
+        ok, bucket = horizon.classify_kickoff("2026-09-06T12:00:00Z", evaluation_time=eval_time)
+        self.assertTrue(ok)
+        self.assertEqual(bucket, "DAY_AFTER_TOMORROW")
+
+    def test_04_evening_23pm_warsaw_includes_tomorrow_and_day_after(self):
         # 23:00 Warsaw CEST = 21:00 UTC
         eval_time = datetime(2026, 9, 4, 21, 0, 0, tzinfo=timezone.utc)
         horizon = resolve_ultra_horizon(evaluation_time=eval_time)
         self.assertTrue(horizon.is_evening_horizon)
+        self.assertEqual(horizon.day_after_tomorrow_date, date(2026, 9, 6))
 
         # Tomorrow 01:00 Warsaw (23:00 UTC previous day) -> TOMORROW
         ok1, b1 = horizon.classify_kickoff("2026-09-04T23:00:00Z", evaluation_time=eval_time)
         self.assertTrue(ok1)
         self.assertEqual(b1, "TOMORROW")
 
-        # Tomorrow 12:00 Warsaw (10:00 UTC) -> TOMORROW
-        ok2, b2 = horizon.classify_kickoff("2026-09-05T10:00:00Z", evaluation_time=eval_time)
+        # Tomorrow 18:00 Warsaw (16:00 UTC) -> TOMORROW
+        ok2, b2 = horizon.classify_kickoff("2026-09-05T16:00:00Z", evaluation_time=eval_time)
         self.assertTrue(ok2)
         self.assertEqual(b2, "TOMORROW")
 
-        # Tomorrow 18:00 Warsaw (16:00 UTC) -> TOMORROW
-        ok3, b3 = horizon.classify_kickoff("2026-09-05T16:00:00Z", evaluation_time=eval_time)
+        # Day after tomorrow 12:00 Warsaw (10:00 UTC) -> DAY_AFTER_TOMORROW
+        ok3, b3 = horizon.classify_kickoff("2026-09-06T10:00:00Z", evaluation_time=eval_time)
         self.assertTrue(ok3)
-        self.assertEqual(b3, "TOMORROW")
+        self.assertEqual(b3, "DAY_AFTER_TOMORROW")
 
-        # Tomorrow 23:30 Warsaw (21:30 UTC) -> TOMORROW
-        ok4, b4 = horizon.classify_kickoff("2026-09-05T21:30:00Z", evaluation_time=eval_time)
+        # Day after tomorrow 23:30 Warsaw (21:30 UTC) -> DAY_AFTER_TOMORROW
+        ok4, b4 = horizon.classify_kickoff("2026-09-06T21:30:00Z", evaluation_time=eval_time)
         self.assertTrue(ok4)
-        self.assertEqual(b4, "TOMORROW")
+        self.assertEqual(b4, "DAY_AFTER_TOMORROW")
 
-    def test_05_evening_2359pm_warsaw_includes_tomorrow(self):
+    def test_05_evening_2359pm_warsaw_includes_tomorrow_and_day_after(self):
         # 23:59 Warsaw CEST = 21:59 UTC
         eval_time = datetime(2026, 9, 4, 21, 59, 0, tzinfo=timezone.utc)
         horizon = resolve_ultra_horizon(evaluation_time=eval_time)
         self.assertTrue(horizon.is_evening_horizon)
+        self.assertEqual(horizon.day_after_tomorrow_date, date(2026, 9, 6))
 
         ok, bucket = horizon.classify_kickoff("2026-09-05T15:00:00Z", evaluation_time=eval_time)
         self.assertTrue(ok)
         self.assertEqual(bucket, "TOMORROW")
+
+        # Day after tomorrow up to 23:59 Warsaw
+        ok2, bucket2 = horizon.classify_kickoff("2026-09-06T21:59:00Z", evaluation_time=eval_time)
+        self.assertTrue(ok2)
+        self.assertEqual(bucket2, "DAY_AFTER_TOMORROW")
 
     def test_06_midnight_0000am_warsaw_advances_date_naturally(self):
         # 00:00:00 Warsaw CEST on 2026-09-05 = 22:00:00 UTC on 2026-09-04
@@ -1145,6 +1170,7 @@ class TestUltraEveningHorizon(unittest.TestCase):
         self.assertFalse(horizon.is_evening_horizon)
         self.assertEqual(horizon.target_date, date(2026, 9, 5))
         self.assertIsNone(horizon.tomorrow_date)
+        self.assertIsNone(horizon.day_after_tomorrow_date)
 
         # 2026-09-05 14:00 Warsaw is now TODAY
         ok, bucket = horizon.classify_kickoff("2026-09-05T12:00:00Z", evaluation_time=eval_time)
@@ -1156,12 +1182,18 @@ class TestUltraEveningHorizon(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(bucket, "OUTSIDE_HORIZON")
 
+        # 2026-09-07 14:00 Warsaw is D+2 and excluded in daytime
+        ok2, bucket2 = horizon.classify_kickoff("2026-09-07T12:00:00Z", evaluation_time=eval_time)
+        self.assertFalse(ok2)
+        self.assertEqual(bucket2, "OUTSIDE_HORIZON")
+
     def test_07_midnight_0030am_warsaw_advances_date_naturally(self):
         # 00:30:00 Warsaw CEST on 2026-09-05 = 22:30:00 UTC on 2026-09-04
         eval_time = datetime(2026, 9, 4, 22, 30, 0, tzinfo=timezone.utc)
         horizon = resolve_ultra_horizon(evaluation_time=eval_time)
         self.assertFalse(horizon.is_evening_horizon)
         self.assertEqual(horizon.target_date, date(2026, 9, 5))
+        self.assertIsNone(horizon.day_after_tomorrow_date)
 
         # 2026-09-05 20:00 Warsaw is TODAY
         ok, bucket = horizon.classify_kickoff("2026-09-05T18:00:00Z", evaluation_time=eval_time)
@@ -1173,18 +1205,28 @@ class TestUltraEveningHorizon(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(bucket, "OUTSIDE_HORIZON")
 
-    def test_08_events_beyond_tomorrow_are_excluded(self):
-        # 23:00 Warsaw CEST = 21:00 UTC
+        # 2026-09-07 is OUTSIDE_HORIZON
+        ok2, bucket2 = horizon.classify_kickoff("2026-09-07T10:00:00Z", evaluation_time=eval_time)
+        self.assertFalse(ok2)
+        self.assertEqual(bucket2, "OUTSIDE_HORIZON")
+
+    def test_08_events_beyond_day_after_tomorrow_are_excluded(self):
+        # 23:00 Warsaw CEST = 21:00 UTC on 2026-09-04
         eval_time = datetime(2026, 9, 4, 21, 0, 0, tzinfo=timezone.utc)
         horizon = resolve_ultra_horizon(evaluation_time=eval_time)
 
-        # 2026-09-06 00:30 Warsaw (22:30 UTC 2026-09-05) -> D+2 in Warsaw -> OUTSIDE_HORIZON
-        ok1, b1 = horizon.classify_kickoff("2026-09-05T22:30:00Z", evaluation_time=eval_time)
+        # 2026-09-06 15:00 Warsaw -> D+2 (POJUTRZE) -> IN HORIZON
+        ok_d2, b_d2 = horizon.classify_kickoff("2026-09-06T13:00:00Z", evaluation_time=eval_time)
+        self.assertTrue(ok_d2)
+        self.assertEqual(b_d2, "DAY_AFTER_TOMORROW")
+
+        # 2026-09-07 00:30 Warsaw (22:30 UTC 2026-09-06) -> D+3 in Warsaw -> OUTSIDE_HORIZON
+        ok1, b1 = horizon.classify_kickoff("2026-09-06T22:30:00Z", evaluation_time=eval_time)
         self.assertFalse(ok1)
         self.assertEqual(b1, "OUTSIDE_HORIZON")
 
-        # 2026-09-06 15:00 Warsaw -> D+2 -> OUTSIDE_HORIZON
-        ok2, b2 = horizon.classify_kickoff("2026-09-06T13:00:00Z", evaluation_time=eval_time)
+        # 2026-09-07 15:00 Warsaw -> D+3 -> OUTSIDE_HORIZON
+        ok2, b2 = horizon.classify_kickoff("2026-09-07T13:00:00Z", evaluation_time=eval_time)
         self.assertFalse(ok2)
         self.assertEqual(b2, "OUTSIDE_HORIZON")
 
@@ -1209,14 +1251,19 @@ class TestUltraEveningHorizon(unittest.TestCase):
         eval_time_day = datetime(2026, 9, 4, 8, 0, 0, tzinfo=timezone.utc)
         horizon_forced_true = resolve_ultra_horizon(evaluation_time=eval_time_day, include_tomorrow=True)
         self.assertTrue(horizon_forced_true.is_evening_horizon)
+        self.assertEqual(horizon_forced_true.day_after_tomorrow_date, date(2026, 9, 6))
         ok, b = horizon_forced_true.classify_kickoff("2026-09-05T14:00:00Z", evaluation_time=eval_time_day)
         self.assertTrue(ok)
         self.assertEqual(b, "TOMORROW")
+        ok_d2, b_d2 = horizon_forced_true.classify_kickoff("2026-09-06T14:00:00Z", evaluation_time=eval_time_day)
+        self.assertTrue(ok_d2)
+        self.assertEqual(b_d2, "DAY_AFTER_TOMORROW")
 
         # Evening 23:00 Warsaw, force include_tomorrow=False
         eval_time_eve = datetime(2026, 9, 4, 21, 0, 0, tzinfo=timezone.utc)
         horizon_forced_false = resolve_ultra_horizon(evaluation_time=eval_time_eve, include_tomorrow=False)
         self.assertFalse(horizon_forced_false.is_evening_horizon)
+        self.assertIsNone(horizon_forced_false.day_after_tomorrow_date)
         ok, b = horizon_forced_false.classify_kickoff("2026-09-05T14:00:00Z", evaluation_time=eval_time_eve)
         self.assertFalse(ok)
         self.assertEqual(b, "OUTSIDE_HORIZON")
@@ -1225,7 +1272,8 @@ class TestUltraEveningHorizon(unittest.TestCase):
         eval_time = datetime(2026, 9, 4, 21, 0, 0, tzinfo=timezone.utc)
         self.assertTrue(is_in_ultra_horizon("2026-09-04T21:30:00Z", evaluation_time=eval_time))
         self.assertTrue(is_in_ultra_horizon("2026-09-05T12:00:00Z", evaluation_time=eval_time))
-        self.assertFalse(is_in_ultra_horizon("2026-09-06T12:00:00Z", evaluation_time=eval_time))
+        self.assertTrue(is_in_ultra_horizon("2026-09-06T12:00:00Z", evaluation_time=eval_time))
+        self.assertFalse(is_in_ultra_horizon("2026-09-07T12:00:00Z", evaluation_time=eval_time))
 
     def test_12_invalid_and_past_kickoff_handling(self):
         eval_time = datetime(2026, 9, 4, 21, 0, 0, tzinfo=timezone.utc)
@@ -1245,7 +1293,7 @@ class TestUltraEveningHorizon(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(reason, "STALE")
 
-    def test_13_full_pipeline_tomorrow_events_flow_and_funnel_accounting(self):
+    def test_13_full_pipeline_tomorrow_and_day_after_events_flow_and_funnel_accounting(self):
         eval_time = datetime(2026, 9, 4, 19, 0, 0, tzinfo=timezone.utc)  # 21:00 Warsaw (evening)
         orchestrator = UltraScanOrchestrator(
             scope=UltraScanScope(
@@ -1259,27 +1307,32 @@ class TestUltraEveningHorizon(unittest.TestCase):
         mock_sb = MagicMock()
         mock_bc = MagicMock()
 
-        # 1 today event and 1 tomorrow event for each provider
+        # 1 today, 1 tomorrow, 1 day after tomorrow event for each provider
         it_sb_today = MagicMock(start_time="2026-09-04T20:00:00Z", event_id="sb_t1")
         it_sb_tom = MagicMock(start_time="2026-09-05T14:00:00Z", event_id="sb_t2")
-        mock_sb.discover.return_value = [it_sb_today, it_sb_tom]
-        mock_sb.fetch.return_value = [{"id": "sb_t1"}, {"id": "sb_t2"}]
+        it_sb_d2 = MagicMock(start_time="2026-09-06T14:00:00Z", event_id="sb_t3")
+        mock_sb.discover.return_value = [it_sb_today, it_sb_tom, it_sb_d2]
+        mock_sb.fetch.return_value = [{"id": "sb_t1"}, {"id": "sb_t2"}, {"id": "sb_t3"}]
 
         it_bc_today = MagicMock(start_time="2026-09-04T20:00:00Z", event_id="bc_t1")
         it_bc_tom = MagicMock(start_time="2026-09-05T14:00:00Z", event_id="bc_t2")
-        mock_bc.discover.return_value = [it_bc_today, it_bc_tom]
-        mock_bc.fetch.return_value = [{"id": "bc_t1"}, {"id": "bc_t2"}]
+        it_bc_d2 = MagicMock(start_time="2026-09-06T14:00:00Z", event_id="bc_t3")
+        mock_bc.discover.return_value = [it_bc_today, it_bc_tom, it_bc_d2]
+        mock_bc.fetch.return_value = [{"id": "bc_t1"}, {"id": "bc_t2"}, {"id": "bc_t3"}]
 
         ev_sb_today = Event(competition_id="c1", home_participant="Arsenal", away_participant="Chelsea", scheduled_start="2026-09-04T20:00:00Z")
         ev_sb_tom = Event(competition_id="c1", home_participant="Liverpool", away_participant="Everton", scheduled_start="2026-09-05T14:00:00Z")
-        mock_sb.parse.return_value = [ev_sb_today, ev_sb_tom]
+        ev_sb_d2 = Event(competition_id="c1", home_participant="Bayern", away_participant="Dortmund", scheduled_start="2026-09-06T14:00:00Z")
+        mock_sb.parse.return_value = [ev_sb_today, ev_sb_tom, ev_sb_d2]
 
         ev_bc_today = Event(competition_id="c1", home_participant="Arsenal", away_participant="Chelsea", scheduled_start="2026-09-04T20:00:00Z")
         ev_bc_tom = Event(competition_id="c1", home_participant="Liverpool", away_participant="Everton", scheduled_start="2026-09-05T14:00:00Z")
-        mock_bc.parse.return_value = [ev_bc_today, ev_bc_tom]
+        ev_bc_d2 = Event(competition_id="c1", home_participant="Bayern", away_participant="Dortmund", scheduled_start="2026-09-06T14:00:00Z")
+        mock_bc.parse.return_value = [ev_bc_today, ev_bc_tom, ev_bc_d2]
 
         g_today = NormalizedGraph(event=ev_sb_today, competition=Competition(name="Premier League"), markets=[])
         g_tom = NormalizedGraph(event=ev_sb_tom, competition=Competition(name="Premier League"), markets=[])
+        g_d2 = NormalizedGraph(event=ev_sb_d2, competition=Competition(name="Bundesliga"), markets=[])
 
         ce_today = CanonicalEvent(
             canonical_event_id="ce_1",
@@ -1299,15 +1352,24 @@ class TestUltraEveningHorizon(unittest.TestCase):
             scheduled_start="2026-09-05T14:00:00Z",
             sources={"superbet": MagicMock(), "betclic": MagicMock()},
         )
+        ce_d2 = CanonicalEvent(
+            canonical_event_id="ce_3",
+            sport="Football",
+            home_team="Bayern",
+            away_team="Dortmund",
+            competition=MagicMock(name="Bundesliga"),
+            scheduled_start="2026-09-06T14:00:00Z",
+            sources={"superbet": MagicMock(), "betclic": MagicMock()},
+        )
         val_res = MagicMock(
-            canonical_events=[ce_today, ce_tom],
-            metrics=MagicMock(matched_market_count=2),
+            canonical_events=[ce_today, ce_tom, ce_d2],
+            metrics=MagicMock(matched_market_count=3),
         )
 
         with patch("orchestration.ultra_scan.NormalizationEngine") as mock_norm_cls, \
              patch("orchestration.ultra_scan.CrossBookmakerValidationPipeline") as mock_val_cls:
             mock_norm_inst = MagicMock()
-            mock_norm_inst.normalize.return_value = MagicMock(graphs=[g_today, g_tom])
+            mock_norm_inst.normalize.return_value = MagicMock(graphs=[g_today, g_tom, g_d2])
             mock_norm_cls.return_value = mock_norm_inst
 
             mock_val_inst = MagicMock()
@@ -1322,12 +1384,15 @@ class TestUltraEveningHorizon(unittest.TestCase):
         f = res.funnel
         self.assertEqual(f.discovered_today_events, 2)
         self.assertEqual(f.discovered_tomorrow_events, 2)
-        self.assertEqual(f.discovered_events_total, 4)
+        self.assertEqual(f.discovered_day_after_tomorrow_events, 2)
+        self.assertEqual(f.discovered_events_total, 6)
         self.assertEqual(f.selected_today_events, 2)
         self.assertEqual(f.selected_tomorrow_events, 2)
+        self.assertEqual(f.selected_day_after_tomorrow_events, 2)
         self.assertEqual(f.matched_events_today, 1)
         self.assertEqual(f.matched_events_tomorrow, 1)
-        self.assertEqual(f.overlap_events_count, 2)
+        self.assertEqual(f.matched_events_day_after_tomorrow, 1)
+        self.assertEqual(f.overlap_events_count, 3)
 
     def test_14_opportunities_tagged_with_correct_horizon_bucket(self):
         opp_today = UltraOpportunity(
@@ -1364,8 +1429,26 @@ class TestUltraEveningHorizon(unittest.TestCase):
             ultra_rank_score=55.0,
             horizon_bucket="TOMORROW",
         )
+        opp_d2 = UltraOpportunity(
+            opportunity_id="opp_3",
+            category="VALUEBET",
+            match_name="Bayern vs Dortmund",
+            competition="Bundesliga",
+            kickoff="2026-09-06T15:30:00Z",
+            market_display="Match Winner",
+            selection_display="Bayern",
+            bookmaker="Superbet",
+            raw_odds=1.80,
+            effective_odds=1.58,
+            fair_odds=1.70,
+            edge_pct=4.0,
+            confidence="HIGH",
+            ultra_rank_score=58.0,
+            horizon_bucket="DAY_AFTER_TOMORROW",
+        )
         self.assertEqual(opp_today.horizon_bucket, "TODAY")
         self.assertEqual(opp_tomorrow.horizon_bucket, "TOMORROW")
+        self.assertEqual(opp_d2.horizon_bucket, "DAY_AFTER_TOMORROW")
 
     def test_15_telegram_formatter_displays_tomorrow_tag_and_split(self):
         opp_today = UltraOpportunity(
@@ -1402,19 +1485,41 @@ class TestUltraEveningHorizon(unittest.TestCase):
             ultra_rank_score=55.0,
             horizon_bucket="TOMORROW",
         )
+        opp_d2 = UltraOpportunity(
+            opportunity_id="opp_3",
+            category="VALUEBET",
+            match_name="Bayern vs Dortmund",
+            competition="Bundesliga",
+            kickoff="2026-09-06T15:30:00Z",
+            market_display="Match Winner",
+            selection_display="Bayern",
+            bookmaker="Superbet",
+            raw_odds=1.80,
+            effective_odds=1.58,
+            fair_odds=1.70,
+            edge_pct=4.0,
+            confidence="HIGH",
+            ultra_rank_score=58.0,
+            horizon_bucket="DAY_AFTER_TOMORROW",
+        )
         funnel = UltraScanFunnelMetrics(
-            discovered_events_total=20,
+            discovered_events_total=30,
             discovered_today_events=12,
-            discovered_tomorrow_events=8,
+            discovered_tomorrow_events=10,
+            discovered_day_after_tomorrow_events=8,
             discovered_superbet_today=6,
-            discovered_superbet_tomorrow=4,
+            discovered_superbet_tomorrow=5,
+            discovered_superbet_day_after_tomorrow=4,
             discovered_betclic_today=6,
-            discovered_betclic_tomorrow=4,
+            discovered_betclic_tomorrow=5,
+            discovered_betclic_day_after_tomorrow=4,
             selected_today_events=10,
-            selected_tomorrow_events=7,
+            selected_tomorrow_events=8,
+            selected_day_after_tomorrow_events=7,
             matched_events_today=5,
-            matched_events_tomorrow=3,
-            overlap_events_count=8,
+            matched_events_tomorrow=4,
+            matched_events_day_after_tomorrow=3,
+            overlap_events_count=12,
         )
         result = UltraScanResult(
             execution_id="ultra_test_eve",
@@ -1424,17 +1529,21 @@ class TestUltraEveningHorizon(unittest.TestCase):
             completed_at="2026-09-04T21:05:00Z",
             duration_seconds=300.0,
             funnel=funnel,
-            top_opportunities=[opp_today, opp_tomorrow],
-            valuebets=[opp_today, opp_tomorrow],
+            top_opportunities=[opp_today, opp_tomorrow, opp_d2],
+            valuebets=[opp_today, opp_tomorrow, opp_d2],
         )
 
         report = format_ultra_scan_report(result)
         full_report = "\n".join(report)
         self.assertIn("[JUTRO]", full_report)
+        self.assertIn("[POJUTRZE]", full_report)
         self.assertIn("Zdarzenia dzisiaj:", full_report)
         self.assertIn("Zdarzenia jutro:", full_report)
+        self.assertIn("Zdarzenia pojutrze:", full_report)
         self.assertIn("Superbet: 6, Betclic: 6", full_report)
+        self.assertIn("Superbet: 5, Betclic: 5", full_report)
         self.assertIn("Superbet: 4, Betclic: 4", full_report)
+        self.assertIn("Pojutrze: 3", full_report)
 
 
 if __name__ == "__main__":

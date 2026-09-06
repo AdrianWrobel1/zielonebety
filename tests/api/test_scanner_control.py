@@ -363,37 +363,45 @@ class TestScannerControlSuite(unittest.TestCase):
     def test_10_fastapi_http_endpoints_integration(self):
         """Verify all scan routes work end-to-end via FastAPI handler functions."""
         from fastapi import Response
+        import api.fastapi_app as fastapi_app_module
         from api.fastapi_app import get_scan_status, get_latest_scan, get_scan_history, trigger_scan
 
-        # GET /api/v1/scan/status
-        status_json = get_scan_status()
-        self.assertEqual(status_json["status_code"], 200)
-        self.assertIn("status", status_json["data"])
-        self.assertIn("is_scanning", status_json["data"])
+        # O1 isolation: the FastAPI handler functions close over the
+        # module-global router/service singletons, which resolve to the
+        # production `zielonebety.db` outside the test environment.
+        # Redirect them at this test's isolated in-memory stack so the
+        # POST /api/v1/scan/run below can never persist into production.
+        isolated_router = APIRouter(service=self.service)
+        with patch.object(fastapi_app_module, "router_instance", isolated_router), \
+                patch.object(fastapi_app_module, "service_instance", self.service):
+            # GET /api/v1/scan/status
+            status_json = get_scan_status()
+            self.assertEqual(status_json["status_code"], 200)
+            self.assertIn("status", status_json["data"])
+            self.assertIn("is_scanning", status_json["data"])
 
-        # GET /api/v1/scan/latest (initial NOT_RUN)
-        latest_json = get_latest_scan()
-        self.assertEqual(latest_json["status_code"], 200)
+            # GET /api/v1/scan/latest (initial NOT_RUN)
+            latest_json = get_latest_scan()
+            self.assertEqual(latest_json["status_code"], 200)
 
-        # GET /api/v1/scan/history
-        hist_json = get_scan_history(limit=5)
-        self.assertEqual(hist_json["status_code"], 200)
-        self.assertIsInstance(hist_json["data"], list)
+            # GET /api/v1/scan/history
+            hist_json = get_scan_history(limit=5)
+            self.assertEqual(hist_json["status_code"], 200)
+            self.assertIsInstance(hist_json["data"], list)
 
-        # POST /api/v1/scan/run
-        resp = Response()
-        from api.fastapi_app import service_instance
-        with patch.object(service_instance.scan_orchestrator, "run_scan_cycle") as mock_scan:
-            mock_scan.return_value = ScanCycleResult(
-                execution_id="fastapi_test_scan",
-                cycle_status=CycleStatus.SUCCESS,
-                started_at="2026-08-17T12:00:00Z",
-                completed_at="2026-08-17T12:00:01Z",
-                duration_seconds=1.0,
-            )
-            scan_run_json = trigger_scan(response=resp)
-            self.assertEqual(resp.status_code, 200)
-            self.assertEqual(scan_run_json["data"]["execution_id"], "fastapi_test_scan")
+            # POST /api/v1/scan/run
+            resp = Response()
+            with patch.object(self.service.scan_orchestrator, "run_scan_cycle") as mock_scan:
+                mock_scan.return_value = ScanCycleResult(
+                    execution_id="fastapi_test_scan",
+                    cycle_status=CycleStatus.SUCCESS,
+                    started_at="2026-08-17T12:00:00Z",
+                    completed_at="2026-08-17T12:00:01Z",
+                    duration_seconds=1.0,
+                )
+                scan_run_json = trigger_scan(response=resp)
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(scan_run_json["data"]["execution_id"], "fastapi_test_scan")
 
 
 class TestSchedulerControlIntegration(unittest.TestCase):

@@ -103,6 +103,7 @@ class GlobalScanScope:
     start_of_day: Optional[int] = None
     end_of_day: Optional[int] = None
     fixture_ids: Optional[str] = None
+    scan_mode: str = "NORMAL"  # "NORMAL" or "ULTRA"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -116,6 +117,7 @@ class GlobalScanScope:
             "start_of_day": self.start_of_day,
             "end_of_day": self.end_of_day,
             "fixture_ids": self.fixture_ids,
+            "scan_mode": self.scan_mode,
         }
 
 
@@ -127,6 +129,35 @@ class GlobalScanBudget:
     max_execution_events: int = 20
     auto_paginate_statshub: bool = True
     max_prop_results_per_stat: int = 500
+    scan_mode: str = "NORMAL"
+
+    @classmethod
+    def normal(cls, **overrides: Any) -> "GlobalScanBudget":
+        """Default fast normal scan budget."""
+        kwargs: Dict[str, Any] = {
+            "max_fixtures": 30,
+            "max_trends_requests": 20,
+            "max_execution_events": 20,
+            "auto_paginate_statshub": False,
+            "max_prop_results_per_stat": 500,
+            "scan_mode": "NORMAL",
+        }
+        kwargs.update(overrides)
+        return cls(**kwargs)
+
+    @classmethod
+    def ultra(cls, **overrides: Any) -> "GlobalScanBudget":
+        """Maximum practical coverage ultra scan budget."""
+        kwargs: Dict[str, Any] = {
+            "max_fixtures": 60,
+            "max_trends_requests": 60,
+            "max_execution_events": 60,
+            "auto_paginate_statshub": True,
+            "max_prop_results_per_stat": 2000,
+            "scan_mode": "ULTRA",
+        }
+        kwargs.update(overrides)
+        return cls(**kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -135,12 +166,14 @@ class GlobalScanBudget:
             "max_execution_events": self.max_execution_events,
             "auto_paginate_statshub": self.auto_paginate_statshub,
             "max_prop_results_per_stat": self.max_prop_results_per_stat,
+            "scan_mode": self.scan_mode,
         }
 
 
 @dataclass
 class GlobalScanFunnelMetrics:
     """Auditable funnel and observability telemetry for the scan cycle."""
+    scan_mode: str = "NORMAL"
     fixtures_discovered: int = 0
     fixtures_selected: int = 0
     trends_discovered: int = 0
@@ -163,11 +196,22 @@ class GlobalScanFunnelMetrics:
     cache_hits: int = 0
     cache_misses: int = 0
 
+    # Extended Observability Telemetry
+    pages_requested: int = 0
+    pages_successful: int = 0
+    pages_failed: int = 0
+    player_props_evaluated: int = 0
+    team_props_evaluated: int = 0
+    matched_both_bookmakers: int = 0
+    quote_discrepancies: int = 0
+    valuebets_qualified: int = 0
+
     def increment_rejection(self, reason_code: str) -> None:
         self.rejection_breakdown[reason_code] = self.rejection_breakdown.get(reason_code, 0) + 1
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "scan_mode": self.scan_mode,
             "fixtures_discovered": self.fixtures_discovered,
             "fixtures_selected": self.fixtures_selected,
             "trends_discovered": self.trends_discovered,
@@ -189,6 +233,14 @@ class GlobalScanFunnelMetrics:
             "execution_time_ms": self.execution_time_ms,
             "cache_hits": self.cache_hits,
             "cache_misses": self.cache_misses,
+            "pages_requested": self.pages_requested,
+            "pages_successful": self.pages_successful,
+            "pages_failed": self.pages_failed,
+            "player_props_evaluated": self.player_props_evaluated,
+            "team_props_evaluated": self.team_props_evaluated,
+            "matched_both_bookmakers": self.matched_both_bookmakers,
+            "quote_discrepancies": self.quote_discrepancies,
+            "valuebets_qualified": self.valuebets_qualified,
         }
 
 
@@ -623,8 +675,8 @@ class GlobalPropsScanner:
         """Executes end-to-end bounded global scan across Player Props and Team Props."""
         start_time = time.perf_counter()
         scan_scope = scope or GlobalScanScope()
-        scan_budget = budget or GlobalScanBudget()
-        funnel = GlobalScanFunnelMetrics()
+        scan_budget = budget or (GlobalScanBudget.ultra() if scan_scope.scan_mode == "ULTRA" else GlobalScanBudget.normal())
+        funnel = GlobalScanFunnelMetrics(scan_mode=scan_scope.scan_mode or scan_budget.scan_mode or "NORMAL")
 
         from orchestration.profiler import (
             ScanExecutionProfiler,
@@ -913,6 +965,11 @@ class GlobalPropsScanner:
                         p_provider = StatsHubProvider(config=cfg)
                         p_res = p_provider.run()
                         raw_player_trends.extend(p_res.parsed_objects)
+                        pages_fetched = p_provider.acquisition_metrics.get("pages_fetched", 1) or 1
+                        funnel.pages_requested += pages_fetched
+                        funnel.pages_successful += pages_fetched
+                        if p_res.errors:
+                            funnel.pages_failed += len(p_res.errors)
 
                         for obj in p_res.parsed_objects:
                             fix = obj.player_stat.fixture
@@ -936,7 +993,7 @@ class GlobalPropsScanner:
                             stat=st,
                             stat_type=st,
                             days_ahead=scan_scope.time_horizon_days,
-                            auto_paginate=False,
+                            auto_paginate=scan_budget.auto_paginate_statshub,
                             max_prop_results=scan_budget.max_prop_results_per_stat,
                         )
                         if scan_scope.tournaments:
@@ -945,6 +1002,11 @@ class GlobalPropsScanner:
                         p_provider = StatsHubProvider(config=cfg)
                         p_res = p_provider.run()
                         raw_player_trends.extend(p_res.parsed_objects)
+                        pages_fetched = p_provider.acquisition_metrics.get("pages_fetched", 1) or 1
+                        funnel.pages_requested += pages_fetched
+                        funnel.pages_successful += pages_fetched
+                        if p_res.errors:
+                            funnel.pages_failed += len(p_res.errors)
 
                         for obj in p_res.parsed_objects:
                             fix = obj.player_stat.fixture
@@ -984,12 +1046,17 @@ class GlobalPropsScanner:
                             stat=st,
                             stat_type=st,
                             days_ahead=scan_scope.time_horizon_days,
-                            auto_paginate=False,
+                            auto_paginate=scan_budget.auto_paginate_statshub,
                             max_prop_results=scan_budget.max_prop_results_per_stat,
                         )
                         t_provider = StatsHubTeamPropsProvider(config=t_cfg)
                         t_res = t_provider.run()
                         raw_team_trends.extend(t_res.parsed_objects)
+                        t_pages_fetched = t_provider.acquisition_metrics.get("pages_fetched", 1) or 1
+                        funnel.pages_requested += t_pages_fetched
+                        funnel.pages_successful += t_pages_fetched
+                        if t_res.errors:
+                            funnel.pages_failed += len(t_res.errors)
 
                         for obj in t_res.parsed_objects:
                             t_fix = obj.team_stat.fixture
@@ -1376,7 +1443,14 @@ class GlobalPropsScanner:
                 discrepancy_details=contract_data.get("discrepancy_details"),
             )
 
+            funnel.player_props_evaluated += 1
+            if contract_data.get("superbet_odds") is not None and contract_data.get("betclic_odds") is not None:
+                funnel.matched_both_bookmakers += 1
+            if opportunity.is_discrepancy:
+                funnel.quote_discrepancies += 1
+
             if effective_status == "QUALIFIED":
+                funnel.valuebets_qualified += 1
                 qualified_opportunities.append(opportunity)
             else:
                 diagnostic_candidates.append(opportunity)
@@ -1564,7 +1638,14 @@ class GlobalPropsScanner:
                 discrepancy_details=t_contract_data.get("discrepancy_details"),
             )
 
+            funnel.team_props_evaluated += 1
+            if t_contract_data.get("superbet_odds") is not None and t_contract_data.get("betclic_odds") is not None:
+                funnel.matched_both_bookmakers += 1
+            if opportunity.is_discrepancy:
+                funnel.quote_discrepancies += 1
+
             if effective_status == "QUALIFIED":
+                funnel.valuebets_qualified += 1
                 qualified_opportunities.append(opportunity)
             else:
                 diagnostic_candidates.append(opportunity)
@@ -1580,7 +1661,12 @@ class GlobalPropsScanner:
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
         funnel.execution_time_ms = round(elapsed_ms, 2)
 
-        status_str = "SUCCESS" if qualified_ranked else ("EMPTY" if not candidate_fixtures and not discovered_fixtures else "PARTIAL")
+        if not candidate_fixtures and not discovered_fixtures:
+            status_str = "EMPTY"
+        elif funnel.pages_failed > 0:
+            status_str = "PARTIAL"
+        else:
+            status_str = "SUCCESS"
 
         selected_fixtures_info = [
             {

@@ -165,8 +165,9 @@
     latestScan: null,
     scanHistory: [],
     scanStatus: { status: 'NOT_RUN', is_scanning: false },
-    schedulerStatus: { enabled: false, interval_minutes: 15, scan_scope: 'POPULAR', hours_ahead: 24, event_limit: 50 },
+    schedulerStatus: { enabled: false, interval_minutes: 15, scanners: { ultra: true, global_props: true }, schedule: [] },
     selectedEventId: null,
+    opportunityTop5Only: false,
     marketIntel: {
       viewMode: 'workspace', // 'workspace' | 'matrix'
       activeEventId: null,
@@ -178,6 +179,8 @@
       activeDetail: null,
     },
     playerProps: {
+      scanMode: 'NORMAL',
+      rawUniverse: [],
       results: [],
       diagnosticCandidates: [],
       selectedPropId: null,
@@ -364,10 +367,10 @@
       const query = new URLSearchParams(params).toString();
       return safeFetch(`${API_BASE}/api/v1/opportunities?${query}`);
     },
-    async fetchUnifiedOpportunities(params = {}) {
+    async fetchUnifiedOpportunities(params = {}, options = {}) {
       const query = new URLSearchParams(params).toString();
       try {
-        const res = await fetch(`${API_BASE}/api/v1/opportunities/explorer?${query}`);
+        const res = await fetch(`${API_BASE}/api/v1/opportunities/explorer?${query}`, options);
         const body = await safeJson(res);
         if (!res.ok) {
           const detail = (body && (body.detail || (body.errors && body.errors[0]))) || res.statusText;
@@ -375,6 +378,9 @@
         }
         return { ok: true, status: res.status, data: (body && body.data !== undefined) ? body.data : body, error: null };
       } catch (err) {
+        if (err.name === 'AbortError') {
+          return { ok: false, status: 0, data: null, error: 'Aborted', aborted: true };
+        }
         return { ok: false, status: 0, data: null, error: err.message || 'Network connection failed' };
       }
     },
@@ -494,20 +500,187 @@
     return 'dashboard';
   }
 
+  let _mobileScrollY = 0;
+  function lockMobileScroll() {
+    _mobileScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.top = `-${_mobileScrollY}px`;
+    document.body.classList.add('mobile-sheet-open');
+    document.body.classList.add('modal-open');
+  }
+
+  function unlockMobileScroll() {
+    if (document.body.classList.contains('mobile-sheet-open')) {
+      document.body.classList.remove('mobile-sheet-open');
+      document.body.style.top = '';
+      window.scrollTo(0, _mobileScrollY);
+    }
+    document.body.classList.remove('modal-open');
+  }
+
   function openMobileMore() {
     const sheet = document.getElementById('mobile-more-sheet');
     const backdrop = document.getElementById('mobile-more-backdrop');
-    if (sheet) sheet.classList.add('open');
-    if (backdrop) backdrop.classList.add('open');
-    document.body.classList.add('modal-open');
+    const btnOpen = document.getElementById('btn-open-mobile-more');
+    if (!sheet) return;
+
+    // Reset any lingering inline styles from drag gestures
+    sheet.style.transform = '';
+    sheet.style.transition = '';
+    if (backdrop) {
+      backdrop.style.opacity = '';
+      backdrop.style.transition = '';
+      backdrop.classList.add('open');
+    }
+
+    sheet.classList.add('open');
+    sheet.setAttribute('aria-hidden', 'false');
+    if (btnOpen) btnOpen.setAttribute('aria-expanded', 'true');
+    lockMobileScroll();
   }
 
   function closeMobileMore() {
     const sheet = document.getElementById('mobile-more-sheet');
     const backdrop = document.getElementById('mobile-more-backdrop');
-    if (sheet) sheet.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('open');
-    document.body.classList.remove('modal-open');
+    const btnOpen = document.getElementById('btn-open-mobile-more');
+
+    if (sheet) {
+      sheet.classList.remove('open');
+      sheet.setAttribute('aria-hidden', 'true');
+      sheet.style.transform = '';
+      sheet.style.transition = '';
+    }
+    if (backdrop) {
+      backdrop.classList.remove('open');
+      backdrop.style.opacity = '';
+      backdrop.style.transition = '';
+    }
+    if (btnOpen) btnOpen.setAttribute('aria-expanded', 'false');
+    unlockMobileScroll();
+  }
+
+  function initMobileSheetDrag() {
+    const sheet = document.getElementById('mobile-more-sheet');
+    const backdrop = document.getElementById('mobile-more-backdrop');
+    if (!sheet) return;
+
+    let startY = 0;
+    let startX = 0;
+    let currentY = 0;
+    let isDragging = false;
+    let isTracking = false;
+    let isHandleOrHeader = false;
+    let sheetHeight = 0;
+
+    function onPointerDown(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (!sheet.classList.contains('open')) return;
+
+      const handleTarget = e.target.closest('#mobile-sheet-drag-handle, .mobile-sheet-drag-handle, .mobile-sheet-header');
+      isHandleOrHeader = !!handleTarget;
+
+      if (e.target.closest('#btn-close-mobile-more')) return;
+
+      if (!isHandleOrHeader && sheet.scrollTop > 0) {
+        return;
+      }
+
+      isTracking = true;
+      isDragging = false;
+      startY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+      startX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      currentY = startY;
+      sheetHeight = sheet.offsetHeight || 380;
+    }
+
+    function onPointerMove(e) {
+      if (!isTracking) return;
+
+      const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+      const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      const dy = clientY - startY;
+      const dx = clientX - startX;
+
+      if (!isDragging) {
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
+          isTracking = false;
+          return;
+        }
+
+        if (dy > 8 && (isHandleOrHeader || sheet.scrollTop <= 0)) {
+          isDragging = true;
+          sheet.classList.add('dragging');
+          sheet.style.transition = 'none';
+          if (backdrop) backdrop.style.transition = 'none';
+        } else {
+          return;
+        }
+      }
+
+      if (isDragging) {
+        if (e.cancelable) e.preventDefault();
+
+        currentY = clientY;
+        if (dy >= 0) {
+          sheet.style.transform = `translateY(${dy}px)`;
+          if (backdrop) {
+            const progress = Math.min(1, Math.max(0, dy / sheetHeight));
+            backdrop.style.opacity = String(Math.max(0, 1 - progress * 0.85));
+          }
+        } else {
+          const rubberBand = dy * 0.18;
+          sheet.style.transform = `translateY(${rubberBand}px)`;
+        }
+      }
+    }
+
+    function onPointerEnd(e) {
+      if (!isTracking && !isDragging) return;
+
+      const wasDragging = isDragging;
+      isTracking = false;
+      isDragging = false;
+      sheet.classList.remove('dragging');
+
+      if (!wasDragging) return;
+
+      const dy = currentY - startY;
+      const dismissThreshold = Math.max(80, Math.min(130, sheetHeight * 0.25));
+
+      if (dy >= dismissThreshold) {
+        sheet.style.transition = 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)';
+        if (backdrop) backdrop.style.transition = 'opacity 0.22s ease';
+        sheet.style.transform = 'translateY(100%)';
+        if (backdrop) backdrop.style.opacity = '0';
+
+        setTimeout(() => {
+          closeMobileMore();
+        }, 220);
+      } else {
+        sheet.style.transition = 'transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1)';
+        if (backdrop) backdrop.style.transition = 'opacity 0.25s ease';
+        sheet.style.transform = 'translateY(0)';
+        if (backdrop) backdrop.style.opacity = '1';
+
+        setTimeout(() => {
+          sheet.style.transition = '';
+          sheet.style.transform = '';
+          if (backdrop) {
+            backdrop.style.transition = '';
+            backdrop.style.opacity = '';
+          }
+        }, 260);
+      }
+    }
+
+    sheet.addEventListener('pointerdown', onPointerDown, { passive: true });
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerEnd, { passive: true });
+    window.addEventListener('pointercancel', onPointerEnd, { passive: true });
+
+    sheet.addEventListener('touchstart', onPointerDown, { passive: true });
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', onPointerEnd, { passive: true });
+    window.addEventListener('touchcancel', onPointerEnd, { passive: true });
   }
 
   function syncNavLinks(viewName) {
@@ -690,6 +863,9 @@
 
   // Event Listeners Initialization
   function initEventListeners() {
+    // Initialize Mobile More bottom-sheet drag-to-dismiss gesture handling
+    initMobileSheetDrag();
+
     // Mobile More Navigation Sheet & Header Buttons
     const btnOpenMoreHeader = document.getElementById('mobile-more-btn-header');
     if (btnOpenMoreHeader) btnOpenMoreHeader.addEventListener('click', openMobileMore);
@@ -791,6 +967,20 @@
         });
         tabBtn.classList.add('active');
         tabBtn.setAttribute('aria-selected', 'true');
+
+        const categoryType = tabBtn.getAttribute('data-type');
+        const filterSort = document.getElementById('filter-sort');
+        const sortIndicator = document.getElementById('sort-order-indicator');
+        if (categoryType === 'QUOTE_DISCREPANCY') {
+          if (filterSort) filterSort.value = 'discrepancy';
+          state.opportunitySortOrder = 'desc';
+          if (sortIndicator) sortIndicator.textContent = '↓';
+        } else {
+          if (filterSort && filterSort.value === 'discrepancy') {
+            filterSort.value = 'ev';
+          }
+        }
+
         loadOpportunitiesData();
       });
     });
@@ -839,6 +1029,17 @@
           sortOrderIndicator.textContent = state.opportunitySortOrder === 'desc' ? '↓' : '↑';
         }
         btnSortOrder.setAttribute('title', `Sort Order: ${state.opportunitySortOrder === 'desc' ? 'Descending' : 'Ascending'}`);
+        loadOpportunitiesData();
+      });
+    }
+
+    // Top 5 Leagues Filter Toggle
+    const btnFilterTop5 = document.getElementById('btn-filter-top5');
+    if (btnFilterTop5) {
+      btnFilterTop5.addEventListener('click', () => {
+        state.opportunityTop5Only = !state.opportunityTop5Only;
+        btnFilterTop5.classList.toggle('active', state.opportunityTop5Only);
+        btnFilterTop5.setAttribute('aria-pressed', state.opportunityTop5Only ? 'true' : 'false');
         loadOpportunitiesData();
       });
     }
@@ -1023,12 +1224,40 @@
     if (btnSchedApply) {
       btnSchedApply.addEventListener('click', () => {
         applySchedulerConfig();
-        showToast('Scheduler configuration applied.');
       });
     }
     const btnSchedRunNow = document.getElementById('btn-sched-run-now');
     if (btnSchedRunNow) {
       btnSchedRunNow.addEventListener('click', handleSchedulerRunNow);
+    }
+    const btnSchedAddWindow = document.getElementById('btn-sched-add-window');
+    if (btnSchedAddWindow) {
+      btnSchedAddWindow.addEventListener('click', () => {
+        addScheduleWindowRow();
+      });
+    }
+    const btnSchedResetWindows = document.getElementById('btn-sched-reset-windows');
+    if (btnSchedResetWindows) {
+      btnSchedResetWindows.addEventListener('click', () => {
+        resetScheduleWindows();
+      });
+    }
+    const schedWindowsList = document.getElementById('sched-windows-list');
+    if (schedWindowsList) {
+      schedWindowsList.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('.btn-sched-del-window');
+        if (delBtn) {
+          const row = delBtn.closest('.sched-window-row');
+          if (row) {
+            const allRows = schedWindowsList.querySelectorAll('.sched-window-row');
+            if (allRows.length > 1) {
+              row.remove();
+            } else {
+              showToast('At least one schedule window is required.');
+            }
+          }
+        }
+      });
     }
   }
 
@@ -2684,59 +2913,249 @@
     } catch { return '—'; }
   }
 
+  const DEFAULT_SCHED_WINDOWS = [
+    { start_time: '00:00', end_time: '08:00', interval_minutes: 120 },
+    { start_time: '08:00', end_time: '14:00', interval_minutes: 60 },
+    { start_time: '14:00', end_time: '18:00', interval_minutes: 30 },
+    { start_time: '18:00', end_time: '23:00', interval_minutes: 15 },
+    { start_time: '23:00', end_time: '24:00', interval_minutes: 60 },
+  ];
+
+  function createScheduleWindowRow(start = '08:00', end = '14:00', interval = 60) {
+    const row = document.createElement('div');
+    row.className = 'sched-window-row';
+    row.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 0.35rem; align-items: center; background: var(--surface-elevated); padding: 0.25rem 0.4rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);';
+    row.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 0.2rem;">
+        <span style="font-size: 0.65rem; color: var(--text-muted);">From</span>
+        <input type="text" class="input input-sm mono sched-win-start" value="${escapeHtml(start)}" placeholder="HH:MM" style="padding: 0.15rem 0.3rem; font-size: 0.75rem; text-align: center; width: 100%;" />
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.2rem;">
+        <span style="font-size: 0.65rem; color: var(--text-muted);">To</span>
+        <input type="text" class="input input-sm mono sched-win-end" value="${escapeHtml(end)}" placeholder="HH:MM" style="padding: 0.15rem 0.3rem; font-size: 0.75rem; text-align: center; width: 100%;" />
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.2rem;">
+        <input type="number" min="1" max="1440" class="input input-sm mono sched-win-interval" value="${interval}" style="padding: 0.15rem 0.3rem; font-size: 0.75rem; text-align: center; width: 100%;" />
+        <span style="font-size: 0.65rem; color: var(--text-muted);">m</span>
+      </div>
+      <button type="button" class="btn btn-xs btn-outline btn-sched-del-window" title="Remove window" style="padding: 0.15rem 0.35rem; font-size: 0.7rem; color: var(--text-muted);">&times;</button>
+    `;
+    return row;
+  }
+
+  function renderScheduleWindowsTable(windows) {
+    const listEl = document.getElementById('sched-windows-list');
+    if (!listEl) return;
+    const wins = (Array.isArray(windows) && windows.length > 0) ? windows : DEFAULT_SCHED_WINDOWS;
+    listEl.innerHTML = '';
+    wins.forEach(w => {
+      listEl.appendChild(createScheduleWindowRow(w.start_time, w.end_time, w.interval_minutes));
+    });
+  }
+
+  function addScheduleWindowRow() {
+    const listEl = document.getElementById('sched-windows-list');
+    if (!listEl) return;
+    const rows = listEl.querySelectorAll('.sched-window-row');
+    let lastEnd = '00:00';
+    if (rows.length > 0) {
+      const lastRowEnd = rows[rows.length - 1].querySelector('.sched-win-end');
+      if (lastRowEnd && lastRowEnd.value) lastEnd = lastRowEnd.value.trim();
+    }
+    listEl.appendChild(createScheduleWindowRow(lastEnd, '24:00', 30));
+  }
+
+  function resetScheduleWindows() {
+    renderScheduleWindowsTable(DEFAULT_SCHED_WINDOWS);
+    showToast('Schedule reset to default Warsaw windows.');
+  }
+
+  function getScheduleWindowsFromDOM() {
+    const listEl = document.getElementById('sched-windows-list');
+    if (!listEl) return DEFAULT_SCHED_WINDOWS;
+    const rows = listEl.querySelectorAll('.sched-window-row');
+    const windows = [];
+    rows.forEach(row => {
+      const start = row.querySelector('.sched-win-start')?.value?.trim() || '00:00';
+      const end = row.querySelector('.sched-win-end')?.value?.trim() || '24:00';
+      const interval = parseInt(row.querySelector('.sched-win-interval')?.value, 10) || 15;
+      windows.push({
+        start_time: start,
+        end_time: end,
+        interval_minutes: interval,
+      });
+    });
+    return windows.length > 0 ? windows : DEFAULT_SCHED_WINDOWS;
+  }
+
   function renderSchedulerWidget(sched) {
+    if (!sched) return;
     const badge = document.getElementById('sched-status-badge');
     const toggle = document.getElementById('sched-enabled-toggle');
-    const lastEl = document.getElementById('sched-last-scan-rel');
+    const ultraCheck = document.getElementById('sched-scanner-ultra');
+    const propsCheck = document.getElementById('sched-scanner-props');
+    const activeEl = document.getElementById('sched-active-window-display');
     const nextEl = document.getElementById('sched-next-scan-rel');
-    const intervalSel = document.getElementById('sched-interval-select');
-    const scopeSel = document.getElementById('sched-scope-select');
-    const windowSel = document.getElementById('sched-window-select');
-    const limitSel = document.getElementById('sched-limit-select');
+    const lastEl = document.getElementById('sched-last-scan-rel');
+    const chipBadgeUltra = document.getElementById('chip-badge-ultra');
+    const chipMetaUltra = document.getElementById('chip-meta-ultra');
+    const chipBadgeProps = document.getElementById('chip-badge-props');
+    const chipMetaProps = document.getElementById('chip-meta-props');
 
+    // Status Badge
     if (badge) {
-      badge.textContent = sched.enabled ? 'ENABLED' : 'DISABLED';
-      badge.className = sched.enabled ? 'badge badge-cycle-success' : 'badge badge-outline';
+      if (sched.is_running) {
+        badge.textContent = 'RUNNING';
+        badge.className = 'badge badge-cycle-partial';
+      } else if (sched.last_cycle_status === 'FAILED' || sched.last_scan_status === 'FAILED') {
+        badge.textContent = 'FAILED';
+        badge.className = 'badge badge-cycle-failed';
+      } else if (sched.last_cycle_status === 'PARTIAL') {
+        badge.textContent = 'PARTIAL';
+        badge.className = 'badge badge-cycle-partial';
+      } else if (sched.enabled) {
+        badge.textContent = 'ENABLED';
+        badge.className = 'badge badge-cycle-success';
+      } else {
+        badge.textContent = 'DISABLED';
+        badge.className = 'badge badge-outline';
+      }
     }
-    if (toggle) toggle.checked = !!sched.enabled;
-    if (lastEl) lastEl.textContent = timeAgo(sched.last_scan_at);
-    if (nextEl) nextEl.textContent = sched.enabled ? timeUntil(sched.next_scan_at) : 'Disabled';
 
-    // Update selects only if user hasn't changed them recently
-    if (intervalSel && sched.interval_minutes) {
-      intervalSel.value = String(sched.interval_minutes);
+    // Toggle
+    if (toggle) toggle.checked = !!sched.enabled;
+
+    // Scanner Checkboxes
+    if (ultraCheck && sched.scanners) {
+      ultraCheck.checked = sched.scanners.ultra !== false;
     }
-    if (scopeSel && sched.scan_scope) {
-      scopeSel.value = sched.scan_scope;
+    if (propsCheck && sched.scanners) {
+      propsCheck.checked = sched.scanners.global_props !== false;
     }
-    if (windowSel && sched.hours_ahead) {
-      windowSel.value = String(sched.hours_ahead);
+
+    // Schedule windows table (avoid overwriting while user is editing it)
+    const isEditingSchedule = document.activeElement && document.getElementById('sched-windows-list')?.contains(document.activeElement);
+    if (!isEditingSchedule && sched.schedule) {
+      renderScheduleWindowsTable(sched.schedule);
     }
-    if (limitSel && sched.event_limit) {
-      limitSel.value = String(sched.event_limit);
+
+    // Active Window Display
+    if (activeEl) {
+      if (sched.active_schedule_window_display) {
+        activeEl.textContent = sched.active_schedule_window_display;
+      } else if (sched.active_window) {
+        activeEl.textContent = `${sched.active_window.start_time}–${sched.active_window.end_time}   Every ${sched.active_window.interval_minutes} min`;
+      } else {
+        activeEl.textContent = '—';
+      }
+    }
+
+    // Next Scan
+    if (nextEl) {
+      if (!sched.enabled) {
+        nextEl.textContent = 'Disabled';
+      } else if (sched.next_scan_warsaw && sched.next_scan_at) {
+        nextEl.textContent = `${timeUntil(sched.next_scan_at)} (${sched.next_scan_warsaw} Warsaw)`;
+      } else if (sched.next_scan_at) {
+        nextEl.textContent = timeUntil(sched.next_scan_at);
+      } else {
+        nextEl.textContent = '—';
+      }
+    }
+
+    // Last Scan
+    if (lastEl) {
+      const dur = sched.last_cycle?.duration_sec ?? sched.last_duration_sec;
+      const durStr = (dur != null && dur > 0) ? ` (${dur.toFixed(1)}s)` : '';
+      const st = sched.last_cycle_status || sched.last_scan_status || '';
+      const stStr = st ? ` [${st}]` : '';
+      lastEl.textContent = `${timeAgo(sched.last_scan_at)}${durStr}${stStr}`;
+    }
+
+    // Per-Scanner Chips
+    const ultraData = sched.last_cycle?.scanners?.ultra;
+    if (chipBadgeUltra && chipMetaUltra) {
+      if (ultraData) {
+        const uStatus = ultraData.status || 'SUCCESS';
+        chipBadgeUltra.textContent = uStatus;
+        if (uStatus === 'SUCCESS') chipBadgeUltra.className = 'badge badge-cycle-success';
+        else if (uStatus === 'FAILED') chipBadgeUltra.className = 'badge badge-cycle-failed';
+        else chipBadgeUltra.className = 'badge badge-outline';
+
+        const recStr = ultraData.records_count != null ? `${ultraData.records_count} opps · ` : '';
+        const durStr = ultraData.duration_sec != null ? `${ultraData.duration_sec.toFixed(1)}s` : '';
+        chipMetaUltra.textContent = `${recStr}${durStr || timeAgo(sched.last_ultra_scan_at)}`;
+      } else if (sched.last_ultra_scan_at) {
+        chipBadgeUltra.textContent = 'READY';
+        chipBadgeUltra.className = 'badge badge-outline';
+        chipMetaUltra.textContent = timeAgo(sched.last_ultra_scan_at);
+      } else {
+        chipBadgeUltra.textContent = 'IDLE';
+        chipBadgeUltra.className = 'badge badge-outline';
+        chipMetaUltra.textContent = '—';
+      }
+    }
+
+    const propsData = sched.last_cycle?.scanners?.global_props;
+    if (chipBadgeProps && chipMetaProps) {
+      if (propsData) {
+        const pStatus = propsData.status || 'SUCCESS';
+        chipBadgeProps.textContent = pStatus;
+        if (pStatus === 'SUCCESS') chipBadgeProps.className = 'badge badge-cycle-success';
+        else if (pStatus === 'FAILED') chipBadgeProps.className = 'badge badge-cycle-failed';
+        else chipBadgeProps.className = 'badge badge-outline';
+
+        const discStr = propsData.discrepancies_count != null ? `${propsData.discrepancies_count} disc · ` : '';
+        const durStr = propsData.duration_sec != null ? `${propsData.duration_sec.toFixed(1)}s` : '';
+        chipMetaProps.textContent = `${discStr}${durStr || timeAgo(sched.last_global_props_scan_at)}`;
+      } else if (sched.last_global_props_scan_at) {
+        chipBadgeProps.textContent = 'READY';
+        chipBadgeProps.className = 'badge badge-outline';
+        chipMetaProps.textContent = timeAgo(sched.last_global_props_scan_at);
+      } else {
+        chipBadgeProps.textContent = 'IDLE';
+        chipBadgeProps.className = 'badge badge-outline';
+        chipMetaProps.textContent = '—';
+      }
     }
   }
 
   async function applySchedulerConfig() {
     const toggle = document.getElementById('sched-enabled-toggle');
-    const intervalSel = document.getElementById('sched-interval-select');
-    const scopeSel = document.getElementById('sched-scope-select');
-    const windowSel = document.getElementById('sched-window-select');
-    const limitSel = document.getElementById('sched-limit-select');
+    const ultraCheck = document.getElementById('sched-scanner-ultra');
+    const propsCheck = document.getElementById('sched-scanner-props');
+
+    const executeUltra = ultraCheck ? ultraCheck.checked : true;
+    const executeProps = propsCheck ? propsCheck.checked : true;
+
+    if (!executeUltra && !executeProps && toggle && toggle.checked) {
+      showToast('Select at least one scanner (ULTRA or Global Props).');
+      return;
+    }
+
+    const scheduleWindows = getScheduleWindowsFromDOM();
 
     const payload = {
       enabled: toggle ? toggle.checked : false,
-      interval_minutes: intervalSel ? parseInt(intervalSel.value) : 15,
-      scan_scope: scopeSel ? scopeSel.value : 'POPULAR',
-      hours_ahead: windowSel ? parseInt(windowSel.value) : 24,
-      event_limit: limitSel ? parseInt(limitSel.value) : 50,
+      execute_ultra: executeUltra,
+      execute_global_props: executeProps,
+      scanners: {
+        ultra: executeUltra,
+        global_props: executeProps,
+      },
+      schedule: scheduleWindows,
     };
 
     try {
       const res = await api.configureScheduler(payload);
-      if (res.data) {
+      if (res.status_code === 200 && res.data) {
         state.schedulerStatus = res.data;
         renderSchedulerWidget(res.data);
+        showToast('Scheduler configuration applied.');
+      } else if (res.errors && res.errors.length > 0) {
+        showToast(`Configuration error: ${res.errors.join(', ')}`);
+      } else {
+        showToast('Failed to apply scheduler config.');
       }
     } catch (err) {
       console.error('Failed to configure scheduler:', err);
@@ -2746,9 +3165,14 @@
 
   async function handleSchedulerRunNow() {
     const btn = document.getElementById('btn-sched-run-now');
+    const badge = document.getElementById('sched-status-badge');
     if (btn) {
       btn.disabled = true;
-      btn.textContent = '⟳ Running...';
+      btn.textContent = '⟳ Running Cycle...';
+    }
+    if (badge) {
+      badge.textContent = 'RUNNING';
+      badge.className = 'badge badge-cycle-partial';
     }
     try {
       const res = await api.schedulerRunNow();
@@ -2756,11 +3180,13 @@
         state.latestScan = res.data;
         renderDashboardView(res.data);
         await refreshScanHistory();
-        showToast(`Automated scan complete — ${res.data.cycle_status}`);
+        const cycleStatus = res.data.cycle_status || res.data.status || 'SUCCESS';
+        showToast(`Automated scan cycle completed — ${cycleStatus}`);
       } else if (res.status_code === 409) {
-        showToast('Scan already in progress.');
+        showToast('Scan cycle already in progress.');
       } else {
-        showToast('Scheduled scan failed.');
+        const errMsg = (res.errors && res.errors[0]) || 'Scheduled scan failed.';
+        showToast(errMsg);
       }
     } catch (err) {
       console.error('Scheduler run-now failed:', err);
@@ -2770,6 +3196,13 @@
         btn.disabled = false;
         btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Now';
       }
+      try {
+        const schedRes = await api.fetchSchedulerStatus();
+        if (schedRes.data) {
+          state.schedulerStatus = schedRes.data;
+          renderSchedulerWidget(schedRes.data);
+        }
+      } catch (e) {}
     }
   }
 
@@ -2852,6 +3285,14 @@
     const sortOrderIndicator = document.getElementById('sort-order-indicator');
     if (sortOrderIndicator) sortOrderIndicator.textContent = '↓';
 
+    // Reset Top 5 filter
+    state.opportunityTop5Only = false;
+    const btnFilterTop5 = document.getElementById('btn-filter-top5');
+    if (btnFilterTop5) {
+      btnFilterTop5.classList.remove('active');
+      btnFilterTop5.setAttribute('aria-pressed', 'false');
+    }
+
     // Reset thresholds
     const minScoreInput = document.getElementById('filter-min-score');
     if (minScoreInput) minScoreInput.value = '';
@@ -2932,6 +3373,23 @@
       });
     }
 
+    if (filters.top_5) {
+      chips.push({
+        id: 'top_5',
+        label: 'Leagues',
+        val: 'Top 5',
+        onRemove: () => {
+          state.opportunityTop5Only = false;
+          const btn = document.getElementById('btn-filter-top5');
+          if (btn) {
+            btn.classList.remove('active');
+            btn.setAttribute('aria-pressed', 'false');
+          }
+          loadOpportunitiesData();
+        }
+      });
+    }
+
     if (filters.min_ev !== undefined && filters.min_ev > 0) {
       chips.push({
         id: 'min_ev',
@@ -2999,11 +3457,27 @@
     if (clearAllBtn) clearAllBtn.addEventListener('click', () => resetAllOpportunityFilters());
   }
 
+  let _activeOppRequestId = 0;
+  let _activeOppAbortController = null;
+
   async function renderOpportunities(isBackground = false) {
     return loadOpportunitiesData(isBackground);
   }
 
   async function loadOpportunitiesData(isBackground = false) {
+    _activeOppRequestId += 1;
+    const currentReqId = _activeOppRequestId;
+
+    if (!isBackground && _activeOppAbortController) {
+      try {
+        _activeOppAbortController.abort();
+      } catch (e) {}
+    }
+    const currentAbortController = new AbortController();
+    if (!isBackground) {
+      _activeOppAbortController = currentAbortController;
+    }
+
     const activeTabBtn = document.querySelector('#explorer-category-tabs .opp-radar-tab.active');
     const selectedType = activeTabBtn ? (activeTabBtn.getAttribute('data-type') || '') : '';
     const status = document.getElementById('filter-opp-status')?.value || '';
@@ -3014,6 +3488,14 @@
     const minExecEdge = parseFloat(document.getElementById('filter-min-exec-edge')?.value) || undefined;
     const minRoi = parseFloat(document.getElementById('filter-min-roi')?.value) || undefined;
     const search = (document.getElementById('filter-search-text')?.value || '').trim();
+    const top5Only = Boolean(state.opportunityTop5Only);
+
+    // Sync Top 5 button UI state
+    const btnFilterTop5 = document.getElementById('btn-filter-top5');
+    if (btnFilterTop5) {
+      btnFilterTop5.classList.toggle('active', top5Only);
+      btnFilterTop5.setAttribute('aria-pressed', top5Only ? 'true' : 'false');
+    }
 
     const listContentArea = document.getElementById('opp-list-content-area');
     const countBadge = document.getElementById('opp-count-badge');
@@ -3023,6 +3505,7 @@
 
     const sortLabelsMap = {
       ev: `Ranked by Net EV / Edge (${sortOrder.toUpperCase()})`,
+      discrepancy: `Ranked by Discrepancy % (${sortOrder.toUpperCase() === 'DESC' ? 'High → Low' : 'Low → High'})`,
       score: `Ranked by Quality Score (${sortOrder.toUpperCase()})`,
       odds: `Ranked by Odds (${sortOrder.toUpperCase()})`,
       kickoff: `Ranked by Kickoff Time (${sortOrder.toUpperCase()})`,
@@ -3036,6 +3519,7 @@
       status: status,
       bookmaker: provider,
       search: search,
+      top_5: top5Only,
       min_ev: minRoi,
       min_score: minScore,
       min_execution_edge: minExecEdge,
@@ -3056,7 +3540,7 @@
       // tracks how many rows the operator asked to see per filter set.
       const filterSig = JSON.stringify({
         t: selectedType, s: status, p: provider, sort: sortField,
-        o: sortOrder, ms: (minScore > 0 ? minScore : 0),
+        o: sortOrder, top5: top5Only, ms: (minScore > 0 ? minScore : 0),
         me: (minExecEdge !== undefined ? minExecEdge : null),
         mr: (minRoi !== undefined ? minRoi : null), q: search,
       });
@@ -3076,12 +3560,16 @@
       if (selectedType) fetchParams.type = selectedType;
       if (status) fetchParams.status = status;
       if (provider) fetchParams.bookmaker = provider;
+      if (top5Only) fetchParams.top_5 = true;
       if (minScore > 0) fetchParams.min_score = minScore;
       if (minExecEdge !== undefined) fetchParams.min_execution_edge = minExecEdge;
       if (minRoi !== undefined) fetchParams.min_ev = minRoi;
       if (search) fetchParams.search = search;
 
-      const res = await api.fetchUnifiedOpportunities(fetchParams);
+      const res = await api.fetchUnifiedOpportunities(fetchParams, { signal: currentAbortController.signal });
+      if (res.aborted || currentReqId !== _activeOppRequestId) {
+        return;
+      }
       // P1-NEW-005: HTTP/auth/validation errors render an explicit ERROR
       // state — never the "No Active Opportunities" empty state.
       if (!res.ok) {
@@ -3157,11 +3645,15 @@
       // ── Handle Rendering States: Empty, Single, or Many ──
       if (items.length === 0) {
         // Distinguish Empty Filter Results vs Zero Scan Data
-        const hasActiveFilters = Boolean(selectedType || status || provider || search || minScore > 0 || minExecEdge !== undefined || minRoi !== undefined);
+        const hasActiveFilters = Boolean(selectedType || status || provider || search || top5Only || minScore > 0 || minExecEdge !== undefined || minRoi !== undefined);
+
+        const emptySvg = hasActiveFilters
+          ? `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`
+          : `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
 
         listContentArea.innerHTML = `
           <div class="opp-empty-state">
-            <div class="opp-empty-icon">${hasActiveFilters ? '🔍' : '📡'}</div>
+            <div class="opp-empty-icon">${emptySvg}</div>
             <div class="opp-empty-title">${hasActiveFilters ? 'No Opportunities Match Current Filters' : 'No Active Opportunities Detected'}</div>
             <div class="opp-empty-desc">
               ${hasActiveFilters
@@ -3220,8 +3712,10 @@
         let activeSelectedId = state.selectedOpportunityId;
         const selectionInItems = Boolean(activeSelectedId && items.some(it => it.id === activeSelectedId));
 
-        if (!activeSelectedId && items.length > 0) {
+        if (!selectionInItems && items.length > 0) {
           activeSelectedId = items[0].id;
+        } else if (!selectionInItems) {
+          activeSelectedId = null;
         }
 
         listContentArea.innerHTML = `
@@ -3234,7 +3728,8 @@
         listContentArea.querySelectorAll('.opp-feed-item').forEach(row => {
           row.addEventListener('click', () => {
             const id = row.getAttribute('data-id');
-            selectOpportunity(id, false);
+            const isMobile = window.innerWidth < 1024;
+            selectOpportunity(id, isMobile);
           });
         });
 
@@ -3247,9 +3742,11 @@
         });
 
         // Ensure active item is loaded in inspector only if none is currently inspected
-        // or if the user selected an item in the active feed page
-        if (activeSelectedId && (!state.activeOpportunityDetail || (selectionInItems && state.activeOpportunityDetail?.id !== activeSelectedId))) {
+        // or if the previous inspected item was excluded or user selected a different item
+        if (activeSelectedId && (!state.activeOpportunityDetail || state.activeOpportunityDetail?.id !== activeSelectedId)) {
           selectOpportunity(activeSelectedId, false);
+        } else if (!activeSelectedId) {
+          deselectOpportunity();
         }
 
         // P1-NEW-005: expose truncation with an explicit next-page action
@@ -3276,9 +3773,11 @@
       console.error('Failed to load unified opportunities:', err);
       if (listContentArea) {
         listContentArea.innerHTML = `
-          <div class="opp-empty-state" style="border-color: var(--accent-danger);">
-            <div class="opp-empty-icon">⚠️</div>
-            <div class="opp-empty-title" style="color: var(--accent-danger);">Failed Loading Opportunities</div>
+          <div class="opp-empty-state" style="border-color: var(--val-negative-border);">
+            <div class="opp-empty-icon" style="color: var(--val-negative);">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div class="opp-empty-title" style="color: var(--val-negative);">Failed Loading Opportunities</div>
             <div class="opp-empty-desc">${escapeHtml(String(err.message || err))}</div>
             <button type="button" class="btn btn-outline btn-sm" onclick="loadOpportunitiesData()" style="margin-top: 0.5rem;">
               Retry Connection
@@ -3374,7 +3873,10 @@
             <div class="opp-spotlight-entity">${escapeHtml(entityName)}</div>
             <div class="opp-spotlight-fixture">${escapeHtml(fixtureText)} ${compText}</div>
             <div class="opp-spotlight-market">
-              <span>🎯 ${escapeHtml(mktText)}</span>
+              <span class="opp-spotlight-market-pill">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 3px;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+                ${escapeHtml(mktText)}
+              </span>
             </div>
           </div>
 
@@ -3422,19 +3924,19 @@
     `;
   }
 
-  // Helper: Renders Dense Multi-Result Feed Item Row
+  // Helper: Renders Dense Multi-Result Feed Item Row (Flagship Workstation 2.0)
   function renderOpportunityFeedRow(item, isSelected) {
-    const typeColors = {
-      SUREBET: { cls: 'badge-success', code: 'ARB' },
-      VALUEBET: { cls: 'badge-info', code: 'VAL' },
-      QUOTE_DISCREPANCY: { cls: 'badge-warning', code: 'DISC' },
-      BOOSTER: { cls: 'badge-warning', code: 'BOOST' },
-      PLAYER_PROP: { cls: 'badge-accent', code: 'PROP' },
-      TEAM_PROP: { cls: 'badge-outline', code: 'TEAM' },
-      QUOTE_COMPARISON: { cls: 'badge-outline', code: 'QUOTE' },
-      WATCHLIST: { cls: 'badge-warning', code: 'WATCH' },
+    const typeBadges = {
+      SUREBET: { cls: 'badge-success', code: 'ARB', label: 'Surebet' },
+      VALUEBET: { cls: 'badge-info', code: 'VAL', label: 'Valuebet' },
+      QUOTE_DISCREPANCY: { cls: 'badge-warning', code: 'DISC', label: 'Discrepancy' },
+      BOOSTER: { cls: 'badge-warning', code: 'BOOST', label: 'Booster' },
+      PLAYER_PROP: { cls: 'badge-accent', code: 'PROP', label: 'Player Prop' },
+      TEAM_PROP: { cls: 'badge-outline', code: 'TEAM', label: 'Team Prop' },
+      QUOTE_COMPARISON: { cls: 'badge-outline', code: 'QUOTE', label: 'Quote' },
+      WATCHLIST: { cls: 'badge-warning', code: 'WATCH', label: 'Watchlist' },
     };
-    const tBadge = typeColors[item.type] || { cls: 'badge-outline', code: item.type };
+    const tBadge = typeBadges[item.type] || { cls: 'badge-outline', code: item.type || 'BET', label: item.type || 'Bet' };
 
     const isDisc = item.type === 'QUOTE_DISCREPANCY';
     const discPct = item.price_discrepancy_pct != null ? Number(item.price_discrepancy_pct) : null;
@@ -3444,8 +3946,10 @@
     let isEvPos = false;
     let evCls = 'neutral';
     let evText = '—';
+    let evSubLabel = 'NET EV';
 
     if (isDisc) {
+      evSubLabel = 'DISC';
       if (discPct != null) {
         evText = `+${discPct.toFixed(1)}%`;
         evCls = 'positive';
@@ -3466,58 +3970,92 @@
       isEvPos = evVal > 0;
       evCls = !hasEv ? 'neutral' : (isEvPos ? 'positive' : (evVal < 0 ? 'negative' : 'neutral'));
       evText = !hasEv ? '—' : `${isEvPos ? '+' : ''}${evVal.toFixed(1)}%`;
+      evSubLabel = item.type === 'SUREBET' ? 'ARB' : 'NET EV';
     }
 
     const entity = item.player || item.team || item.event || 'Selection';
     const fixture = item.event && item.event !== entity ? item.event : (item.competition || 'Match');
 
     const mktType = item.market || 'Market';
-    const mktStr = `${mktType}${item.line !== null && item.line !== undefined ? ' • ' + item.line : ''}`;
+    const mktStr = `${mktType}${item.line !== null && item.line !== undefined ? ' • ' + item.line : ''}${item.side ? ' (' + item.side + ')' : ''}`;
 
     const execOdds = item.execution_odds ? Number(item.execution_odds).toFixed(2) : (item.reference_odds ? Number(item.reference_odds).toFixed(2) : '—');
     const bookmaker = item.best_bookmaker || 'Book';
 
+    // Reference / Comparison baseline
+    let refHtml = '';
+    if (item.fair_odds) {
+      refHtml = `<span class="ref-pill"><span class="ref-k">FAIR</span> <strong class="ref-v mono text-info">${Number(item.fair_odds).toFixed(2)}</strong></span>`;
+    } else if (item.reference_odds && item.reference_odds !== item.execution_odds) {
+      refHtml = `<span class="ref-pill"><span class="ref-k">REF</span> <strong class="ref-v mono">${Number(item.reference_odds).toFixed(2)}</strong></span>`;
+    } else if (item.lower_execution_odds) {
+      const lowerBm = item.lower_bookmaker ? escapeHtml(item.lower_bookmaker) : 'Alt';
+      refHtml = `<span class="ref-pill"><span class="ref-k">${lowerBm}</span> <strong class="ref-v mono">${Number(item.lower_execution_odds).toFixed(2)}</strong></span>`;
+    }
+
+    const statusMap = {
+      VALUEBET: 'VALUEBET',
+      BETTABLE: 'BETTABLE',
+      AVAILABLE: 'AVAILABLE',
+      WATCHLIST: 'WATCHLIST',
+      REFERENCE_ONLY: 'REFERENCE',
+      NO_EXECUTION_MARKET: 'NO MARKET',
+      NO_EXECUTION_ODDS: 'NO ODDS',
+      MATCH_UNCERTAIN: 'UNCERTAIN',
+      EXPIRED: 'EXPIRED'
+    };
+    const statusLabel = statusMap[item.status] || item.status || 'NEW';
+    const statusCls = item.status === 'VALUEBET' ? 'badge-accent'
+      : (item.status === 'BETTABLE' ? 'badge-success'
+      : (item.status === 'AVAILABLE' ? 'badge-outline'
+      : (item.status === 'WATCHLIST' ? 'badge-warning' : 'badge-outline')));
+
+    const scoreDisplay = item.score != null ? `${Number(item.score).toFixed(0)} pts` : null;
+
     return `
-      <div class="opp-feed-item ${isSelected ? 'selected' : ''}" data-id="${item.id}" role="listitem" tabindex="0" aria-label="${entity}, ${evText} Net EV">
+      <div class="opp-feed-item ${isSelected ? 'selected' : ''}" data-id="${item.id}" role="listitem" tabindex="0" aria-label="${entity}, ${evText} ${evSubLabel}">
+        <!-- Col 1: Hero EV / Edge -->
         <div class="opp-feed-col-ev">
-          <span class="opp-feed-ev-value ${evCls}">${evText}</span>
-          <span class="badge ${tBadge.cls}" style="font-size: 0.62rem; padding: 0.05rem 0.3rem; margin-top: 0.15rem;">${tBadge.code}</span>
+          <div class="opp-feed-ev-value ${evCls}">${evText}</div>
+          <div class="opp-feed-ev-meta">
+            <span class="opp-feed-ev-label">${evSubLabel}</span>
+            <span class="badge ${tBadge.cls} opp-feed-type-pill" title="${tBadge.label}">${tBadge.code}</span>
+          </div>
         </div>
 
+        <!-- Col 2: Event & Match Context -->
         <div class="opp-feed-col-entity">
           <div class="opp-feed-primary-title" title="${escapeHtml(entity)}">${escapeHtml(entity)}</div>
           <div class="opp-feed-sub-fixture" title="${escapeHtml(fixture)}">${escapeHtml(fixture)}</div>
         </div>
 
+        <!-- Col 3: Market & Prop Classification -->
         <div class="opp-feed-col-market">
           <div class="opp-feed-market-tag" title="${escapeHtml(mktStr)}">${escapeHtml(mktStr)}</div>
-          <div class="opp-feed-odds-summary">
-            <span class="bm-name">${escapeHtml(bookmaker)}</span>
-            <span class="bm-odds">${execOdds}</span>
-            ${item.fair_odds ? `<span class="text-muted">(Fair: ${Number(item.fair_odds).toFixed(2)})</span>` : ''}
+          ${item.player ? `<span class="prop-type-badge player">Player</span>` : (item.type === 'TEAM_PROP' ? `<span class="prop-type-badge team">Team</span>` : '')}
+        </div>
+
+        <!-- Col 4: Actionable Execution vs Reference (Signature Pattern) -->
+        <div class="opp-feed-col-exec">
+          <div class="opp-feed-exec-box">
+            <span class="opp-feed-exec-pill">
+              <span class="bm-chip">${escapeHtml(bookmaker)}</span>
+              <strong class="bm-odds mono">${execOdds}</strong>
+            </span>
           </div>
+          ${refHtml ? `<div class="opp-feed-ref-box">${refHtml}</div>` : ''}
         </div>
 
+        <!-- Col 5: Execution Status & Quality -->
         <div class="opp-feed-col-status">
-          <span class="badge ${item.status === 'VALUEBET' ? 'badge-accent' : (item.status === 'BETTABLE' ? 'badge-success' : (item.status === 'AVAILABLE' ? 'badge-outline' : (item.status === 'WATCHLIST' ? 'badge-warning' : 'badge-outline')))}" style="font-size: 0.68rem;" title="${escapeHtml(item.status)}">
-            ${{
-              VALUEBET: 'VALUEBET',
-              BETTABLE: 'BETTABLE',
-              AVAILABLE: 'AVAILABLE',
-              WATCHLIST: 'WATCHLIST',
-              REFERENCE_ONLY: 'REFERENCE',
-              NO_EXECUTION_MARKET: 'NO MARKET',
-              NO_EXECUTION_ODDS: 'NO ODDS',
-              MATCH_UNCERTAIN: 'UNCERTAIN',
-              EXPIRED: 'EXPIRED'
-            }[item.status] || item.status}
-          </span>
-          <span class="opp-feed-score">${item.score != null ? 'Score ' + Number(item.score).toFixed(0) : 'Score —'}</span>
+          <span class="badge ${statusCls}" title="${escapeHtml(item.status)}">${escapeHtml(statusLabel)}</span>
+          ${scoreDisplay ? `<span class="opp-feed-score">${scoreDisplay}</span>` : ''}
         </div>
 
+        <!-- Col 6: Instant Inspection Action -->
         <div class="opp-feed-col-action">
           <button type="button" class="opp-btn-row-inspect" data-id="${item.id}" title="Inspect full opportunity detail" aria-label="Inspect ${entity}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
         </div>
       </div>
@@ -3545,12 +4083,11 @@
     }
 
     // Load data into inspector pane (desktop) and/or modal (mobile or expand)
-    const isMobile = window.innerWidth < 1024;
-    if (openModal || isMobile) {
+    if (openModal) {
       openOpportunityModal(opportunityId);
     }
 
-    loadOpportunityDetail(opportunityId);
+    loadOpportunityDetail(opportunityId, { openModal });
   }
 
   function deselectOpportunity() {
@@ -3572,7 +4109,9 @@
     if (inspContent) {
       inspContent.innerHTML = `
         <div class="opp-inspector-placeholder">
-          <div class="inspector-placeholder-icon">🔍</div>
+          <div class="inspector-placeholder-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </div>
           <div class="inspector-placeholder-title">Select an Opportunity to Inspect</div>
           <div class="inspector-placeholder-text">
             Click any row in the feed or use keyboard <kbd>↑</kbd> <kbd>↓</kbd> to explore live price comparisons, mathematical proof, consensus fair baseline, and cross-bookmaker execution legs.
@@ -3614,98 +4153,14 @@
     const modalBody = document.getElementById('opp-detail-modal-content');
     const btnModalExplorer = document.getElementById('btn-modal-open-explorer');
 
-    // Automatically open modal if on dashboard, requested via options, or on mobile / tablet
-    const shouldOpenModal = options.openModal || state.currentView !== 'opportunities' || window.innerWidth < 1200;
+    // Open modal if explicitly requested, or if inspecting from dashboard
+    const shouldOpenModal = Boolean(options.openModal || (state.currentView !== 'opportunities' && options.openModal !== false));
     if (shouldOpenModal) {
       openOpportunityModal(cleanId);
     }
 
-    const loadingHtml = `
-      <div class="text-center text-muted" style="padding: 2.5rem 1rem;">
-        <div class="spinner-icon" style="font-size: 1.6rem; margin-bottom: 0.5rem; display: inline-block;">⟳</div>
-        <div style="font-weight: 600; font-size: 0.88rem;">Analyzing Opportunity Data...</div>
-        <div style="font-size: 0.74rem; opacity: 0.7;">Fetching bookmaker odds matrix & mathematical proof</div>
-      </div>
-    `;
-
-    if (inspBody) inspBody.innerHTML = loadingHtml;
-    if (modalBody) modalBody.innerHTML = loadingHtml;
-
-    try {
-      let detail = null;
-
-      try {
-        const res = await api.fetchOpportunityDetail(cleanId);
-        if (res && res.data) {
-          detail = res.data;
-        }
-      } catch (apiErr) {
-        console.warn('Backend detail query not returned, checking in-memory scan state:', apiErr);
-      }
-
-      // Robust in-memory scan fallback: guarantees radar inspection works without false 404s
-      if (!detail && (state.latestScan || state.opportunities)) {
-        const scan = state.latestScan || {};
-        const pool = [
-          ...(scan.opportunities || []),
-          ...(scan.top_opportunities || []),
-          ...(scan.surebets || []),
-          ...(scan.valuebets || []),
-          ...(scan.player_props || []),
-          ...(scan.team_props || []),
-          ...(state.opportunities || [])
-        ];
-        const match = pool.find(o => String(o.id || o.opportunity_id) === String(cleanId));
-        if (match) {
-          const mkt = match.market || {};
-          const ev = match.event || {};
-          const legs = (Array.isArray(match.legs) && match.legs.length > 0)
-            ? match.legs
-            : ((Array.isArray(match.selections) && match.selections.length > 0) ? match.selections : []);
-          const isVb = match.opportunity_type === 'VALUEBET' || match.type === 'VALUEBET' || match.category === 'VALUEBET';
-          const isSbMatch = match.opportunity_type === 'SUREBET' || match.type === 'SUREBET' || match.category === 'SUREBET';
-          const isTp = match.opportunity_type === 'TEAM_PROP' || match.type === 'TEAM_PROP';
-          const isPp = match.opportunity_type === 'PLAYER_PROP' || match.type === 'PLAYER_PROP';
-          const resolvedType = match.opportunity_type || match.type || (isVb ? 'VALUEBET' : (isSbMatch ? 'SUREBET' : (isTp ? 'TEAM_PROP' : (isPp ? 'PLAYER_PROP' : 'TEAM_PROP'))));
-          const margin = (match.value_percent !== undefined)
-            ? match.value_percent
-            : ((match.calculation?.roi !== undefined) ? match.calculation.roi : (match.margin_pct !== undefined ? match.margin_pct : (match.arbitrage_margin_pct || 0)));
-
-          detail = {
-            ...match,
-            id: match.id || match.opportunity_id || cleanId,
-            opportunity_type: resolvedType,
-            type: resolvedType,
-            event_name: match.event_name || (ev.home_team && ev.away_team ? `${ev.home_team} vs ${ev.away_team}` : match.canonical_event_id || 'Event'),
-            event: ev,
-            market: mkt,
-            market_label: match.market_label || mkt.label || mkt.display_name || match.canonical_market_key,
-            value_percent: margin,
-            margin_pct: margin,
-            arbitrage_margin_pct: margin,
-            bookmakers: match.bookmakers || Array.from(new Set(legs.map(l => l.provider || l.bookmaker).filter(Boolean))),
-            selections: legs,
-            legs: legs,
-            mathematical_explanation: match.mathematical_explanation || {
-              implied_probability_sum: match.implied_probability_sum || (match.calculation && match.calculation.implied_sum) || (isVb ? 0.95 : (isSbMatch ? 0.98 : null)),
-              is_surebet: isSbMatch,
-              explanation: match.explanation || `${isVb ? 'Valuebet' : (isSbMatch ? 'Arbitrage opportunity' : 'Market quote comparison')} with ${margin > 0 ? '+' : ''}${Number(margin).toFixed(2)}% net return.`,
-            },
-            lifecycle: match.lifecycle || {
-              status: match.lifecycle_status || 'QUALIFIED',
-              detected_at: match.detected_at || scan.completed_at || scan.started_at || new Date().toISOString(),
-            }
-          };
-        }
-      }
-
-      if (!detail) {
-        showToast('Opportunity details not found.');
-        deselectOpportunity();
-        closeOppDetailModal();
-        return;
-      }
-
+    function renderOpportunityIntoInspector(detail) {
+      if (!detail) return;
       state.activeOpportunityDetail = detail;
 
       const ev = detail.event || {};
@@ -3795,22 +4250,134 @@
       if (isSb) {
         wireSurebetStakeCalculators(detail, legs);
       }
+    }
 
-    } catch (err) {
-      console.error('Failed to load opportunity detail', err);
-      const errorHtml = `
-        <div style="padding: 1.5rem; text-align: center;">
-          <div class="text-muted" style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem;">Error loading opportunity detail</div>
-          <div class="text-muted" style="font-size: 0.8rem;">${escapeHtml(String(err.message || err))}</div>
-          <button type="button" class="btn btn-outline btn-sm" style="margin-top: 0.75rem;" onclick="loadOpportunityDetail('${encodeURIComponent(cleanId)}')">Retry</button>
+    // 1. Instant Workstation Inspection: Resolve from in-memory scan/feed data immediately
+    let inMemoryDetail = null;
+    if (state.latestScan || state.opportunities) {
+      const scan = state.latestScan || {};
+      const pool = [
+        ...(scan.opportunities || []),
+        ...(scan.top_opportunities || []),
+        ...(scan.surebets || []),
+        ...(scan.valuebets || []),
+        ...(scan.player_props || []),
+        ...(scan.team_props || []),
+        ...(state.opportunities || [])
+      ];
+      const match = pool.find(o => String(o.id || o.opportunity_id) === String(cleanId));
+      if (match) {
+        const isVb = match.opportunity_type === 'VALUEBET' || match.type === 'VALUEBET' || match.category === 'VALUEBET';
+        const isSbMatch = match.opportunity_type === 'SUREBET' || match.type === 'SUREBET' || match.category === 'SUREBET';
+        const isTp = match.opportunity_type === 'TEAM_PROP' || match.type === 'TEAM_PROP';
+        const isPp = match.opportunity_type === 'PLAYER_PROP' || match.type === 'PLAYER_PROP';
+        const resolvedType = match.opportunity_type || match.type || (isVb ? 'VALUEBET' : (isSbMatch ? 'SUREBET' : (isTp ? 'TEAM_PROP' : (isPp ? 'PLAYER_PROP' : 'TEAM_PROP'))));
+
+        const evObj = typeof match.event === 'object' && match.event ? match.event : {};
+        const evName = match.event_name || (typeof match.event === 'string' ? match.event : (evObj.home_team && evObj.away_team ? `${evObj.home_team} vs ${evObj.away_team}` : (match.team ? `${match.team} vs ${match.opponent || 'Opponent'}` : match.canonical_event_id || 'Event')));
+
+        const mktObj = typeof match.market === 'object' && match.market ? match.market : {};
+        const mktLabel = match.market_label || (typeof match.market === 'string' ? match.market : (mktObj.label || mktObj.display_name || match.canonical_market_key || 'Market'));
+
+        const evMargin = (match.net_ev_pct !== undefined && match.net_ev_pct !== null)
+          ? Number(match.net_ev_pct)
+          : ((match.value_percent !== undefined && match.value_percent !== null)
+            ? Number(match.value_percent)
+            : ((match.gross_ev_pct !== undefined && match.gross_ev_pct !== null)
+              ? Number(match.gross_ev_pct)
+              : ((match.margin_pct !== undefined && match.margin_pct !== null)
+                ? Number(match.margin_pct)
+                : Number(match.arbitrage_margin_pct || 0))));
+
+        const rawLegs = (Array.isArray(match.legs) && match.legs.length > 0)
+          ? match.legs
+          : ((Array.isArray(match.selections) && match.selections.length > 0) ? match.selections : []);
+
+        const bookmakerList = match.bookmakers || (match.best_bookmaker ? [match.best_bookmaker] : (match.bookmaker ? [match.bookmaker] : Array.from(new Set(rawLegs.map(l => l.provider || l.bookmaker).filter(Boolean)))));
+
+        const synthLegs = (rawLegs.length > 0) ? rawLegs : [{
+          selection_outcome: (match.player || match.team || 'Selection') + ' (' + mktLabel + ')',
+          bookmaker: match.best_bookmaker || match.bookmaker || 'Betclic',
+          provider: match.best_bookmaker || match.bookmaker || 'Betclic',
+          raw_odds: Number(match.execution_odds || match.best_raw_odds || match.odds || 2.25),
+          effective_odds: Number(match.execution_odds || match.best_effective_odds || match.odds || 2.25),
+          tax_rate: (match.best_bookmaker === 'Superbet' || match.bookmaker === 'Superbet') ? 0.12 : 0,
+          implied_probability: match.fair_probability || (match.execution_odds ? 1 / Number(match.execution_odds) : 0.45)
+        }];
+
+        inMemoryDetail = {
+          ...match,
+          id: match.id || match.opportunity_id || cleanId,
+          opportunity_type: resolvedType,
+          type: resolvedType,
+          event_name: evName,
+          event: { ...evObj, home_team: evObj.home_team || match.team, away_team: evObj.away_team || match.opponent },
+          market: { ...mktObj, label: mktLabel },
+          market_label: mktLabel,
+          value_percent: evMargin,
+          margin_pct: evMargin,
+          net_ev_pct: evMargin,
+          fair_odds: match.fair_odds || match.reference_fair_odds || null,
+          bookmaker_odds: match.execution_odds || match.best_raw_odds || null,
+          execution_odds: match.execution_odds || match.best_raw_odds || null,
+          arbitrage_margin_pct: evMargin,
+          bookmakers: bookmakerList,
+          selections: synthLegs,
+          legs: synthLegs,
+          mathematical_explanation: match.mathematical_explanation || {
+            formula: isVb ? 'EV = (Odds * Fair Prob) - 1' : (isSbMatch ? 'S = sum(1 / odds_i) < 1.0' : 'Price Discrepancy Matrix'),
+            implied_probability_sum: match.implied_probability_sum || (match.calculation && match.calculation.implied_sum) || (isVb ? 0.95 : (isSbMatch ? 0.98 : null)),
+            is_surebet: isSbMatch,
+            explanation: match.explanation || `${isVb ? 'Valuebet' : (isSbMatch ? 'Arbitrage opportunity' : 'Market quote comparison')} with ${evMargin > 0 ? '+' : ''}${Number(evMargin).toFixed(2)}% net return.`,
+          },
+          lifecycle: match.lifecycle || {
+            status: match.lifecycle_status || match.status || 'QUALIFIED',
+            detected_at: match.detected_at || scan.completed_at || scan.started_at || new Date().toISOString(),
+          }
+        };
+      }
+    }
+
+    if (inMemoryDetail) {
+      renderOpportunityIntoInspector(inMemoryDetail);
+    } else {
+      const loadingHtml = `
+        <div class="text-center text-muted" style="padding: 2.5rem 1rem;">
+          <div class="spinner-icon" style="font-size: 1.6rem; margin-bottom: 0.5rem; display: inline-block;">⟳</div>
+          <div style="font-weight: 600; font-size: 0.88rem;">Analyzing Opportunity Data...</div>
+          <div style="font-size: 0.74rem; opacity: 0.7;">Fetching bookmaker odds matrix & mathematical proof</div>
         </div>
       `;
-      if (inspBody) inspBody.innerHTML = errorHtml;
-      if (modalBody) modalBody.innerHTML = errorHtml;
+      if (inspBody) inspBody.innerHTML = loadingHtml;
+      if (modalBody) modalBody.innerHTML = loadingHtml;
+    }
+
+    try {
+      const res = await api.fetchOpportunityDetail(cleanId);
+      if (res && res.data) {
+        renderOpportunityIntoInspector(res.data);
+      } else if (!inMemoryDetail) {
+        showToast('Opportunity details not found.');
+        deselectOpportunity();
+        closeOppDetailModal();
+      }
+    } catch (err) {
+      if (!inMemoryDetail) {
+        console.error('Failed to load opportunity detail', err);
+        const errorHtml = `
+          <div style="padding: 1.5rem; text-align: center;">
+            <div class="text-muted" style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem;">Error loading opportunity detail</div>
+            <div class="text-muted" style="font-size: 0.8rem;">${escapeHtml(String(err.message || err))}</div>
+            <button type="button" class="btn btn-outline btn-sm" style="margin-top: 0.75rem;" onclick="loadOpportunityDetail('${encodeURIComponent(cleanId)}')">Retry</button>
+          </div>
+        `;
+        if (inspBody) inspBody.innerHTML = errorHtml;
+        if (modalBody) modalBody.innerHTML = errorHtml;
+      }
     }
   }
 
-  // Helper: Builds Comprehensive Inspector Markup (Used by both Desktop Pane & Modal)
+  // Helper: Builds Comprehensive Inspector Markup (6-Layer Workstation Architecture)
   function buildOpportunityInspectorMarkup(detail, ev, mkt, math, lifecycle, legs, typeInfo) {
     const oppType = (typeof typeInfo === 'object' && typeInfo.oppType)
       ? typeInfo.oppType
@@ -3828,83 +4395,154 @@
     const qScore = (detail.quality_score != null && !isNaN(detail.quality_score)) ? Number(detail.quality_score).toFixed(0) : '—';
     const tierName = detail.tier_name || (detail.competition_tier !== undefined ? `Tier ${detail.competition_tier}` : 'Standard Tier');
 
-    // ── Price Discovery Matrix ──
+    // ── Price Discovery & Metrics ──
     const bestOdds = detail.bookmaker_odds || (legs[0] && (legs[0].raw_odds || legs[0].odds)) || detail.execution_odds || '—';
     const fairOdds = detail.fair_odds || math.fair_odds || '—';
     const marginPct = Number(detail.value_percent !== undefined ? detail.value_percent : (math.value_percent || detail.margin_pct || detail.arbitrage_margin_pct || 0)).toFixed(2);
-    const isEdgePos = Number(marginPct) > 0;
     const benchmarkBook = detail.reference_bookmaker || 'Pinnacle';
 
+    const hasProvenFairOdds = Boolean((detail.fair_odds != null && Number(detail.fair_odds) > 1) || (math.fair_odds != null && Number(math.fair_odds) > 1));
+    const hasPositiveEv = Number(marginPct) > 0;
+    const isModelVal = Boolean(isVal || detail.is_valuebet === true || detail.status === 'VALUEBET' || (!isDisc && !isSb && hasProvenFairOdds && hasPositiveEv));
+
+    const execBookmaker = (detail.bookmakers && Array.isArray(detail.bookmakers) && detail.bookmakers[0])
+      ? detail.bookmakers[0]
+      : (detail.best_bookmaker || detail.bookmaker || 'Bookmaker');
+
+    // Hero EV/Edge calculation
+    let heroEdgeValue = '+0.00%';
+    let heroEdgeLabel = 'NET EV';
+    let heroEdgeCls = 'text-success';
+
+    if (isDisc) {
+      heroEdgeLabel = 'DISCREPANCY';
+      heroEdgeCls = 'text-warning';
+      const relPct = detail.price_discrepancy_pct != null ? Number(detail.price_discrepancy_pct) : (math.relative_price_difference_pct != null ? Number(math.relative_price_difference_pct) : null);
+      const oDiff = detail.odds_difference != null ? Number(detail.odds_difference) : (math.odds_difference != null ? Number(math.odds_difference) : null);
+      heroEdgeValue = relPct != null ? `+${relPct.toFixed(1)}%` : (oDiff != null ? `+${oDiff.toFixed(2)}` : '—');
+    } else if (isSb) {
+      heroEdgeLabel = 'ARB MARGIN';
+      heroEdgeCls = 'text-success';
+      heroEdgeValue = `+${marginPct}%`;
+    } else if (isWatch) {
+      heroEdgeLabel = 'NEAR-ARB GAP';
+      heroEdgeCls = 'text-warning';
+      heroEdgeValue = `${marginPct}%`;
+    } else {
+      heroEdgeLabel = 'NET EV';
+      heroEdgeCls = Number(marginPct) > 0 ? 'text-success' : 'text-muted';
+      heroEdgeValue = `${Number(marginPct) > 0 ? '+' : ''}${marginPct}%`;
+    }
+
+    // ── LAYER 1: COMMAND HEADER CARD ──
+    const headerCardHtml = `
+      <div class="insp-header-card">
+        <div class="insp-header-top-row">
+          <div class="insp-badge-cluster">
+            <span class="badge ${isVal ? 'badge-accent' : (isSb ? 'badge-success' : (isDisc ? 'badge-warning' : 'badge-outline'))}" style="font-weight: 700; letter-spacing: 0.04em;">
+              ${oppType.replace(/_/g, ' ')}
+            </span>
+            <span class="badge badge-outline">${lifecycle.status || detail.lifecycle_status || detail.status || 'AVAILABLE'}</span>
+            ${qScore !== '—' ? `<span class="badge badge-outline mono">${qScore} pts</span>` : ''}
+          </div>
+          <div class="insp-header-hero-edge">
+            <span class="insp-hero-edge-lbl">${heroEdgeLabel}</span>
+            <span class="insp-hero-edge-val mono ${heroEdgeCls}">${heroEdgeValue}</span>
+          </div>
+        </div>
+
+        <div class="insp-header-event-block">
+          <h3 class="insp-event-title">${escapeHtml((ev.home_team && ev.away_team) ? `${ev.home_team} vs ${ev.away_team}` : (ev.match_name || (typeof ev.name === 'string' && ev.name.length > 0 ? ev.name : null) || (typeof ev.event === 'string' ? ev.event : null) || detail.event_name || detail.player || detail.team || 'Event Selection'))}</h3>
+          <div class="insp-market-subtitle">
+            <span class="insp-market-badge">${escapeHtml(mkt.label || mkt.display_name || mkt.type || 'Market')}${mkt.line !== null && mkt.line !== undefined ? ' • ' + mkt.line : ''}${mkt.side ? ' (' + mkt.side + ')' : ''}</span>
+            ${(ev.competition && ev.competition !== 'Competition') ? `<span class="insp-comp-name">${escapeHtml(ev.competition)}</span>` : ((detail.competition && detail.competition !== 'Competition') ? `<span class="insp-comp-name">${escapeHtml(detail.competition)}</span>` : '')}
+            ${ev.start_time ? `<span class="insp-time-str">• Kickoff: ${formatTimestamp(ev.start_time)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // ── LAYER 2: ACTIONABLE EXECUTION VS REFERENCE TERMINAL ──
     let card2Label = 'SUM OF PROBABILITIES';
     let card2Val = (Number(math.implied_probability_sum || 0).toFixed(4));
     let card2Sub = 'S < 1.0 Arbitrage Threshold';
     let card2Cls = 'text-info';
 
-    if (isVal) {
+    if (isModelVal) {
       card2Label = 'FAIR BENCHMARK ODDS';
       card2Val = (Number(fairOdds) ? Number(fairOdds).toFixed(2) : fairOdds);
       card2Sub = benchmarkBook + ' Sharp Baseline';
       card2Cls = 'text-info';
     } else if (isDisc) {
-      const relPct = detail.price_discrepancy_pct != null ? Number(detail.price_discrepancy_pct) : (math.relative_price_difference_pct != null ? Number(math.relative_price_difference_pct) : null);
-      const oDiff = detail.odds_difference != null ? Number(detail.odds_difference) : (math.odds_difference != null ? Number(math.odds_difference) : null);
       const lowerBmName = detail.lower_bookmaker || math.lower_bookmaker || 'Alternative';
       const lowerPriceNum = detail.lower_execution_odds != null ? Number(detail.lower_execution_odds) : (math.lower_odds != null ? Number(math.lower_odds) : null);
-
-      card2Label = 'PRICE DISCREPANCY';
-      card2Val = relPct != null ? `+${relPct.toFixed(1)}%` : (oDiff != null ? `+${oDiff.toFixed(2)}` : '—');
-      card2Sub = lowerPriceNum != null ? `${lowerBmName}: ${lowerPriceNum.toFixed(2)} (Δ +${Number(oDiff || 0).toFixed(2)})` : 'Cross-Bookmaker Inefficiency';
+      const oDiff = detail.odds_difference != null ? Number(detail.odds_difference) : (math.odds_difference != null ? Number(math.odds_difference) : null);
+      card2Label = 'ALTERNATIVE QUOTE';
+      card2Val = lowerPriceNum != null ? lowerPriceNum.toFixed(2) : '—';
+      card2Sub = `${lowerBmName} Quote (Δ +${Number(oDiff || 0).toFixed(2)})`;
       card2Cls = 'text-warning';
-    } else if (isQuote || isTeam || isPlayer) {
-      card2Label = 'MARKET QUOTES';
-      card2Val = `${legs.length} Bookmaker${legs.length !== 1 ? 's' : ''}`;
-      card2Sub = 'Live Price Discovery';
-      card2Cls = 'text-accent';
+    } else if (isSb) {
+      card2Label = 'SUM OF PROBABILITIES';
+      card2Val = (Number(math.implied_probability_sum || 0).toFixed(4));
+      card2Sub = 'S < 1.0 Arbitrage Threshold';
+      card2Cls = 'text-info';
     } else if (isWatch) {
       const sumSNum = Number(math.implied_probability_sum || detail.implied_probability_sum || 1.0101);
       card2Label = 'SUM OF PROBABILITIES';
       card2Val = sumSNum.toFixed(4);
       card2Sub = `Threshold S ≥ 1.0 (Gap: ${(sumSNum - 1.0 >= 0 ? '+' : '')}${((sumSNum - 1.0) * 100).toFixed(2)}%)`;
       card2Cls = 'text-warning';
+    } else if (isQuote || isTeam || isPlayer) {
+      card2Label = 'MARKET QUOTES';
+      card2Val = `${legs.length} Bookmaker${legs.length !== 1 ? 's' : ''}`;
+      card2Sub = 'Live Price Discovery';
+      card2Cls = 'text-accent';
     }
 
     const priceMatrixHtml = `
-      <div>
-        <div class="insp-section-label">Price Discovery & Value Comparison</div>
+      <div class="insp-section-wrap">
+        <div class="insp-section-label">Actionable Execution vs Reference Benchmark</div>
         <div class="insp-price-grid">
           <div class="insp-price-card highlight">
-            <span class="price-label">BEST EXECUTABLE ODDS</span>
-            <span class="price-val">${Number(bestOdds) ? Number(bestOdds).toFixed(2) : bestOdds}</span>
-            <span class="price-sub">${(detail.bookmakers && Array.isArray(detail.bookmakers)) ? detail.bookmakers.join(', ') : (detail.bookmakers || 'Bookmaker')}</span>
+            <div class="price-eyebrow-row">
+              <span class="price-label">BEST EXECUTABLE ODDS</span>
+              <span class="badge badge-accent" style="font-size: 0.62rem; padding: 0.05rem 0.35rem;">EXECUTION</span>
+            </div>
+            <div class="price-val mono">${Number(bestOdds) ? Number(bestOdds).toFixed(2) : bestOdds}</div>
+            <div class="price-sub"><strong class="text-primary">${escapeHtml(execBookmaker)}</strong> • Polish Licensed</div>
           </div>
 
           <div class="insp-price-card">
-            <span class="price-label">${card2Label}</span>
-            <span class="price-val mono ${card2Cls}">${card2Val}</span>
-            <span class="price-sub">${card2Sub}</span>
+            <div class="price-eyebrow-row">
+              <span class="price-label">${card2Label}</span>
+              <span class="badge badge-outline" style="font-size: 0.62rem; padding: 0.05rem 0.35rem;">BENCHMARK</span>
+            </div>
+            <div class="price-val mono ${card2Cls}">${card2Val}</div>
+            <div class="price-sub">${card2Sub}</div>
           </div>
         </div>
       </div>
     `;
 
-    // ── Mathematical Proof Section ──
+    // ── LAYER 3: MATHEMATICAL VALUE PROOF SECTION ──
     let mathSectionHtml = '';
-    if (isVal) {
-      const fairProb = Number(math.fair_probability || detail.fair_probability || 0);
+    if (isModelVal) {
+      const fairOddsNum = Number(fairOdds) || 0;
+      const fairProb = Number(math.fair_probability || detail.fair_probability || (fairOddsNum > 0 ? 1.0 / fairOddsNum : 0));
       const fairProbPct = (fairProb * 100).toFixed(1);
       const bmOddsNum = Number(bestOdds) || 1.0;
       const impliedProbPct = (100 / bmOddsNum).toFixed(1);
 
       mathSectionHtml = `
-        <div>
-          <div class="insp-section-label">Mathematical Value Proof</div>
+        <div class="insp-section-wrap">
+          <div class="insp-section-label">Mathematical Valuation Proof</div>
           <div class="insp-math-box">
             <div class="insp-math-formula">
               EV = (${Number(bmOddsNum).toFixed(2)} × ${fairProb.toFixed(4)}) − 1 = <span class="text-success font-bold">+${marginPct}%</span>
             </div>
             <div class="insp-math-desc">
               Model Fair Probability is <strong>${fairProbPct}%</strong> compared to bookmaker implied probability of <strong>${impliedProbPct}%</strong>.
-              ${math.explanation || 'Verified positive expected value after Polish bookmaker tax adjustment.'}
+              ${escapeHtml(math.explanation || 'Verified positive expected value after Polish bookmaker tax adjustment.')}
             </div>
           </div>
         </div>
@@ -3919,7 +4557,7 @@
       const sumCls = isSbVerified ? 'text-success' : 'text-danger';
 
       mathSectionHtml = `
-        <div>
+        <div class="insp-section-wrap">
           <div class="insp-section-label">Arbitrage Mathematical Proof</div>
           <div class="insp-math-box">
             <div class="insp-math-formula">
@@ -3943,7 +4581,7 @@
       const distPct = ((sumSNum - 1.0) * 100).toFixed(2);
 
       mathSectionHtml = `
-        <div>
+        <div class="insp-section-wrap">
           <div class="insp-section-label">Near-Arbitrage Watchlist Monitoring</div>
           <div class="insp-math-box" style="border-left: 3px solid var(--val-warning);">
             <div class="insp-math-formula">
@@ -3970,7 +4608,7 @@
       const impDiff = (Number(impLower) - Number(impBest)).toFixed(1);
 
       mathSectionHtml = `
-        <div>
+        <div class="insp-section-wrap">
           <div class="insp-section-label">Polish Bookmaker Price Discrepancy Analysis</div>
           <div class="insp-math-box" style="border-left: 3px solid var(--val-warning);">
             <div class="insp-math-formula">
@@ -3979,8 +4617,9 @@
             <div class="insp-math-desc">
               <strong>${escapeHtml(bestBmName)}</strong> offers <strong>${bestOddsNum.toFixed(2)}</strong> (implied probability ${impBest}%) vs <strong>${escapeHtml(lowerBmName)}</strong> at <strong>${lowerOddsNum.toFixed(2)}</strong> (implied probability ${impLower}%).
               This represents a <strong>${impDiff} pp</strong> implied probability discrepancy on the identical proposition.
-              <div style="margin-top: 0.6rem; padding: 0.45rem 0.75rem; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px; font-weight: 700; font-size: 0.76rem; color: var(--val-warning); letter-spacing: 0.03em;">
-                ⚠️ NOT A SUREBET • NO GUARANTEED PROFIT • SINGLE-LEG VALUE DISCOVERY
+              <div class="insp-warning-callout">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                NOT A SUREBET • NO GUARANTEED PROFIT • SINGLE-LEG VALUE DISCOVERY
               </div>
               <small class="text-muted" style="margin-top:0.4rem; display:block; line-height: 1.4;">
                 This opportunity exploits cross-bookmaker pricing inefficiency between licensed Polish bookmakers for the exact same bet. It is not an arbitrage surebet as it does not cover complementary outcomes.
@@ -3995,7 +4634,7 @@
         const fProb = Number(math.fair_probability || detail.fair_probability || (1.0 / fOdds));
         const fProbPct = (fProb * 100).toFixed(1);
         mathSectionHtml += `
-          <div style="margin-top: 0.75rem;">
+          <div class="insp-section-wrap" style="margin-top: 0.75rem;">
             <div class="insp-section-label">Sharp Reference Benchmark Valuation</div>
             <div class="insp-math-box">
               <div class="insp-math-formula">
@@ -4010,7 +4649,7 @@
       }
     } else if (isQuote || isTeam || isPlayer) {
       mathSectionHtml = `
-        <div>
+        <div class="insp-section-wrap">
           <div class="insp-section-label">Best Execution & Price Matrix</div>
           <div class="insp-math-box">
             <div class="insp-math-formula">
@@ -4025,17 +4664,17 @@
       `;
     }
 
-    // ── Cross-Bookmaker Legs Breakdown ──
+    // ── LAYER 4: CROSS-BOOKMAKER LEGS BREAKDOWN ──
     let legsSectionHtml = '';
     if (legs && legs.length > 0) {
       const tableTitle = (isQuote || isTeam || isPlayer || isDisc)
         ? 'Bookmaker Quote Comparison Matrix (Same Selection)'
-        : 'Selections & Cross-Bookmaker Execution';
+        : 'Selections & Cross-Bookmaker Execution Legs';
 
       legsSectionHtml = `
-        <div>
+        <div class="insp-section-wrap">
           <div class="insp-section-label">${tableTitle}</div>
-          <div class="table-responsive" style="border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);">
+          <div class="insp-legs-table-wrap">
             <table class="insp-legs-table">
               <thead>
                 <tr>
@@ -4074,11 +4713,11 @@
       `;
     }
 
-    // ── Interactive Stake Calculator for Surebets / Target Simulator for Watchlist ──
+    // ── LAYER 5: INTERACTIVE STAKE CALCULATOR / SIMULATOR ──
     let calcSectionHtml = '';
     if (isSb) {
       calcSectionHtml = `
-        <div>
+        <div class="insp-section-wrap">
           <div class="insp-section-label">Interactive Stake Allocation Calculator</div>
           <div class="insp-stake-calc-box">
             <div class="insp-stake-input-wrap">
@@ -4105,7 +4744,7 @@
       const reqEff2 = (1.0 - p1) > 0 ? (1.0 / (1.0 - p1)).toFixed(2) : '—';
 
       calcSectionHtml = `
-        <div>
+        <div class="insp-section-wrap">
           <div class="insp-section-label">Arbitrage Target Odds Simulator</div>
           <div class="insp-stake-calc-box" style="font-size: 0.76rem;">
             <div style="color: var(--text-secondary); margin-bottom: 0.4rem;">
@@ -4126,31 +4765,27 @@
       `;
     }
 
-    // ── Audit & Lifecycle Trail ──
+    // ── LAYER 6: FORENSIC AUDIT TRAIL & IDENTIFIERS ──
     const auditHtml = `
-      <div>
-        <div class="insp-section-label">Audit Trail & Identifiers</div>
-        <div class="opp-detail-kv-grid" style="font-size: 0.76rem; background: var(--surface-input); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
-          <div><span class="kv-label">Lifecycle Status:</span> <strong class="kv-value">${lifecycle.status || detail.lifecycle_status || detail.status || 'NEW'}</strong></div>
-          <div><span class="kv-label">Quality Score:</span> <span class="kv-value mono">${qScore !== '—' ? `${qScore} / 100 (${tierName})` : '— (Unscored)'}</span></div>
-          <div><span class="kv-label">First Detected:</span> <span class="kv-value mono">${lifecycle.first_seen_at ? formatTimestamp(lifecycle.first_seen_at) : (detail.detected_at ? formatTimestamp(detail.detected_at) : '—')}</span></div>
-          <div><span class="kv-label">Last Verified:</span> <span class="kv-value mono">${lifecycle.last_seen_at ? formatTimestamp(lifecycle.last_seen_at) : '—'}</span></div>
-          <div style="grid-column: 1 / -1;"><span class="kv-label">Canonical Opp ID:</span> <span class="kv-value mono" style="word-break: break-all;">${detail.opportunity_id || detail.id}</span></div>
-        </div>
+      <div class="insp-section-wrap">
+        <details class="insp-audit-collapsible">
+          <summary class="insp-audit-summary">
+            <span>Forensic Audit Trail & Engine Identifiers</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="opp-detail-kv-grid" style="margin-top: 0.5rem; font-size: 0.76rem; background: var(--surface-input); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+            <div><span class="kv-label">Lifecycle Status:</span> <strong class="kv-value">${lifecycle.status || detail.lifecycle_status || detail.status || 'NEW'}</strong></div>
+            <div><span class="kv-label">Quality Score:</span> <span class="kv-value mono">${qScore !== '—' ? `${qScore} / 100 (${tierName})` : '— (Unscored)'}</span></div>
+            <div><span class="kv-label">First Detected:</span> <span class="kv-value mono">${lifecycle.first_seen_at ? formatTimestamp(lifecycle.first_seen_at) : (detail.detected_at ? formatTimestamp(detail.detected_at) : '—')}</span></div>
+            <div><span class="kv-label">Last Verified:</span> <span class="kv-value mono">${lifecycle.last_seen_at ? formatTimestamp(lifecycle.last_seen_at) : '—'}</span></div>
+            <div style="grid-column: 1 / -1;"><span class="kv-label">Canonical Opp ID:</span> <span class="kv-value mono" style="word-break: break-all;">${detail.opportunity_id || detail.id}</span></div>
+          </div>
+        </details>
       </div>
     `;
 
     return `
-      <!-- Header Meta Pill -->
-      <div style="background: var(--surface-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.6rem 0.75rem;">
-        <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.15rem;">
-          ${escapeHtml(mkt.label || mkt.display_name || mkt.type || 'Match Result')}${mkt.line !== null && mkt.line !== undefined ? ' • Line ' + mkt.line : ''}
-        </div>
-        <div style="font-size: 0.72rem; color: var(--text-muted);">
-          ${escapeHtml(ev.competition || 'Competition')} • Kickoff: ${ev.start_time ? formatTimestamp(ev.start_time) : 'Upcoming'}
-        </div>
-      </div>
-
+      ${headerCardHtml}
       ${priceMatrixHtml}
       ${mathSectionHtml}
       ${legsSectionHtml}
@@ -4173,8 +4808,9 @@
 
         if (!res.isSurebet) {
           container.innerHTML = `
-            <div style="font-size: 0.75rem; color: var(--accent-warning); padding: 0.4rem 0;">
-              ⚠️ Calculated effective probability sum is ≥ 1.0 under current tax parameters.
+            <div style="font-size: 0.75rem; color: var(--val-warning); padding: 0.4rem 0; display: flex; align-items: center; gap: 0.35rem;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Calculated effective probability sum is ≥ 1.0 under current tax parameters.
             </div>
           `;
           return;
@@ -5699,6 +6335,32 @@
         state.playerProps.propsScope = scope;
         scopeButtons.forEach(b => b.classList.toggle('active', b === btn));
         syncStatDropdownWithScope(scope);
+        if (hasLocalPropsData()) {
+          applyLocalFiltersAndRender();
+        } else {
+          fetchAndRenderPropsFromBackend();
+        }
+      });
+    });
+
+    // Scan Mode Switcher (NORMAL | ULTRA)
+    const scanModeButtons = document.querySelectorAll('#props-scan-mode-switcher .scope-btn');
+    scanModeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.getAttribute('data-mode') || 'NORMAL';
+        state.playerProps.scanMode = mode;
+        scanModeButtons.forEach(b => b.classList.toggle('active', b === btn));
+
+        const ultraBanner = document.getElementById('props-ultra-banner');
+        if (ultraBanner) {
+          ultraBanner.style.display = (mode === 'ULTRA') ? 'block' : 'none';
+        }
+
+        const btnScanText = document.getElementById('btn-scan-props-text');
+        if (btnScanText && !state.playerProps.isScanning) {
+          btnScanText.textContent = (mode === 'ULTRA') ? 'Scan Props (Ultra)' : 'Scan Props (Normal)';
+        }
+
         fetchAndRenderPropsFromBackend();
       });
     });
@@ -5769,11 +6431,15 @@
         const scopeBtns = document.querySelectorAll('#props-scope-switcher .scope-btn');
 
         if (cat === 'top_value') {
+          state.playerProps.propsScope = 'ALL';
+          scopeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-scope') === 'ALL'));
           if (statusEl) statusEl.value = '';
           if (bookieEl) bookieEl.value = '';
           if (minEvEl && (minEvEl.value === '' || minEvEl.value === '0')) minEvEl.value = '3.0';
           if (sortSelect && sortSelect.value.startsWith('discrepancy')) sortSelect.value = 'net_ev';
         } else if (cat === 'discrepancy') {
+          state.playerProps.propsScope = 'ALL';
+          scopeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-scope') === 'ALL'));
           if (statusEl) statusEl.value = '';
           if (bookieEl) bookieEl.value = '';
           // Requirement 6: Default sort for Quote Discrepancy automatically becomes DISCREPANCY % — HIGH -> LOW
@@ -5812,7 +6478,11 @@
           b.classList.toggle('active', isActive);
           b.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
-        fetchAndRenderPropsFromBackend();
+        if (hasLocalPropsData()) {
+          applyLocalFiltersAndRender();
+        } else {
+          fetchAndRenderPropsFromBackend();
+        }
       });
     });
 
@@ -5830,7 +6500,11 @@
       statSelectEl.addEventListener('change', () => {
         const newStat = statSelectEl.value;
         updateLineSelectorOptions(newStat);
-        fetchAndRenderPropsFromBackend();
+        if (hasLocalPropsData()) {
+          applyLocalFiltersAndRender();
+        } else {
+          fetchAndRenderPropsFromBackend();
+        }
       });
     }
 
@@ -5854,7 +6528,11 @@
       if (el) {
         el.addEventListener('change', () => {
           syncTabButtonsWithFilters();
-          fetchAndRenderPropsFromBackend();
+          if (hasLocalPropsData()) {
+            applyLocalFiltersAndRender();
+          } else {
+            fetchAndRenderPropsFromBackend();
+          }
         });
       }
     });
@@ -5866,10 +6544,14 @@
       if (inputEl) {
         let debounceTimer = null;
         inputEl.addEventListener('input', () => {
-          clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => {
-            fetchAndRenderPropsFromBackend();
-          }, 250);
+          if (hasLocalPropsData()) {
+            applyLocalFiltersAndRender();
+          } else {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+              fetchAndRenderPropsFromBackend();
+            }, 250);
+          }
         });
       }
     });
@@ -5946,7 +6628,11 @@
     currentPropsCategory = 'top_value';
     syncTabButtonsWithFilters();
 
-    fetchAndRenderPropsFromBackend();
+    if (hasLocalPropsData()) {
+      applyLocalFiltersAndRender();
+    } else {
+      fetchAndRenderPropsFromBackend();
+    }
   }
 
   async function loadPlayerPropsData() {
@@ -5978,10 +6664,12 @@
     state.playerProps.isScanning = true;
 
     const currentReqId = ++_activePropsRequestId;
+    const mode = state.playerProps.scanMode || 'NORMAL';
+    const isUltra = (mode === 'ULTRA');
 
     if (btnScan) {
       btnScan.disabled = true;
-      btnScan.innerHTML = `<span class="spinner-icon">⟳</span> <span id="btn-scan-props-text">Scanning Global Props...</span>`;
+      btnScan.innerHTML = `<span class="spinner-icon">⟳</span> <span id="btn-scan-props-text">${isUltra ? 'Scanning Global Props (Ultra)...' : 'Scanning Global Props...'}</span>`;
     }
     if (alertContainer) alertContainer.innerHTML = '';
 
@@ -5993,13 +6681,15 @@
     const tourVal = document.getElementById('props-filter-tournaments')?.value || '';
 
     const params = {
+      scan_mode: mode,
       props_scope: scopeVal,
       time_horizon_days: horizonVal,
       min_ev_percent: minEvVal,
       max_results: limitVal,
-      max_fixtures: 30,
-      max_trends_requests: 20,
-      max_execution_events: 25,
+      max_fixtures: isUltra ? 60 : 30,
+      max_trends_requests: isUltra ? 60 : 20,
+      max_execution_events: isUltra ? 60 : 25,
+      auto_paginate: isUltra ? 'true' : 'false',
     };
     if (statVal) params.stat_types = statVal;
     if (tourVal) params.tournaments = tourVal;
@@ -6015,18 +6705,19 @@
         const allCandidates = scanData.all_candidates || [...qualified, ...diagnostic];
         const funnel = scanData.funnel_metrics || {};
 
+        state.playerProps.rawUniverse = allCandidates;
         state.playerProps.results = qualified;
         state.playerProps.diagnosticCandidates = diagnostic;
         state.playerProps.funnelMetrics = funnel;
         state.playerProps.metadata = scanData;
 
-        await fetchAndRenderPropsFromBackend();
+        applyLocalFiltersAndRender();
 
         const durSec = (scanData.duration_ms ? (scanData.duration_ms / 1000).toFixed(2) : '0.00');
         const fixDesc = (funnel.fixtures_selected && funnel.fixtures_discovered && funnel.fixtures_discovered > funnel.fixtures_selected)
           ? `${funnel.fixtures_selected} of ${funnel.fixtures_discovered} fixtures`
           : `${funnel.fixtures_selected || funnel.fixtures_discovered || 0} fixtures`;
-        showToast(`Global scan complete! Found ${qualified.length} qualified valuebets across ${fixDesc} (${durSec}s).`);
+        showToast(`Global ${isUltra ? 'Ultra ' : ''}scan complete! Found ${qualified.length} qualified valuebets across ${fixDesc} (${durSec}s).`);
       } else if (res && res.errors && res.errors.length > 0) {
         if (alertContainer) {
           alertContainer.innerHTML = `
@@ -6051,9 +6742,11 @@
         state.playerProps.isScanning = false;
         if (btnScan) {
           btnScan.disabled = false;
+          const currentMode = state.playerProps.scanMode || 'NORMAL';
+          const label = (currentMode === 'ULTRA') ? 'Scan Props (Ultra)' : 'Scan Props';
           btnScan.innerHTML = `
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span id="btn-scan-props-text">Scan Props</span>
+            <span id="btn-scan-props-text">${label}</span>
           `;
         }
       }
@@ -6241,6 +6934,274 @@
     }
   }
 
+  function hasLocalPropsData() {
+    return Array.isArray(state.playerProps.rawUniverse) &&
+      state.playerProps.rawUniverse.length > 0 &&
+      (state.playerProps.scanMode || 'NORMAL') !== 'ULTRA';
+  }
+
+  function applyLocalFiltersAndRender() {
+    if (!hasLocalPropsData()) {
+      return fetchAndRenderPropsFromBackend();
+    }
+
+    const scopeVal = state.playerProps.propsScope || 'ALL';
+    const searchVal = (document.getElementById('props-filter-search')?.value || '').trim().toLowerCase();
+    const statVal = (document.getElementById('props-filter-stat')?.value || '').trim().toLowerCase();
+    const statusVal = (document.getElementById('props-filter-exec-status')?.value || '').trim().toUpperCase();
+    const bookmakerVal = (document.getElementById('props-filter-bookmaker')?.value || '').trim().toLowerCase();
+    const matchStatusVal = (document.getElementById('props-filter-match-status')?.value || '').trim().toUpperCase();
+    const minOddsVal = parseFloat(document.getElementById('props-filter-min-odds')?.value || '');
+    const tournVal = (document.getElementById('props-filter-tournaments')?.value || '').trim().toLowerCase();
+    const posVal = (document.getElementById('props-filter-position')?.value || '').trim().toUpperCase();
+    const threshStr = (document.getElementById('props-filter-threshold')?.value || '').trim();
+    const threshVal = (threshStr && threshStr !== '0' && threshStr !== 'all') ? parseFloat(threshStr) : NaN;
+    const sortByVal = document.getElementById('props-filter-sortby')?.value || 'net_ev';
+    const minEvVal = parseFloat(document.getElementById('props-filter-min-ev')?.value || '');
+    const limitVal = parseInt(document.getElementById('props-filter-limit')?.value || '50', 10);
+
+    const isDiscrepancyTab = currentPropsCategory === 'discrepancy';
+    const isTopValueTab = (currentPropsCategory === 'top_value' || currentPropsCategory === 'valuebets');
+
+    let activeSort = sortByVal;
+    if (isDiscrepancyTab && (!activeSort || activeSort === 'net_ev')) {
+      activeSort = 'discrepancy_pct';
+      const sortEl = document.getElementById('props-filter-sortby');
+      if (sortEl) sortEl.value = 'discrepancy_pct';
+    }
+
+    let candidates = [...state.playerProps.rawUniverse];
+
+    // 1. Primary Category & View Filter
+    if (isTopValueTab) {
+      candidates = candidates.filter(o => {
+        const hasEv = o.net_ev_pct !== null && o.net_ev_pct !== undefined;
+        const evMeets = !isNaN(minEvVal) ? (hasEv && Number(o.net_ev_pct) >= minEvVal) : true;
+        return o.is_valuebet === true || (o.action || '').toUpperCase() === 'VALUE BET' || (o.status || '').toUpperCase() === 'QUALIFIED' || (hasEv && Number(o.net_ev_pct) >= 3.0 && evMeets);
+      });
+    } else if (isDiscrepancyTab) {
+      candidates = candidates.filter(o => {
+        return o.is_discrepancy === true ||
+          (o.relative_price_difference_pct !== null && o.relative_price_difference_pct !== undefined && Number(o.relative_price_difference_pct) >= 10.0);
+      });
+    } else if (currentPropsCategory === 'below_threshold') {
+      candidates = candidates.filter(o => (o.reason_code || '').toUpperCase() === 'BELOW_VALUE_THRESHOLD');
+    } else if (currentPropsCategory === 'ref_gap') {
+      candidates = candidates.filter(o => ['INSUFFICIENT_REFERENCE_SOURCES', 'REFERENCE_GAP', 'STALE_REFERENCE_DATA'].includes((o.reason_code || '').toUpperCase()));
+    } else if (currentPropsCategory === 'no_polish') {
+      candidates = candidates.filter(o => ['POLISH_ODDS_UNAVAILABLE', 'ODDS_INACTIVE'].includes((o.reason_code || '').toUpperCase()));
+    } else if (currentPropsCategory === 'superbet') {
+      candidates = candidates.filter(o => o.superbet_odds !== null && o.superbet_odds !== undefined && Number(o.superbet_odds) > 1.0);
+    } else if (currentPropsCategory === 'betclic') {
+      candidates = candidates.filter(o => o.betclic_odds !== null && o.betclic_odds !== undefined && Number(o.betclic_odds) > 1.0);
+    } else if (currentPropsCategory === 'player') {
+      candidates = candidates.filter(o => (o.prop_type || '').toUpperCase() === 'PLAYER');
+    } else if (currentPropsCategory === 'team') {
+      candidates = candidates.filter(o => (o.prop_type || '').toUpperCase() === 'TEAM');
+    }
+
+    // 2. Scope Filter (PLAYER | TEAM | ALL)
+    if (scopeVal && scopeVal !== 'ALL') {
+      candidates = candidates.filter(o => (o.prop_type || '').toUpperCase() === scopeVal.toUpperCase());
+    }
+
+    // 3. Search Filter
+    if (searchVal) {
+      candidates = candidates.filter(o => {
+        const fields = [
+          o.player_name, o.team, o.opponent, o.match_name, o.stat_type, o.competition,
+          `${o.side || ''} ${o.line || ''}`, o.best_bookmaker
+        ].map(f => String(f || '').toLowerCase());
+        return fields.some(f => f.includes(searchVal));
+      });
+    }
+
+    // 4. Stat Type Filter
+    if (statVal) {
+      if (statVal.startsWith('player_')) {
+        const pStat = statVal.replace('player_', '').toUpperCase();
+        candidates = candidates.filter(o => (o.prop_type || '').toUpperCase() === 'PLAYER' && (o.stat_type || '').toUpperCase() === pStat);
+      } else if (statVal.startsWith('team_')) {
+        const tStat = statVal.replace('team_', '').toUpperCase();
+        candidates = candidates.filter(o => (o.prop_type || '').toUpperCase() === 'TEAM' && (o.stat_type || '').toUpperCase() === tStat);
+      } else {
+        const targetStat = statVal.toUpperCase();
+        candidates = candidates.filter(o => (o.stat_type || '').toUpperCase() === targetStat);
+      }
+    }
+
+    // 5. Min Net EV Filter (unless discrepancy tab with default)
+    if (!isNaN(minEvVal) && (!isDiscrepancyTab || minEvVal !== 3.0)) {
+      candidates = candidates.filter(o => o.net_ev_pct !== null && o.net_ev_pct !== undefined && Number(o.net_ev_pct) >= minEvVal);
+    }
+
+    // 6. Min Odds Filter
+    if (!isNaN(minOddsVal) && minOddsVal > 1.0) {
+      candidates = candidates.filter(o => {
+        if (bookmakerVal === 'superbet' && o.superbet_odds) return Number(o.superbet_odds) >= minOddsVal;
+        if (bookmakerVal === 'betclic' && o.betclic_odds) return Number(o.betclic_odds) >= minOddsVal;
+        if (o.best_raw_odds && Number(o.best_raw_odds) >= minOddsVal) return true;
+        if (o.superbet_odds && Number(o.superbet_odds) >= minOddsVal) return true;
+        if (o.betclic_odds && Number(o.betclic_odds) >= minOddsVal) return true;
+        return false;
+      });
+    }
+
+    // 7. Tournament / Competition Filter
+    if (tournVal) {
+      candidates = candidates.filter(o => String(o.competition || '').toLowerCase().includes(tournVal));
+    }
+
+    // 8. Position Filter
+    if (posVal && posVal !== 'D,M,F' && posVal !== 'ALL') {
+      if (posVal === 'HOME' || posVal === 'AWAY') {
+        candidates = candidates.filter(o => {
+          const role = (o.participant_role || (o.provenance || {}).target_role || '').toUpperCase();
+          return role === posVal;
+        });
+      } else {
+        candidates = candidates.filter(o => {
+          if ((o.prop_type || '').toUpperCase() === 'TEAM') return false;
+          let p = (o.position || (o.provenance || {}).position || '').toUpperCase();
+          if (p === 'FW' || p === 'FORWARD' || p === 'FORWARDS') p = 'F';
+          if (p === 'MF' || p === 'MIDFIELDER' || p === 'MIDFIELDERS') p = 'M';
+          if (p === 'DF' || p === 'DEFENDER' || p === 'DEFENDERS') p = 'D';
+          return p === posVal;
+        });
+      }
+    }
+
+    // 9. Threshold / Line Filter
+    if (!isNaN(threshVal)) {
+      candidates = candidates.filter(o => o.line !== null && o.line !== undefined && Math.abs(Number(o.line) - threshVal) < 0.05);
+    }
+
+    // 10. Match Status Filter
+    if (matchStatusVal) {
+      const isBoth = (o) => {
+        const sb = Number(o.superbet_odds);
+        const bc = Number(o.betclic_odds);
+        return sb > 1.0 && bc > 1.0;
+      };
+      if (['MATCHED', 'MATCHED_BOTH', 'BOTH', 'MATCHED_BETCLIC_SUPERBET'].includes(matchStatusVal)) {
+        candidates = candidates.filter(isBoth);
+      } else if (['UNMATCHED', 'PARTIAL', 'PARTIAL_UNMATCHED'].includes(matchStatusVal)) {
+        candidates = candidates.filter(o => !isBoth(o));
+      }
+    }
+
+    // 11. Status Filter
+    if (statusVal) {
+      candidates = candidates.filter(o => {
+        const rCode = (o.reason_code || '').toUpperCase();
+        const oStatus = (o.status || '').toUpperCase();
+        const oAction = (o.action || '').toUpperCase();
+        if ([rCode, oStatus, oAction].includes(statusVal)) return true;
+        if (statusVal === 'MATCHING_FAILURE' && ['MATCHING_FAILURE', 'MARKET_UNMATCHED', 'EVENT_UNMATCHED', 'PLAYER_UNMATCHED', 'TEAM_UNMATCHED', 'LINE_MISMATCH', 'SELECTION_MISMATCH', 'MATCH_UNCERTAIN'].includes(rCode)) return true;
+        if (['REFERENCE_GAP', 'INSUFFICIENT_REFERENCE_SOURCES'].includes(statusVal) && ['REFERENCE_GAP', 'INSUFFICIENT_REFERENCE_SOURCES', 'STALE_REFERENCE_DATA'].includes(rCode)) return true;
+        if (statusVal === 'POLISH_ODDS_UNAVAILABLE' && ['POLISH_ODDS_UNAVAILABLE', 'ODDS_INACTIVE'].includes(rCode)) return true;
+        if (['BELOW_THRESHOLD', 'BELOW_VALUE_THRESHOLD'].includes(statusVal) && ['BELOW_THRESHOLD', 'BELOW_VALUE_THRESHOLD'].includes(rCode)) return true;
+        if (statusVal === 'QUALIFIED' && (rCode === 'QUALIFIED' || oStatus === 'QUALIFIED' || o.is_valuebet)) return true;
+        return false;
+      });
+    }
+
+    // 12. Bookmaker Filter
+    if (bookmakerVal) {
+      candidates = candidates.filter(o => {
+        if (String(o.best_bookmaker || '').toLowerCase() === bookmakerVal) return true;
+        if (bookmakerVal === 'superbet' && o.superbet_odds !== null && o.superbet_odds !== undefined) return true;
+        if (bookmakerVal === 'betclic' && o.betclic_odds !== null && o.betclic_odds !== undefined) return true;
+        if (o.execution_odds && typeof o.execution_odds === 'object') {
+          return Object.keys(o.execution_odds).some(k => k.toLowerCase().includes(bookmakerVal));
+        }
+        return false;
+      });
+    }
+
+    // 13. Deterministic Sorting
+    const sortMode = (activeSort || 'net_ev').toLowerCase();
+    candidates.sort((a, b) => {
+      if (sortMode === 'discrepancy_pct' || sortMode === 'discrepancy' || sortMode === 'discrepancy_high') {
+        const aRel = a.relative_price_difference_pct !== null && a.relative_price_difference_pct !== undefined ? Number(a.relative_price_difference_pct) : null;
+        const bRel = b.relative_price_difference_pct !== null && b.relative_price_difference_pct !== undefined ? Number(b.relative_price_difference_pct) : null;
+        const aHas = (aRel !== null && aRel >= 10.0) ? 0 : (aRel !== null ? 1 : 2);
+        const bHas = (bRel !== null && bRel >= 10.0) ? 0 : (bRel !== null ? 1 : 2);
+        if (aHas !== bHas) return aHas - bHas;
+        const aDiffVal = aRel !== null ? aRel : 0;
+        const bDiffVal = bRel !== null ? bRel : 0;
+        if (bDiffVal !== aDiffVal) return bDiffVal - aDiffVal;
+        const aOddsDiff = Number(a.odds_difference || 0);
+        const bOddsDiff = Number(b.odds_difference || 0);
+        if (bOddsDiff !== aOddsDiff) return bOddsDiff - aOddsDiff;
+        const aKey = String(a.canonical_prop_key || a.prop_id || '');
+        const bKey = String(b.canonical_prop_key || b.prop_id || '');
+        return aKey.localeCompare(bKey);
+      } else if (sortMode === 'discrepancy_pct_asc' || sortMode === 'discrepancy_low') {
+        const aRel = a.relative_price_difference_pct !== null && a.relative_price_difference_pct !== undefined ? Number(a.relative_price_difference_pct) : null;
+        const bRel = b.relative_price_difference_pct !== null && b.relative_price_difference_pct !== undefined ? Number(b.relative_price_difference_pct) : null;
+        const aHas = (aRel !== null && aRel >= 10.0) ? 0 : (aRel !== null ? 1 : 2);
+        const bHas = (bRel !== null && bRel >= 10.0) ? 0 : (bRel !== null ? 1 : 2);
+        if (aHas !== bHas) return aHas - bHas;
+        const aDiffVal = aRel !== null ? aRel : 0;
+        const bDiffVal = bRel !== null ? bRel : 0;
+        if (aDiffVal !== bDiffVal) return aDiffVal - bDiffVal;
+        const aOddsDiff = Number(a.odds_difference || 0);
+        const bOddsDiff = Number(b.odds_difference || 0);
+        if (aOddsDiff !== bOddsDiff) return aOddsDiff - bOddsDiff;
+        const aKey = String(a.canonical_prop_key || a.prop_id || '');
+        const bKey = String(b.canonical_prop_key || b.prop_id || '');
+        return aKey.localeCompare(bKey);
+      } else if (sortMode === 'hit_rate') {
+        const aHr = Number(a.hit_rate_pct || 0);
+        const bHr = Number(b.hit_rate_pct || 0);
+        if (bHr !== aHr) return bHr - aHr;
+      } else if (sortMode === 'sample_size') {
+        const aSs = Number(a.trend_window || a.sample_size || 0);
+        const bSs = Number(b.trend_window || b.sample_size || 0);
+        if (bSs !== aSs) return bSs - aSs;
+      } else if (sortMode === 'gross_ev') {
+        const aEv = a.gross_ev_pct !== null && a.gross_ev_pct !== undefined ? Number(a.gross_ev_pct) : -999;
+        const bEv = b.gross_ev_pct !== null && b.gross_ev_pct !== undefined ? Number(b.gross_ev_pct) : -999;
+        if (bEv !== aEv) return bEv - aEv;
+      } else if (sortMode === 'odds') {
+        const aO = Number(a.best_raw_odds || 0);
+        const bO = Number(b.best_raw_odds || 0);
+        if (bO !== aO) return bO - aO;
+      } else if (sortMode === 'name') {
+        const aN = String(a.player_name || a.team || '');
+        const bN = String(b.player_name || b.team || '');
+        return aN.localeCompare(bN);
+      } else {
+        // 'net_ev' default
+        const aEv = a.net_ev_pct !== null && a.net_ev_pct !== undefined ? Number(a.net_ev_pct) : -999;
+        const bEv = b.net_ev_pct !== null && b.net_ev_pct !== undefined ? Number(b.net_ev_pct) : -999;
+        if (bEv !== aEv) return bEv - aEv;
+      }
+      const aKey = String(a.canonical_prop_key || a.prop_id || '');
+      const bKey = String(b.canonical_prop_key || b.prop_id || '');
+      return aKey.localeCompare(bKey);
+    });
+
+    const totalMatching = candidates.length;
+    const paginatedItems = candidates.slice(0, limitVal);
+
+    updatePropsSummaryMetrics(state.playerProps.metadata, state.playerProps.rawUniverse);
+    renderScanDiagnostics(state.playerProps.metadata, state.playerProps.rawUniverse);
+    renderPropsTable(paginatedItems, totalMatching, state.playerProps.funnelMetrics, state.playerProps.rawUniverse.length);
+
+    if (state.playerProps.selectedPropId) {
+      const stillPresent = state.playerProps.rawUniverse.find(i => (i.canonical_prop_key === state.playerProps.selectedPropId || i.prop_id === state.playerProps.selectedPropId));
+      if (stillPresent) {
+        showPropDetail(state.playerProps.selectedPropId);
+      } else {
+        const detailCard = document.getElementById('prop-detail-container');
+        if (detailCard) detailCard.style.display = 'none';
+        state.playerProps.selectedPropId = null;
+      }
+    }
+  }
+
   let _activeResultsRequestId = 0;
 
   async function fetchAndRenderPropsFromBackend() {
@@ -6277,7 +7238,9 @@
       if (sortEl) sortEl.value = 'discrepancy_pct';
     }
 
+    const mode = state.playerProps.scanMode || 'NORMAL';
     const params = {
+      scan_mode: mode,
       view_mode: viewMode,
       limit: limitVal,
       offset: 0,
@@ -6342,6 +7305,7 @@
         const items = scanData.items || (viewMode === 'TOP_VALUE' ? qualified : allCandidates);
         const funnel = scanData.funnel_metrics || {};
 
+        state.playerProps.rawUniverse = allCandidates;
         state.playerProps.results = qualified;
         state.playerProps.diagnosticCandidates = diagnostic;
         state.playerProps.metadata = scanData;

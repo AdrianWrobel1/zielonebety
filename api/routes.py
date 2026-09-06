@@ -328,6 +328,11 @@ class APIRouter:
                 hours_ahead=payload.get("hours_ahead"),
                 event_limit=payload.get("event_limit"),
                 adaptive_mode=payload.get("adaptive_mode"),
+                scan_mode=payload.get("scan_mode"),
+                execute_ultra=payload.get("execute_ultra"),
+                execute_global_props=payload.get("execute_global_props"),
+                scanners=payload.get("scanners"),
+                schedule=payload.get("schedule"),
             )
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             return APIResponse(
@@ -408,6 +413,7 @@ class APIRouter:
         order: str = "desc",
         limit: int = 50,
         offset: int = 0,
+        top_5: bool = False,
     ) -> APIResponse:
         """GET /api/v1/opportunities/explorer — Unified Opportunity Explorer."""
         start = time.perf_counter()
@@ -427,6 +433,7 @@ class APIRouter:
             order=order,
             limit=limit,
             offset=offset,
+            top_5=top_5,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         return APIResponse(
@@ -835,6 +842,7 @@ class APIRouter:
         position: Optional[str] = None,
         threshold: Optional[float] = None,
         match_status: Optional[str] = None,
+        scan_mode: Optional[str] = "NORMAL",
     ) -> APIResponse:
         """GET /api/v1/props/global-results"""
         start = time.perf_counter()
@@ -845,6 +853,7 @@ class APIRouter:
             "min_net_ev": min_net_ev,
             "limit": limit,
             "offset": offset,
+            "scan_mode": scan_mode or "NORMAL",
         }
         if status is not None:
             kwargs["status"] = status

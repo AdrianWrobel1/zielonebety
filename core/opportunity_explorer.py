@@ -108,6 +108,10 @@ class UnifiedOpportunityDTO:
     status: str = "AVAILABLE"
     quality_flags: List[str] = field(default_factory=list)
 
+    # Canonical Competition Metadata & Top 5 Classification
+    canonical_competition_id: Optional[str] = None
+    is_top_5: bool = False
+
     # Lifecycle timestamps
     created_at: Optional[str] = None
     expires_at: Optional[str] = None
@@ -133,6 +137,8 @@ class UnifiedOpportunityDTO:
             "kickoff": self.kickoff,
             "sport": self.sport,
             "competition": self.competition,
+            "canonical_competition_id": self.canonical_competition_id,
+            "is_top_5": self.is_top_5,
             "market": self.market,
             "line": self.line,
             "side": self.side,
@@ -184,6 +190,35 @@ class ExplorerResponse:
 
 class OpportunityExplorerAdapter:
     """Pure translation layer adapting disparate engine domain models into UnifiedOpportunityDTO."""
+
+    @staticmethod
+    def _resolve_competition_metadata(
+        raw_comp: Optional[str] = None,
+        home_team: Optional[str] = None,
+        away_team: Optional[str] = None,
+        provider_ids: Optional[Dict[str, str]] = None,
+        existing_can_id: Optional[str] = None,
+        explicit_is_top_5: Optional[bool] = None,
+    ) -> Tuple[Optional[str], Optional[str], bool]:
+        """Resolves canonical competition ID, display name, and Top 5 status."""
+        from normalization.competitions import resolve_canonical_competition, TOP_5_LEAGUE_IDS_SET
+
+        if explicit_is_top_5 is not None and existing_can_id:
+            return existing_can_id, raw_comp, explicit_is_top_5
+
+        if existing_can_id and existing_can_id in TOP_5_LEAGUE_IDS_SET:
+            return existing_can_id, raw_comp, True
+
+        target = existing_can_id or raw_comp
+        res = resolve_canonical_competition(
+            raw_name=target,
+            home_team=home_team,
+            away_team=away_team,
+            provider_ids=provider_ids,
+        )
+        is_top5 = res.canonical_id in TOP_5_LEAGUE_IDS_SET
+        display_name = raw_comp or res.canonical_name
+        return res.canonical_id, display_name, is_top5
 
     @staticmethod
     def from_player_prop(prop: Dict[str, Any]) -> UnifiedOpportunityDTO:
@@ -297,6 +332,14 @@ class OpportunityExplorerAdapter:
         if disc_details:
             details_dict["discrepancy"] = disc_details
 
+        can_comp_id, comp_name, is_top5 = OpportunityExplorerAdapter._resolve_competition_metadata(
+            raw_comp=prop.get("competition"),
+            home_team=prop.get("team"),
+            away_team=prop.get("opponent"),
+            existing_can_id=prop.get("canonical_competition_id") or prop.get("competition_id"),
+            explicit_is_top_5=prop.get("is_top_5"),
+        )
+
         return UnifiedOpportunityDTO(
             id=str(prop.get("prop_id") or prop.get("canonical_prop_key") or "prop_unknown"),
             type=dto_type,
@@ -307,7 +350,9 @@ class OpportunityExplorerAdapter:
             event=prop.get("fixture") or prop.get("match_name"),
             kickoff=prop.get("kickoff"),
             sport="football",
-            competition=prop.get("competition"),
+            competition=comp_name,
+            canonical_competition_id=can_comp_id,
+            is_top_5=is_top5,
             market=prop.get("market") or prop.get("stat_type") or prop.get("canonical_market_key"),
             line=float(prop["line"]) if prop.get("line") is not None else None,
             side=str(prop.get("side", "OVER")).upper(),
@@ -371,13 +416,96 @@ class OpportunityExplorerAdapter:
                 and (net_ev is None or float(net_ev) > 0.0))
         )
 
+        # Check Polish Bookmaker Price Discrepancy
+        disc_details = prop.get("discrepancy_details") or prop.get("discrepancy")
+        is_disc = bool(
+            prop.get("is_discrepancy")
+            or (disc_details and disc_details.get("is_discrepancy"))
+            or (prop.get("relative_price_difference_pct") is not None and float(prop["relative_price_difference_pct"]) >= 10.0)
+        )
+        odds_diff = prop.get("odds_difference")
+        rel_diff_pct = prop.get("relative_price_difference_pct")
+        lower_odds = prop.get("lower_executable_odds")
+        lower_bm = prop.get("lower_executable_bookmaker")
+
+        if disc_details:
+            if odds_diff is None:
+                odds_diff = disc_details.get("odds_difference")
+            if rel_diff_pct is None:
+                rel_diff_pct = disc_details.get("relative_price_difference_pct")
+            if lower_odds is None:
+                lower_odds = disc_details.get("lower_odds")
+            if lower_bm is None:
+                lower_bm = disc_details.get("lower_bookmaker")
+
+        # Fallback check on exec_odds_dict if not already evaluated
+        if not is_disc and isinstance(exec_odds_dict, dict) and len(exec_odds_dict) >= 2:
+            extracted_prices = []
+            for b_name, b_val in exec_odds_dict.items():
+                price = None
+                if isinstance(b_val, dict):
+                    price = b_val.get("decimal_odds") or b_val.get("odds")
+                elif isinstance(b_val, (int, float)):
+                    price = b_val
+                if price is not None:
+                    try:
+                        p_flt = float(price)
+                        if p_flt > 1.0:
+                            extracted_prices.append((b_name, p_flt))
+                    except (ValueError, TypeError):
+                        pass
+
+            if len(extracted_prices) >= 2:
+                extracted_prices.sort(key=lambda x: x[1], reverse=True)
+                high_bm, high_price = extracted_prices[0]
+                low_bm, low_price = extracted_prices[-1]
+                calc_rel_diff = round(((high_price / low_price) - 1.0) * 100.0, 2)
+                if calc_rel_diff >= 10.0:
+                    is_disc = True
+                    rel_diff_pct = calc_rel_diff
+                    odds_diff = round(high_price - low_price, 4)
+                    lower_odds = low_price
+                    lower_bm = low_bm
+                    disc_details = {
+                        "is_discrepancy": True,
+                        "threshold_pct": 10.0,
+                        "best_bookmaker": high_bm,
+                        "best_odds": high_price,
+                        "lower_bookmaker": low_bm,
+                        "lower_odds": low_price,
+                        "odds_difference": odds_diff,
+                        "relative_price_difference_pct": rel_diff_pct,
+                        "implied_prob_best_pct": round((1.0 / high_price) * 100.0, 2),
+                        "implied_prob_lower_pct": round((1.0 / low_price) * 100.0, 2),
+                        "implied_prob_diff_pp": round(((1.0 / low_price) - (1.0 / high_price)) * 100.0, 2),
+                        "is_surebet": False,
+                        "is_guaranteed_profit": False,
+                        "note": "Polish bookmaker price discrepancy on identical canonical outcome.",
+                    }
+
+        dto_type = OpportunityType.QUOTE_DISCREPANCY.value if is_disc else OpportunityType.TEAM_PROP.value
+
         status_str = str(prop.get("actionability") or prop.get("execution_status") or prop.get("status") or "REFERENCE_ONLY")
-        if is_val and status_str in ("BETTABLE", "AVAILABLE"):
+        if is_disc and status_str in ("AVAILABLE", "BETTABLE"):
+            status_str = "BETTABLE"
+        elif is_val and status_str in ("BETTABLE", "AVAILABLE"):
             status_str = "VALUEBET"
+
+        details_dict = dict(prop)
+        if disc_details:
+            details_dict["discrepancy"] = disc_details
+
+        can_comp_id, comp_name, is_top5 = OpportunityExplorerAdapter._resolve_competition_metadata(
+            raw_comp=prop.get("competition"),
+            home_team=prop.get("team") or prop.get("team_name"),
+            away_team=prop.get("opponent") or prop.get("opponent_name"),
+            existing_can_id=prop.get("canonical_competition_id") or prop.get("competition_id"),
+            explicit_is_top_5=prop.get("is_top_5"),
+        )
 
         return UnifiedOpportunityDTO(
             id=str(prop.get("prop_id") or prop.get("canonical_prop_key") or "team_prop_unknown"),
-            type=OpportunityType.TEAM_PROP.value,
+            type=dto_type,
             source="statshub_team",
             player=None,
             team=prop.get("team") or prop.get("team_name"),
@@ -385,7 +513,9 @@ class OpportunityExplorerAdapter:
             event=prop.get("fixture") or prop.get("match_name"),
             kickoff=prop.get("kickoff"),
             sport="football",
-            competition=prop.get("competition"),
+            competition=comp_name,
+            canonical_competition_id=can_comp_id,
+            is_top_5=is_top5,
             market=prop.get("market") or prop.get("stat_type") or prop.get("canonical_market_key"),
             line=float(prop["line"]) if prop.get("line") is not None else None,
             side=str(prop.get("side", "OVER")).upper(),
@@ -401,12 +531,16 @@ class OpportunityExplorerAdapter:
             model_probability_pct=float(model_p_pct) if model_p_pct is not None else None,
             value_edge_pp=float(val_edge_pp) if val_edge_pp is not None else None,
             is_valuebet=is_val,
+            price_discrepancy_pct=float(rel_diff_pct) if rel_diff_pct is not None else None,
+            odds_difference=float(odds_diff) if odds_diff is not None else None,
+            lower_execution_odds=float(lower_odds) if lower_odds is not None else None,
+            lower_bookmaker=lower_bm,
             score=float(prop["score"]) if prop.get("score") is not None else None,
             status=status_str,
             quality_flags=list(prop.get("data_quality_flags") or []),
             created_at=prop.get("created_at") or prop.get("detected_at"),
             expires_at=None,
-            details=prop,
+            details=details_dict,
         )
 
     @staticmethod
@@ -414,6 +548,7 @@ class OpportunityExplorerAdapter:
         event: Dict[str, Any],
         market: Dict[str, Any],
         selection: Dict[str, Any],
+        discrepancy_threshold_pct: float = 10.0,
     ) -> UnifiedOpportunityDTO:
         """Adapts a matched Team Prop market selection from scan results into UnifiedOpportunityDTO."""
         home = event.get("home_team") or ""
@@ -436,16 +571,104 @@ class OpportunityExplorerAdapter:
 
         odds_map = selection.get("odds") or {}
         books = list(odds_map.keys()) if isinstance(odds_map, dict) else list(market.get("participating_bookmakers") or [])
-        best_o = selection.get("best_odds") or {}
-        best_bm = best_o.get("bookmaker") or (books[0] if books else None)
-        exec_odds = float(best_o.get("odds")) if best_o.get("odds") else (float(odds_map[best_bm]) if best_bm and best_bm in odds_map else None)
 
-        status_str = "AVAILABLE" if exec_odds is not None else "NO_EXECUTION_ODDS"
+        # Parse quotes and detect discrepancy
+        valid_quotes = []
+        if isinstance(odds_map, dict):
+            for b, o in odds_map.items():
+                try:
+                    ov = float(o)
+                    if ov > 1.0:
+                        valid_quotes.append((b, ov))
+                except (ValueError, TypeError):
+                    continue
+
+        best_bm = None
+        best_odds = None
+        lower_bm = None
+        lower_odds = None
+        odds_diff = None
+        rel_diff_pct = None
+        is_discrepancy = False
+        discrepancy_details = None
+
+        if valid_quotes:
+            valid_quotes.sort(key=lambda x: x[1], reverse=True)
+            best_bm, best_odds = valid_quotes[0]
+            if len(valid_quotes) >= 2:
+                lower_bm, lower_odds = valid_quotes[-1]
+                odds_diff = round(best_odds - lower_odds, 4)
+                rel_diff_pct = round(((best_odds / lower_odds) - 1.0) * 100.0, 2)
+
+                imp_prob_best = round((1.0 / best_odds) * 100.0, 2)
+                imp_prob_lower = round((1.0 / lower_odds) * 100.0, 2)
+                prob_diff_pp = round(imp_prob_lower - imp_prob_best, 2)
+
+                if rel_diff_pct >= discrepancy_threshold_pct:
+                    is_discrepancy = True
+
+                discrepancy_details = {
+                    "is_discrepancy": is_discrepancy,
+                    "threshold_pct": discrepancy_threshold_pct,
+                    "best_bookmaker": best_bm,
+                    "best_odds": best_odds,
+                    "lower_bookmaker": lower_bm,
+                    "lower_odds": lower_odds,
+                    "odds_difference": odds_diff,
+                    "relative_price_difference_pct": rel_diff_pct,
+                    "implied_prob_best_pct": imp_prob_best,
+                    "implied_prob_lower_pct": imp_prob_lower,
+                    "implied_prob_diff_pp": prob_diff_pp,
+                    "is_surebet": False,
+                    "is_guaranteed_profit": False,
+                    "note": "Polish bookmaker price discrepancy on identical canonical outcome.",
+                }
+        else:
+            best_o = selection.get("best_odds") or {}
+            best_bm = best_o.get("bookmaker") or (books[0] if books else None)
+            best_odds = float(best_o.get("odds")) if best_o.get("odds") else (float(odds_map[best_bm]) if best_bm and best_bm in odds_map else None)
+
+        status_str = "AVAILABLE" if best_odds is not None else "NO_EXECUTION_ODDS"
+        dto_type = OpportunityType.QUOTE_DISCREPANCY.value if is_discrepancy else OpportunityType.QUOTE_COMPARISON.value
         can_id = f"ctp_scan_{event.get('id') or event.get('canonical_event_id')}_{team}_{m_type}_{line}_{side}"
+
+        details_dict = {
+            "event": {
+                "id": event.get("id") or event.get("canonical_event_id"),
+                "home_team": home,
+                "away_team": away,
+                "competition": event.get("competition"),
+                "kickoff": event.get("kickoff"),
+                "sport": event.get("sport", "football"),
+            },
+            "market": {
+                "market_type": m_type,
+                "line": line,
+                "period": market.get("period", "FULL_TIME"),
+                "scope": market.get("scope", "TEAM"),
+            },
+            "selection": {
+                "participant": team,
+                "selection_type": side,
+                "line": line,
+                "odds": odds_map,
+                "best_odds": {"bookmaker": best_bm, "odds": best_odds} if best_bm else {},
+            },
+        }
+        if discrepancy_details:
+            details_dict["discrepancy"] = discrepancy_details
+
+        can_comp_id, comp_name, is_top5 = OpportunityExplorerAdapter._resolve_competition_metadata(
+            raw_comp=event.get("competition"),
+            home_team=home,
+            away_team=away,
+            existing_can_id=event.get("canonical_competition_id") or event.get("competition_id"),
+            explicit_is_top_5=event.get("is_top_5"),
+        )
 
         return UnifiedOpportunityDTO(
             id=can_id,
-            type=OpportunityType.QUOTE_COMPARISON.value,
+            type=dto_type,
             source="scanner",
             player=None,
             team=team,
@@ -453,12 +676,14 @@ class OpportunityExplorerAdapter:
             event=ev_name,
             kickoff=event.get("kickoff"),
             sport=event.get("sport", "football"),
-            competition=event.get("competition"),
+            competition=comp_name,
+            canonical_competition_id=can_comp_id,
+            is_top_5=is_top5,
             market=m_type,
             line=float(line) if line is not None else None,
             side=side,
             reference_odds=None,
-            execution_odds=exec_odds,
+            execution_odds=best_odds,
             best_bookmaker=best_bm,
             all_bookmakers=books,
             statistical_edge_pct=None,
@@ -469,32 +694,14 @@ class OpportunityExplorerAdapter:
             model_probability_pct=None,
             value_edge_pp=None,
             is_valuebet=False,
+            price_discrepancy_pct=float(rel_diff_pct) if rel_diff_pct is not None else None,
+            odds_difference=float(odds_diff) if odds_diff is not None else None,
+            lower_execution_odds=float(lower_odds) if lower_odds is not None else None,
+            lower_bookmaker=lower_bm,
             score=None,
             status=status_str,
             quality_flags=[],
-            details={
-                "event": {
-                    "id": event.get("id") or event.get("canonical_event_id"),
-                    "home_team": home,
-                    "away_team": away,
-                    "competition": event.get("competition"),
-                    "kickoff": event.get("kickoff"),
-                    "sport": event.get("sport", "football"),
-                },
-                "market": {
-                    "market_type": m_type,
-                    "line": line,
-                    "period": market.get("period", "FULL_TIME"),
-                    "scope": market.get("scope", "TEAM"),
-                },
-                "selection": {
-                    "participant": team,
-                    "selection_type": side,
-                    "line": line,
-                    "odds": odds_map,
-                    "best_odds": best_o,
-                },
-            },
+            details=details_dict,
         )
 
     @staticmethod
@@ -580,6 +787,14 @@ class OpportunityExplorerAdapter:
         p_slug = player_name.replace(" ", "_") if player_name else "prop"
         can_id = f"cpp_scan_{event.get('id') or event.get('canonical_event_id')}_{p_slug}_{m_type}_{line}_{side}"
 
+        can_comp_id, comp_name, is_top5 = OpportunityExplorerAdapter._resolve_competition_metadata(
+            raw_comp=event.get("competition"),
+            home_team=home,
+            away_team=away,
+            existing_can_id=event.get("canonical_competition_id") or event.get("competition_id"),
+            explicit_is_top_5=event.get("is_top_5"),
+        )
+
         return UnifiedOpportunityDTO(
             id=can_id,
             type=opp_type,
@@ -590,7 +805,9 @@ class OpportunityExplorerAdapter:
             event=ev_name,
             kickoff=event.get("kickoff"),
             sport=event.get("sport", "football"),
-            competition=event.get("competition"),
+            competition=comp_name,
+            canonical_competition_id=can_comp_id,
+            is_top_5=is_top5,
             market=m_type,
             line=float(line) if line is not None else None,
             side=side,
@@ -677,6 +894,14 @@ class OpportunityExplorerAdapter:
             else:
                 is_q = bool(val_pct and float(val_pct) > 0.0)
 
+        can_comp_id, comp_name, is_top5 = OpportunityExplorerAdapter._resolve_competition_metadata(
+            raw_comp=val.get("competition_name") or val.get("competition"),
+            home_team=home,
+            away_team=away,
+            existing_can_id=val.get("canonical_competition_id") or (ev_data.get("canonical_competition_id") if isinstance(ev_data, dict) else getattr(ev_data, "canonical_competition_id", None)),
+            explicit_is_top_5=val.get("is_top_5"),
+        )
+
         return UnifiedOpportunityDTO(
             id=str(val.get("candidate_id") or val.get("opportunity_id") or val.get("id") or "vbc_unknown"),
             type=val_type,
@@ -687,7 +912,9 @@ class OpportunityExplorerAdapter:
             event=ev_name,
             kickoff=val.get("kickoff"),
             sport=val.get("sport", "football"),
-            competition=val.get("competition_name") or val.get("competition"),
+            competition=comp_name,
+            canonical_competition_id=can_comp_id,
+            is_top_5=is_top5,
             market=mkt_name,
             line=float(line_val) if line_val is not None else None,
             side=str(val.get("selection_type", "")).upper() if val.get("selection_type") else None,
@@ -756,6 +983,14 @@ class OpportunityExplorerAdapter:
         # Side for first leg if available
         first_side = str(legs[0].get("selection_type", "")).upper() if legs and legs[0].get("selection_type") else None
 
+        can_comp_id, comp_name, is_top5 = OpportunityExplorerAdapter._resolve_competition_metadata(
+            raw_comp=sb.get("competition"),
+            home_team=team_entity,
+            away_team=opponent_entity,
+            existing_can_id=sb.get("canonical_competition_id") or (ev_data.get("canonical_competition_id") if isinstance(ev_data, dict) else getattr(ev_data, "canonical_competition_id", None)),
+            explicit_is_top_5=sb.get("is_top_5"),
+        )
+
         return UnifiedOpportunityDTO(
             id=str(sb.get("opportunity_id") or sb.get("id") or "sb_unknown"),
             type=opp_type,
@@ -766,7 +1001,9 @@ class OpportunityExplorerAdapter:
             event=ev_name,
             kickoff=sb.get("kickoff"),
             sport=sb.get("sport", "football"),
-            competition=sb.get("competition"),
+            competition=comp_name,
+            canonical_competition_id=can_comp_id,
+            is_top_5=is_top5,
             market=mkt_name,
             line=float(line_val) if line_val is not None else None,
             side=first_side,
@@ -793,6 +1030,14 @@ class OpportunityExplorerAdapter:
     @staticmethod
     def from_booster(b: Dict[str, Any]) -> UnifiedOpportunityDTO:
         """Adapts an enhanced odds booster into UnifiedOpportunityDTO."""
+        can_comp_id, comp_name, is_top5 = OpportunityExplorerAdapter._resolve_competition_metadata(
+            raw_comp=b.get("competition"),
+            home_team=b.get("team"),
+            away_team=b.get("opponent"),
+            existing_can_id=b.get("canonical_competition_id"),
+            explicit_is_top_5=b.get("is_top_5"),
+        )
+
         return UnifiedOpportunityDTO(
             id=str(b.get("booster_id") or b.get("id") or "booster_unknown"),
             type=OpportunityType.BOOSTER.value,
@@ -803,7 +1048,9 @@ class OpportunityExplorerAdapter:
             event=b.get("event"),
             kickoff=b.get("kickoff"),
             sport=b.get("sport", "football"),
-            competition=b.get("competition"),
+            competition=comp_name,
+            canonical_competition_id=can_comp_id,
+            is_top_5=is_top5,
             market=b.get("market"),
             line=float(b["line"]) if b.get("line") is not None else None,
             side=b.get("side"),
@@ -897,6 +1144,14 @@ class OpportunityExplorerAdapter:
         fair_odds_val = float(fair_odds) if fair_odds is not None else None
         model_prob = round(100.0 / fair_odds_val, 1) if (fair_odds_val and fair_odds_val > 0) else None
 
+        can_comp_id, comp_name, is_top5 = OpportunityExplorerAdapter._resolve_competition_metadata(
+            raw_comp=d.get("competition"),
+            home_team=home,
+            away_team=away,
+            existing_can_id=d.get("canonical_competition_id"),
+            explicit_is_top_5=d.get("is_top_5"),
+        )
+
         return UnifiedOpportunityDTO(
             id=str(d.get("opportunity_id") or "ultra_unknown"),
             type=dto_type,
@@ -907,7 +1162,9 @@ class OpportunityExplorerAdapter:
             event=match_name,
             kickoff=d.get("kickoff"),
             sport="football",
-            competition=d.get("competition"),
+            competition=comp_name,
+            canonical_competition_id=can_comp_id,
+            is_top_5=is_top5,
             market=d.get("market_display"),
             line=line_val,
             side=d.get("selection_display"),

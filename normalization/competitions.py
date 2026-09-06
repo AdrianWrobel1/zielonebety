@@ -636,6 +636,16 @@ COMPETITION_DEFINITIONS: Tuple[CanonicalCompetitionDefinition, ...] = (
 )
 
 
+TOP_5_LEAGUE_CANONICAL_IDS: Tuple[str, ...] = (
+    "comp_eng_pl",
+    "comp_esp_laliga",
+    "comp_ita_serie_a",
+    "comp_ger_bundesliga",
+    "comp_fra_ligue_1",
+)
+TOP_5_LEAGUE_IDS_SET: Set[str] = set(TOP_5_LEAGUE_CANONICAL_IDS)
+
+
 @dataclass
 class CanonicalCompetitionResolution:
     """Detailed result of a competition resolution query."""
@@ -759,6 +769,21 @@ class CanonicalCompetitionRegistry:
 
         # 2. Authoritative string alias matching if not generic
         if not is_generic_raw:
+            # Check canonical ID table first
+            if raw_str in self._id_map or clean_raw in self._id_map:
+                defn = self._id_map.get(raw_str) or self._id_map[clean_raw]
+                return CanonicalCompetitionResolution(
+                    canonical_id=defn.canonical_id,
+                    canonical_name=defn.canonical_name,
+                    country=defn.country,
+                    competition_type=defn.competition_type,
+                    tier=defn.tier,
+                    provenance="PROVIDER_METADATA",
+                    confidence=1.0,
+                    matched_by="CANONICAL_ID",
+                    original_input=raw_name,
+                )
+
             # Check direct alias table
             if clean_raw in self._alias_map:
                 defn = self._alias_map[clean_raw]
@@ -936,3 +961,34 @@ def resolve_canonical_competition(
         provider_ids=provider_ids,
         country=country,
     )
+
+
+def is_top_5_league(
+    raw_name: Optional[str] = None,
+    home_team: Optional[str] = None,
+    away_team: Optional[str] = None,
+    provider_ids: Optional[Dict[str, str]] = None,
+    canonical_id: Optional[str] = None,
+) -> bool:
+    """Deterministically checks if a competition or match belongs to the canonical Top 5 football leagues.
+
+    Canonical Top 5 European Leagues:
+    - Premier League (comp_eng_pl)
+    - La Liga (comp_esp_laliga)
+    - Serie A (comp_ita_serie_a)
+    - Bundesliga (comp_ger_bundesliga)
+    - Ligue 1 (comp_fra_ligue_1)
+    """
+    if canonical_id and canonical_id in TOP_5_LEAGUE_IDS_SET:
+        return True
+    target = canonical_id or raw_name
+    if not target and not home_team and not away_team and not provider_ids:
+        return False
+    res = resolve_canonical_competition(
+        raw_name=target,
+        home_team=home_team,
+        away_team=away_team,
+        provider_ids=provider_ids,
+    )
+    return res.canonical_id in TOP_5_LEAGUE_IDS_SET
+

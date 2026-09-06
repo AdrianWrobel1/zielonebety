@@ -87,16 +87,71 @@ class StatsHubTeamPropsProvider(BaseProvider):
             return [self._raw_mock_payload] if isinstance(self._raw_mock_payload, dict) else self._raw_mock_payload
 
         if self.statshub_config.mode == "team_trends":
-            try:
-                raw_data = self.client.fetch_team_trends(
-                    games=self.statshub_config.games,
-                    config_override=self.statshub_config,
-                )
-                return [raw_data] if isinstance(raw_data, dict) else raw_data
-            except Exception as e:
-                self.context.logger.error(f"StatsHub team trends fetch failed: {e}")
-                self.errors.append(str(e))
-                return []
+            if not self.statshub_config.auto_paginate:
+                try:
+                    raw_data = self.client.fetch_team_trends(
+                        games=self.statshub_config.games,
+                        config_override=self.statshub_config,
+                    )
+                    return [raw_data] if isinstance(raw_data, dict) else raw_data
+                except Exception as e:
+                    self.context.logger.error(f"StatsHub team trends fetch failed: {e}")
+                    self.errors.append(str(e))
+                    return []
+
+            # Multi-page team trends acquisition loop
+            all_payloads: List[Any] = []
+            current_page = 1
+            max_pages = max(1, self.statshub_config.max_pages)
+            max_results = max(1, self.statshub_config.max_prop_results)
+            collected_count = 0
+            truncated = False
+
+            while current_page <= max_pages:
+                try:
+                    page_cfg = StatsHubConfig(**{k: v for k, v in self.statshub_config.__dict__.items() if k != "page"})
+                    page_cfg.page = current_page
+                    raw_page = self.client.fetch_team_trends(
+                        games=page_cfg.games,
+                        config_override=page_cfg,
+                        page=current_page,
+                    )
+                    if not raw_page:
+                        break
+
+                    all_payloads.append(raw_page)
+                    self.acquisition_metrics["pages_fetched"] = current_page
+
+                    pagination = raw_page.get("pagination", {}) if isinstance(raw_page, dict) else {}
+                    total_in_source = pagination.get("total") or 0
+                    if total_in_source > 0:
+                        self.acquisition_metrics["source_total"] = total_in_source
+
+                    items = []
+                    if isinstance(raw_page, dict):
+                        items = raw_page.get("teams") or raw_page.get("data") or raw_page.get("items") or []
+                    elif isinstance(raw_page, list):
+                        items = raw_page
+                    items_len = len(items)
+                    collected_count += items_len
+
+                    total_pages = pagination.get("totalPages") or 1
+                    if current_page >= total_pages or items_len == 0:
+                        break
+
+                    if collected_count >= max_results:
+                        truncated = True
+                        self.context.logger.info(f"StatsHub team trends reached max limit ({max_results}). Stopping pagination.")
+                        break
+
+                    current_page += 1
+                except Exception as e:
+                    self.context.logger.error(f"StatsHub team trends fetch failed on page {current_page}: {e}")
+                    self.errors.append(f"Page {current_page} error: {str(e)}")
+                    break
+
+            self.acquisition_metrics["truncated"] = truncated
+            return all_payloads
 
         if not self.statshub_config.auto_paginate:
             try:

@@ -2979,6 +2979,15 @@ class PlatformAPIService:
             self._events_summary_cache = list(serialized.get("events", []))
             self._events_cache = dict(serialized.get("_events_detail_map", {}))
 
+            # Preserve NormalizedGraph objects from scan cycle for direct reuse by GlobalPropsScanner
+            cached_graphs = []
+            if hasattr(scan_cycle_result, "normalization_results") and isinstance(scan_cycle_result.normalization_results, dict):
+                for nr in scan_cycle_result.normalization_results.values():
+                    if hasattr(nr, "normalized_graphs") and nr.normalized_graphs:
+                        cached_graphs.extend(nr.normalized_graphs)
+            self._cached_normalized_graphs = cached_graphs
+            PlatformAPIService._unified_opportunities_cache = None
+
             # Persist scan cycle summary to database
             if self.db_manager is not None:
                 _save_scan_snapshot(self.db_manager, execution_id=serialized["execution_id"], serialized_result=serialized)
@@ -3113,6 +3122,7 @@ class PlatformAPIService:
             self._events_cache = dict(events_detail_map)
 
             self._last_ultra_scan_result = serialized
+            PlatformAPIService._unified_opportunities_cache = None
 
             # Persist ULTRA SCAN result snapshot into database
             if self.db_manager is not None:
@@ -3283,6 +3293,11 @@ class PlatformAPIService:
         hours_ahead: Optional[int] = None,
         event_limit: Optional[int] = None,
         adaptive_mode: Optional[bool] = None,
+        scan_mode: Optional[str] = None,
+        execute_ultra: Optional[bool] = None,
+        execute_global_props: Optional[bool] = None,
+        scanners: Optional[Any] = None,
+        schedule: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Apply scheduler configuration update and return new status."""
         self.scheduler.configure(
@@ -3292,6 +3307,11 @@ class PlatformAPIService:
             hours_ahead=hours_ahead,
             event_limit=event_limit,
             adaptive_mode=adaptive_mode,
+            scan_mode=scan_mode,
+            execute_ultra=execute_ultra,
+            execute_global_props=execute_global_props,
+            scanners=scanners,
+            schedule=schedule,
         )
         return self.scheduler.get_status()
 
@@ -3623,6 +3643,7 @@ class PlatformAPIService:
         order: str = "desc",
         limit: int = 50,
         offset: int = 0,
+        top_5: bool = False,
     ) -> Dict[str, Any]:
         """Aggregates Player Props, Valuebets, Surebets, Boosters, and Team Props into unified DTOs."""
         from core.opportunity_explorer import (
@@ -3635,10 +3656,15 @@ class PlatformAPIService:
         counts_by_type: Dict[str, int] = {t.value: 0 for t in OpportunityType}
         counts_by_status: Dict[str, int] = {}
 
-        if getattr(self, "_unified_opportunities_cache", None) is not None:
-            unified_items = list(self._unified_opportunities_cache)
+        cached = getattr(self, "_unified_opportunities_cache", None)
+        if cached is None:
+            cached = PlatformAPIService._unified_opportunities_cache
+        if cached is not None:
+            unified_items = list(cached)
         else:
             unified_items = self._collect_unified_explorer_opportunities()
+            PlatformAPIService._unified_opportunities_cache = list(unified_items)
+            self._unified_opportunities_cache = list(unified_items)
 
         # Update raw type counts before filtering
         for item in unified_items:
@@ -3710,10 +3736,31 @@ class PlatformAPIService:
                 if edge_val is None or edge_val < min_ev:
                     continue
 
+            # Top 5 Leagues filter
+            if top_5:
+                if not getattr(item, "is_top_5", False):
+                    continue
+
             filtered.append(item)
 
         # 5. Deterministic Sort
+        is_disc_sort = (
+            sort in ("discrepancy", "discrepancy_pct", "discrepancy_high", "discrepancy_low")
+            or (opp_type and opp_type.upper() == "QUOTE_DISCREPANCY" and sort in ("ev", "net_ev", "score"))
+        )
+
         def sort_key(dto: UnifiedOpportunityDTO):
+            if is_disc_sort:
+                disc_pct = dto.price_discrepancy_pct
+                # Tier 1: Flag presence (0 = qualifies >= 10%, 1 = has some pct < 10%, 2 = None)
+                has_tier = 0 if (disc_pct is not None and disc_pct >= 10.0) else (1 if disc_pct is not None else 2)
+                disc_val = float(disc_pct) if disc_pct is not None else 0.0
+                odds_diff = float(dto.odds_difference) if dto.odds_difference is not None else 0.0
+                if order.lower() == "asc":
+                    return (has_tier, disc_val, odds_diff, dto.id)
+                else:
+                    return (has_tier, -disc_val, -odds_diff, dto.id)
+
             reverse_mult = -1 if order.lower() == "desc" else 1
             if sort == "execution_edge":
                 val = dto.execution_edge_pct if dto.execution_edge_pct is not None else -999.0
@@ -3770,6 +3817,7 @@ class PlatformAPIService:
                     "min_score": min_score,
                     "min_execution_edge": min_execution_edge,
                     "min_ev": min_ev,
+                    "top_5": top_5,
                 }
             }
         }
@@ -6783,6 +6831,8 @@ class PlatformAPIService:
         }
 
     _cached_global_props_results: Optional[Dict[str, Any]] = None
+    _cached_global_props_ultra_results: Optional[Dict[str, Any]] = None
+    _unified_opportunities_cache: Optional[List[Any]] = None
 
     def scan_global_props(self, scope_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Executes a bounded global props scan across Player Props and Team Props for multiple fixtures."""
@@ -6793,6 +6843,9 @@ class PlatformAPIService:
         )
 
         params = scope_params or {}
+        scan_mode = str(params.get("scan_mode") or "NORMAL").upper()
+        is_ultra = (scan_mode == "ULTRA")
+
         time_horizon = int(params.get("time_horizon_days") or params.get("days_ahead") or 7)
         tournaments = params.get("tournaments")
         if isinstance(tournaments, str) and tournaments:
@@ -6810,9 +6863,11 @@ class PlatformAPIService:
         min_ev_val = params.get("min_ev_percent") if params.get("min_ev_percent") is not None else (params.get("min_ev_threshold") if params.get("min_ev_threshold") is not None else 3.0)
         min_ev_pct = float(min_ev_val)
         max_results = int(params.get("max_results") or params.get("limit") or 50)
-        max_fixtures = int(params.get("max_fixtures") or 30)
-        max_trends = int(params.get("max_trends_requests") or 10)
-        max_exec = int(params.get("max_execution_events") or 20)
+        max_fixtures = int(params.get("max_fixtures") or (60 if is_ultra else 30))
+        max_trends = int(params.get("max_trends_requests") or (60 if is_ultra else 20))
+        max_exec = int(params.get("max_execution_events") or (60 if is_ultra else 20))
+        auto_paginate = bool(params.get("auto_paginate", True if is_ultra else False))
+        max_prop_results_per_stat = int(params.get("max_prop_results_per_stat", 2000 if is_ultra else 500))
 
         scope = GlobalScanScope(
             time_horizon_days=time_horizon,
@@ -6825,14 +6880,16 @@ class PlatformAPIService:
             start_of_day=int(params["start_of_day"]) if "start_of_day" in params and params["start_of_day"] else None,
             end_of_day=int(params["end_of_day"]) if "end_of_day" in params and params["end_of_day"] else None,
             fixture_ids=str(params["fixture_ids"]) if "fixture_ids" in params and params["fixture_ids"] else None,
+            scan_mode=scan_mode,
         )
 
         budget = GlobalScanBudget(
             max_fixtures=max_fixtures,
             max_trends_requests=max_trends,
             max_execution_events=max_exec,
-            auto_paginate_statshub=bool(params.get("auto_paginate", True)),
-            max_prop_results_per_stat=int(params.get("max_prop_results_per_stat", 500)),
+            auto_paginate_statshub=auto_paginate,
+            max_prop_results_per_stat=max_prop_results_per_stat,
+            scan_mode=scan_mode,
         )
 
         from normalization.base_normalizer import NormalizedGraph
@@ -6850,7 +6907,9 @@ class PlatformAPIService:
                 logger.warning(f"Could not initialize PlayerShotsSnapshotRecorder for global scan: {rec_err}")
 
         try:
-            cached_graphs = list(self._events_cache.values()) if hasattr(self, "_events_cache") and self._events_cache else []
+            cached_graphs = getattr(self, "_cached_normalized_graphs", None)
+            if not cached_graphs:
+                cached_graphs = [g for g in self._events_cache.values() if isinstance(g, NormalizedGraph)] if hasattr(self, "_events_cache") and self._events_cache else []
             scanner = GlobalPropsScanner(
                 cached_execution_events=cached_graphs if isinstance(cached_graphs, list) and cached_graphs and isinstance(cached_graphs[0], NormalizedGraph) else [],
                 snapshot_recorder=recorder,
@@ -6858,8 +6917,12 @@ class PlatformAPIService:
 
             scan_result = scanner.execute_scan(scope=scope, budget=budget)
             res_dict = scan_result.to_dict()
+            res_dict["scan_mode"] = scan_mode
             res_dict["total_qualified_matching_filter"] = res_dict.get("qualified_count", len(scan_result.qualified_opportunities))
-            PlatformAPIService._cached_global_props_results = res_dict
+            if is_ultra:
+                PlatformAPIService._cached_global_props_ultra_results = res_dict
+            else:
+                PlatformAPIService._cached_global_props_results = res_dict
 
             trace_obj = res_dict.get("scan_trace")
             if trace_obj:
@@ -6897,16 +6960,23 @@ class PlatformAPIService:
         position: Optional[str] = None,
         threshold: Optional[float] = None,
         match_status: Optional[str] = None,
+        scan_mode: Optional[str] = "NORMAL",
     ) -> Dict[str, Any]:
         """Returns cached global props scan results with optional filtering, diagnostics and pagination."""
-        cached = PlatformAPIService._cached_global_props_results
+        mode = str(scan_mode or "NORMAL").upper()
+        if mode == "ULTRA":
+            cached = PlatformAPIService._cached_global_props_ultra_results
+        else:
+            cached = PlatformAPIService._cached_global_props_results
+
         if not cached:
             from scanner.global_props_scanner import GlobalScanFunnelMetrics
             return {
                 "status": "NOT_RUN",
-                "scope": {},
+                "scan_mode": mode,
+                "scope": {"scan_mode": mode},
                 "budget": {},
-                "funnel_metrics": GlobalScanFunnelMetrics().to_dict(),
+                "funnel_metrics": GlobalScanFunnelMetrics(scan_mode=mode).to_dict(),
                 "qualified_count": 0,
                 "diagnostic_count": 0,
                 "qualified_opportunities": [],
@@ -7166,8 +7236,9 @@ class PlatformAPIService:
         if sort_key_mode in ("discrepancy_pct", "discrepancy", "price_discrepancy", "discrepancy_high"):
             # Deterministic ranking: relative_price_difference_pct DESC -> odds_difference DESC -> canonical_prop_key ASC
             def _discrepancy_sort_key_desc(x: Dict[str, Any]):
-                has_rel = 0 if x.get("relative_price_difference_pct") is not None else 1
-                rel = -float(x.get("relative_price_difference_pct") or 0.0)
+                rel_val = x.get("relative_price_difference_pct")
+                has_rel = 0 if (rel_val is not None and float(rel_val) >= 10.0) else (1 if rel_val is not None else 2)
+                rel = -float(rel_val or 0.0)
                 diff = -float(x.get("odds_difference") or 0.0)
                 key = str(x.get("canonical_prop_key") or x.get("prop_id") or "")
                 return (has_rel, rel, diff, key)
@@ -7176,8 +7247,9 @@ class PlatformAPIService:
         elif sort_key_mode in ("discrepancy_pct_asc", "discrepancy_low"):
             # Deterministic ranking: relative_price_difference_pct ASC -> odds_difference ASC -> canonical_prop_key ASC
             def _discrepancy_sort_key_asc(x: Dict[str, Any]):
-                has_rel = 0 if x.get("relative_price_difference_pct") is not None else 1
-                rel = float(x.get("relative_price_difference_pct") or 0.0)
+                rel_val = x.get("relative_price_difference_pct")
+                has_rel = 0 if (rel_val is not None and float(rel_val) >= 10.0) else (1 if rel_val is not None else 2)
+                rel = float(rel_val or 0.0)
                 diff = float(x.get("odds_difference") or 0.0)
                 key = str(x.get("canonical_prop_key") or x.get("prop_id") or "")
                 return (has_rel, rel, diff, key)
@@ -7212,21 +7284,22 @@ class PlatformAPIService:
         res = dict(cached)
         res["items"] = paginated
         res["opportunities"] = paginated
-        res["all_candidates"] = qualified_raw + diagnostic_raw
+        res["all_candidates"] = opportunities
         if is_all_candidates_view:
-            res["qualified_opportunities"] = qualified_raw
-            res["total_qualified_matching_filter"] = len([o for o in qualified_raw if o.get("is_valuebet") or o.get("status") == "QUALIFIED"])
+            res["qualified_opportunities"] = [o for o in opportunities if o.get("is_valuebet") or o.get("status") == "QUALIFIED"]
+            res["total_qualified_matching_filter"] = len(res["qualified_opportunities"])
         elif is_quote_discrepancy_view:
             res["qualified_opportunities"] = paginated
             res["total_qualified_matching_filter"] = total
         else:
             res["qualified_opportunities"] = paginated
             res["total_qualified_matching_filter"] = total
-        res["diagnostic_candidates"] = diagnostic_raw
+        res["diagnostic_candidates"] = [o for o in opportunities if not (o.get("is_valuebet") or o.get("status") == "QUALIFIED")]
         res["total_items_matching_filter"] = total
         res["limit"] = limit
         res["offset"] = offset
         res["view_mode"] = view_mode or ("ALL_CANDIDATES" if is_all_candidates_view else ("QUOTE_DISCREPANCY" if is_quote_discrepancy_view else "TOP_VALUE"))
+        res["scan_mode"] = mode
         return res
 
     def run_player_shots_settlement(self, now: Optional[datetime] = None) -> Dict[str, Any]:

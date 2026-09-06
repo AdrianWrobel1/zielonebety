@@ -588,24 +588,43 @@ def list_unified_explorer_opportunities(
     order: str = Query("desc"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    top_5: bool = Query(False),
 ):
     """Unified Opportunity Explorer — aggregated view of Player Props, Valuebets, Surebets, Boosters, and Team Props."""
+    eff_type = type if isinstance(type, str) else None
+    eff_status = status if isinstance(status, str) else None
+    eff_bookmaker = bookmaker if isinstance(bookmaker, str) else None
+    eff_sport = sport if isinstance(sport, str) else None
+    eff_competition = competition if isinstance(competition, str) else None
+    eff_search = search if isinstance(search, str) else None
+    eff_min_score = float(min_score) if isinstance(min_score, (int, float)) else 0.0
+    eff_min_edge = float(min_execution_edge) if isinstance(min_execution_edge, (int, float)) else None
+    eff_min_ev = float(min_ev) if isinstance(min_ev, (int, float)) else None
+    eff_date_from = date_from if isinstance(date_from, str) else None
+    eff_date_to = date_to if isinstance(date_to, str) else None
+    eff_sort = sort if isinstance(sort, str) else "score"
+    eff_order = order if isinstance(order, str) else "desc"
+    eff_limit = int(limit) if isinstance(limit, int) else 50
+    eff_offset = int(offset) if isinstance(offset, int) else 0
+    eff_top_5 = bool(top_5) if isinstance(top_5, bool) else False
+
     return router_instance.handle_get_explorer_opportunities(
-        opp_type=type,
-        status=status,
-        bookmaker=bookmaker,
-        sport=sport,
-        competition=competition,
-        search=search,
-        min_score=min_score,
-        min_execution_edge=min_execution_edge,
-        min_ev=min_ev,
-        date_from=date_from,
-        date_to=date_to,
-        sort=sort,
-        order=order,
-        limit=limit,
-        offset=offset,
+        opp_type=eff_type,
+        status=eff_status,
+        bookmaker=eff_bookmaker,
+        sport=eff_sport,
+        competition=eff_competition,
+        search=eff_search,
+        min_score=eff_min_score,
+        min_execution_edge=eff_min_edge,
+        min_ev=eff_min_ev,
+        date_from=eff_date_from,
+        date_to=eff_date_to,
+        sort=eff_sort,
+        order=eff_order,
+        limit=eff_limit,
+        offset=eff_offset,
+        top_5=eff_top_5,
     ).to_dict()
 
 
@@ -809,9 +828,10 @@ def post_global_props_scan(
     stat_types: Optional[str] = Query(None),
     min_ev_percent: float = Query(3.0),
     max_results: int = Query(50, ge=1, le=200),
-    max_fixtures: int = Query(30, ge=1, le=100),
-    max_trends_requests: int = Query(10, ge=1, le=50),
-    max_execution_events: int = Query(20, ge=1, le=50),
+    max_fixtures: Optional[int] = Query(None, ge=1, le=100),
+    max_trends_requests: Optional[int] = Query(None, ge=1, le=100),
+    max_execution_events: Optional[int] = Query(None, ge=1, le=100),
+    scan_mode: str = Query("NORMAL"),
     response: Response = None,
 ):
     """Trigger bounded multi-fixture global scan for Player Props and Team Props."""
@@ -822,10 +842,15 @@ def post_global_props_scan(
         "stat_types": stat_types,
         "min_ev_percent": min_ev_percent,
         "max_results": max_results,
-        "max_fixtures": max_fixtures,
-        "max_trends_requests": max_trends_requests,
-        "max_execution_events": max_execution_events,
+        "scan_mode": scan_mode,
     }
+    if max_fixtures is not None:
+        params["max_fixtures"] = max_fixtures
+    if max_trends_requests is not None:
+        params["max_trends_requests"] = max_trends_requests
+    if max_execution_events is not None:
+        params["max_execution_events"] = max_execution_events
+
     api_res = router_instance.handle_post_global_props_scan(params)
     if response:
         response.status_code = api_res.status_code
@@ -849,6 +874,7 @@ def get_global_props_results(
     position: Optional[str] = Query(None),
     threshold: Optional[float] = Query(None),
     match_status: Optional[str] = Query(None),
+    scan_mode: Optional[str] = Query("NORMAL"),
 ):
     """Fetch cached global props scan opportunities with filtering and pagination."""
     return router_instance.handle_get_global_props_results(
@@ -867,6 +893,7 @@ def get_global_props_results(
         position=position,
         threshold=threshold,
         match_status=match_status,
+        scan_mode=scan_mode,
     ).to_dict()
 
 

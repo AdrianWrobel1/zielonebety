@@ -45,6 +45,8 @@ class TestScanDiagnosticUIContract(unittest.TestCase):
         with open("web/app.js", "r", encoding="utf-8") as f:
             js = f.read()
 
+        self.assertIn("function safeStringify", js)
+        self.assertIn("function safeExtractError", js)
         self.assertIn("function sanitizeHeaders", js)
         self.assertIn("function sanitizePayload", js)
         self.assertIn("function extractSafeResponseHeaders", js)
@@ -184,7 +186,157 @@ class TestScanDiagnosticUIContract(unittest.TestCase):
         self.assertEqual(result.returncode, 0, f"Node tests failed:\n{result.stderr}\n{result.stdout}")
         self.assertIn("ALL_DIAGNOSTIC_TESTS_PASSED", result.stdout)
 
+    def test_05_cycle_safe_serialization_and_error_isolation(self):
+        """Execute Phase 7 requirements directly in Node.js against the real functions from app.js."""
+        test_script = """
+        const fs = require('fs');
+        const code = fs.readFileSync('web/app.js', 'utf8');
+
+        // Evaluate the helper functions in a sandboxed context
+        const vm = require('vm');
+        const sandbox = {
+          console: console,
+          Headers: class Headers {
+            constructor(init) { this._h = init || {}; }
+            forEach(fn) { for (const [k, v] of Object.entries(this._h)) fn(v, k); }
+          },
+          Response: class Response {
+            constructor(init) { Object.assign(this, init); }
+          },
+          Request: class Request {
+            constructor(init) { Object.assign(this, init); }
+          },
+          Error: Error,
+          TypeError: TypeError,
+          API_BASE: '',
+          authHeaders: (h) => h || {},
+        };
+
+        // Extract and run the diagnostic block from app.js
+        const startMarker = '// ── Diagnostic Instrumentation & Security Redaction Helpers (Mobile Debug) ──';
+        const endMarker = '// Safe JSON extraction helper that never throws';
+        const diagBlock = code.substring(code.indexOf(startMarker), code.indexOf(endMarker));
+        vm.runInNewContext(diagBlock, sandbox);
+
+        const { safeStringify, safeExtractError, sanitizePayload, classifyFailure, formatDebugReport, buildFallbackDiagnostic } = sandbox;
+
+        // 1. Circular object serialization: const a = {}; a.self = a; MUST NOT THROW
+        const a = { name: 'test-node' };
+        a.self = a;
+        const serializedA = safeStringify(a);
+        if (!serializedA.includes('[Circular Reference]')) {
+          throw new Error('Expected safeStringify to mark circular reference, got: ' + serializedA);
+        }
+
+        // 2. Error object handling: preserves name, message, stack without full circular structure
+        const testErr = new Error('Database query timed out');
+        testErr.customProp = a; // attach circular object to error
+        const extractedErr = safeExtractError(testErr);
+        if (extractedErr.message !== 'Database query timed out') {
+          throw new Error('Failed to extract error message');
+        }
+        const serializedErr = safeStringify(testErr);
+        if (!serializedErr.includes('Database query timed out')) {
+          throw new Error('safeStringify failed on Error object');
+        }
+
+        // 3. Request object handling
+        const reqObj = new sandbox.Request({ method: 'POST', url: '/api/v1/scan/run', headers: { 'Authorization': 'Bearer secret' } });
+        const serializedReq = safeStringify(reqObj);
+        if (!serializedReq.includes('[REDACTED]') || !serializedReq.includes('/api/v1/scan/run')) {
+          throw new Error('Failed to handle Request object: ' + serializedReq);
+        }
+
+        // 4. Response object handling
+        const resObj = new sandbox.Response({ status: 502, statusText: 'Bad Gateway', ok: false, url: '/api/v1/scan/run', headers: { server: 'nginx' } });
+        const serializedRes = safeStringify(resObj);
+        if (!serializedRes.includes('502') || !serializedRes.includes('Bad Gateway')) {
+          throw new Error('Failed to handle Response object: ' + serializedRes);
+        }
+
+        // 5. Headers object handling
+        const headersObj = new sandbox.Headers({ 'authorization': 'Bearer secret123', 'content-type': 'application/json' });
+        const serializedHeaders = safeStringify(headersObj);
+        if (!serializedHeaders.includes('[REDACTED]') || !serializedHeaders.includes('application/json')) {
+          throw new Error('Failed to handle Headers object: ' + serializedHeaders);
+        }
+
+        // 6. Diagnostic capture failure does not replace original error
+        const originalError = new Error('original failure');
+        const fallback = buildFallbackDiagnostic(originalError, 'NORMAL', 154);
+        if (fallback.frontend.original_error !== 'Error: original failure') {
+          throw new Error('Original error was not preserved in fallback: ' + fallback.frontend.original_error);
+        }
+        if (fallback.frontend.error !== 'original failure') {
+          throw new Error('Error message replaced: ' + fallback.frontend.error);
+        }
+
+        // 7. Correct classification of genuine network failure
+        const genuineNetErr = new TypeError('Failed to fetch');
+        const netFallback = buildFallbackDiagnostic(genuineNetErr, 'NORMAL', 100);
+        if (netFallback.frontend.category !== 'B') {
+          throw new Error('Expected Category B for Failed to fetch, got: ' + netFallback.frontend.category);
+        }
+
+        // 8. Correct classification of HTTP 502
+        const class502 = classifyFailure({ status: 502, statusText: 'Bad Gateway' });
+        if (class502.code !== 'C') {
+          throw new Error('Expected Category C for 502, got: ' + class502.code);
+        }
+
+        // 9. Correct classification of backend 4xx/5xx
+        const class400 = classifyFailure({ status: 400 });
+        if (class400.code !== 'D') {
+          throw new Error('Expected Category D for 400, got: ' + class400.code);
+        }
+        const class500Json = classifyFailure({ status: 500, isNonJson: false });
+        if (class500Json.code !== 'D') {
+          throw new Error('Expected Category D for 500 JSON, got: ' + class500Json.code);
+        }
+
+        // 10. Duration is not incorrectly forced to 0 ms
+        if (fallback.duration_ms !== 154) {
+          throw new Error('Expected duration_ms to be 154, got: ' + fallback.duration_ms);
+        }
+
+        // 11. Client serialization error is NOT classified as Category B (Browser/Network Failure)
+        const serialErr = new TypeError('JSON.stringify cannot serialize cyclic structures');
+        const clientDiag = buildFallbackDiagnostic(serialErr, 'NORMAL', 50);
+        if (clientDiag.frontend.category === 'B') {
+          throw new Error('Serialization error was incorrectly classified as Category B (network failure)');
+        }
+        if (clientDiag.frontend.category !== 'G') {
+          throw new Error('Expected Category G for serialization error, got: ' + clientDiag.frontend.category);
+        }
+
+        // 12. formatDebugReport handles circular structures inside diagnostic cleanly
+        const cyclicDiag = {
+          timestamp: '2026-09-14T00:00:00.000Z',
+          duration_ms: 123,
+          request: { method: 'POST', url: '/test', payload: a, headers: {} },
+          response: { status: 500, parsed_json: a },
+          frontend: { category: 'D', original_error: 'Error', diagnostic_capture_error: null },
+          identifiers: {}
+        };
+        const report = formatDebugReport(cyclicDiag);
+        if (!report.includes('[Circular Reference]')) {
+          throw new Error('formatDebugReport failed to format circular structure');
+        }
+
+        console.log('ALL_PHASE_7_REQUIREMENTS_VERIFIED');
+        """
+
+        result = subprocess.run(
+            ["node", "-e", test_script],
+            capture_output=True,
+            text=True,
+            cwd=os.getcwd(),
+        )
+        self.assertEqual(result.returncode, 0, f"Node Phase 7 tests failed:\n{result.stderr}\n{result.stdout}")
+        self.assertIn("ALL_PHASE_7_REQUIREMENTS_VERIFIED", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

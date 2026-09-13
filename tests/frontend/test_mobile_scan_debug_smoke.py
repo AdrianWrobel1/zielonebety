@@ -108,6 +108,74 @@ def test_mobile_scan_debug_502_rendering():
         browser.close()
 
 
+def test_mobile_scan_debug_json_error_with_cycle_safety():
+    """Verify that a JSON error response renders cycle-safely without throwing cyclic serialization errors."""
+    html_path = os.path.abspath("web/index.html")
+    screenshot_dir = os.path.abspath("test_evidence_screenshots")
+    os.makedirs(screenshot_dir, exist_ok=True)
+    screenshot_path = os.path.join(screenshot_dir, "mobile_scan_debug_json_error.png")
+
+    page_errors = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            viewport={"width": 390, "height": 844},
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15"
+        )
+        page = context.new_page()
+        page.on("pageerror", lambda err: page_errors.append(str(err)))
+
+        # Mock background endpoints
+        page.route("**/api/v1/health**", lambda route: route.fulfill(status=200, content_type="application/json", body='{"data":{"status":"HEALTHY"}}'))
+        page.route("**/api/v1/scan/status**", lambda route: route.fulfill(status=200, content_type="application/json", body='{"data":{"status":"READY"}}'))
+        page.route("**/api/v1/scan/latest**", lambda route: route.fulfill(status=200, content_type="application/json", body='{"data":null}'))
+        page.route("**/api/v1/scan/history**", lambda route: route.fulfill(status=200, content_type="application/json", body='{"data":[]}'))
+        page.route("**/api/v1/providers**", lambda route: route.fulfill(status=200, content_type="application/json", body='{"data":[]}'))
+        page.route("**/api/v1/events**", lambda route: route.fulfill(status=200, content_type="application/json", body='{"data":[]}'))
+        page.route("**/api/v1/opportunities**", lambda route: route.fulfill(status=200, content_type="application/json", body='{"data":[]}'))
+        page.route("**/api/v1/notifications**", lambda route: route.fulfill(status=200, content_type="application/json", body='{"data":[]}'))
+
+        # Mock structured JSON backend error
+        page.route("**/api/v1/scan/run", lambda route: route.fulfill(
+            status=500,
+            content_type="application/json",
+            body='{"status_code":500,"errors":["Database connection pool exhausted"],"data":{"retries":3}}'
+        ))
+
+        page.goto(f"file:///{html_path.replace(os.sep, '/')}")
+        page.wait_for_selector("#btn-run-scan")
+
+        # Trigger Run Scan
+        page.click("#btn-run-scan")
+
+        debug_panel = page.locator("#dash-scan-debug-panel")
+        debug_panel.wait_for(state="visible", timeout=5000)
+
+        # Confirm zero unhandled page errors (no cyclic serialization crash)
+        cyclic_errors = [e for e in page_errors if "cyclic" in e.lower() or "circular" in e.lower()]
+        assert len(cyclic_errors) == 0, f"Found cyclic structure errors in browser: {cyclic_errors}"
+
+        # Check alert banner preserves real error
+        alert_box = page.locator("#dash-alert-container")
+        alert_text = alert_box.inner_text()
+        assert "Database connection pool exhausted" in alert_text, f"Unexpected alert banner: {alert_text}"
+
+        # Check Diagnostic Panel contains Category D and exact error
+        panel_text = debug_panel.inner_text()
+        assert "CATEGORY D" in panel_text
+        assert "Backend Application HTTP Error" in panel_text
+        assert "Database connection pool exhausted" in panel_text
+        assert "500" in panel_text
+
+        # Capture screenshot evidence
+        page.screenshot(path=screenshot_path, full_page=False)
+
+        context.close()
+        browser.close()
+
+
 if __name__ == "__main__":
     test_mobile_scan_debug_502_rendering()
+    test_mobile_scan_debug_json_error_with_cycle_safety()
 

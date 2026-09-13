@@ -304,6 +304,119 @@
 
   const SENSITIVE_KEY_REGEX = /(authorization|auth|token|cookie|key|secret|password|credential|session)/i;
 
+  function safeExtractError(err) {
+    if (!err) return { name: 'UnknownError', message: 'No error details available', stack: null };
+    if (typeof err === 'string') return { name: 'Error', message: err, stack: null };
+    return {
+      name: String(err.name || (err.constructor && err.constructor.name) || 'Error'),
+      message: String(err.message || err.detail || err.description || err || 'Unknown error'),
+      stack: err.stack ? String(err.stack) : null,
+    };
+  }
+
+  function isErrorLike(node) {
+    if (!node || typeof node !== 'object') return false;
+    if (typeof Error !== 'undefined' && node instanceof Error) return true;
+    return Object.prototype.toString.call(node) === '[object Error]' || (typeof node.message === 'string' && typeof node.name === 'string');
+  }
+
+  function safeStringify(val, indent = 2, maxDepth = 6) {
+    if (val === undefined) return 'undefined';
+    if (val === null) return 'null';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+
+    const seen = new WeakSet();
+
+    function cleanNode(node, depth) {
+      if (node === null || node === undefined) return node;
+      if (typeof node !== 'object') {
+        if (typeof node === 'function') return '[Function]';
+        if (typeof node === 'symbol') return String(node);
+        if (typeof node === 'bigint') return `${node.toString()}n`;
+        return node;
+      }
+
+      if (seen.has(node)) {
+        return '[Circular Reference]';
+      }
+
+      if (depth > maxDepth) {
+        return '[Max Depth Exceeded]';
+      }
+
+      if (isErrorLike(node)) {
+        return {
+          name: node.name || 'Error',
+          message: node.message || '',
+          stack: node.stack || undefined,
+        };
+      }
+
+      if (typeof Headers !== 'undefined' && node instanceof Headers) {
+        return sanitizeHeaders(node);
+      }
+
+      if (typeof Response !== 'undefined' && node instanceof Response) {
+        return {
+          status: node.status,
+          statusText: node.statusText,
+          ok: node.ok,
+          url: node.url,
+          headers: sanitizeHeaders(node.headers),
+        };
+      }
+
+      if (typeof Request !== 'undefined' && node instanceof Request) {
+        return {
+          method: node.method,
+          url: node.url,
+          headers: sanitizeHeaders(node.headers),
+        };
+      }
+
+      if (typeof Node !== 'undefined' && node instanceof Node) {
+        return `[DOM ${node.nodeName || 'Node'}]`;
+      }
+
+      if (typeof AbortController !== 'undefined' && node instanceof AbortController) {
+        return '[AbortController]';
+      }
+
+      if (typeof Window !== 'undefined' && node instanceof Window) {
+        return '[Window]';
+      }
+
+      seen.add(node);
+
+      if (Array.isArray(node)) {
+        return node.map(item => cleanNode(item, depth + 1));
+      }
+
+      const out = {};
+      for (const key of Object.keys(node)) {
+        if (key === '_diagnostic') continue;
+        try {
+          out[key] = cleanNode(node[key], depth + 1);
+        } catch (propErr) {
+          out[key] = `[Error extracting property: ${propErr?.message || propErr}]`;
+        }
+      }
+      return out;
+    }
+
+    try {
+      const cleaned = cleanNode(val, 0);
+      return JSON.stringify(cleaned, null, indent);
+    } catch (err) {
+      try {
+        return String(val);
+      } catch {
+        return '[Unserializable Object]';
+      }
+    }
+  }
+
   function sanitizeHeaders(headers) {
     if (!headers) return {};
     const sanitized = {};
@@ -326,38 +439,54 @@
   function sanitizePayload(payload) {
     if (payload === null || payload === undefined) return null;
 
-    function redactNode(val) {
+    const seen = new WeakSet();
+
+    function redactNode(val, depth = 0) {
+      if (val === null || val === undefined) return val;
       if (typeof val === 'string') {
         return val
           .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
           .replace(/(password|secret|token|api_key|admin_password)=[^&\s]+/gi, '$1=[REDACTED]');
       }
+      if (typeof val !== 'object') return val;
+
+      if (seen.has(val)) return '[Circular Reference]';
+      if (depth > 6) return '[Max Depth Exceeded]';
+      seen.add(val);
+
       if (Array.isArray(val)) {
-        return val.map(redactNode);
+        return val.map(item => redactNode(item, depth + 1));
       }
-      if (typeof val === 'object' && val !== null) {
-        const out = {};
-        for (const [k, v] of Object.entries(val)) {
-          if (SENSITIVE_KEY_REGEX.test(k)) {
-            out[k] = '[REDACTED]';
-          } else {
-            out[k] = redactNode(v);
+
+      if (isErrorLike(val)) {
+        return { name: val.name || 'Error', message: redactNode(val.message || '', depth + 1) };
+      }
+
+      const out = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (k === '_diagnostic') continue;
+        if (SENSITIVE_KEY_REGEX.test(k)) {
+          out[k] = '[REDACTED]';
+        } else {
+          try {
+            out[k] = redactNode(v, depth + 1);
+          } catch {
+            out[k] = '[Redaction Error]';
           }
         }
-        return out;
       }
-      return val;
+      return out;
     }
 
     if (typeof payload === 'string') {
       try {
         const parsed = JSON.parse(payload);
-        return redactNode(parsed);
+        return redactNode(parsed, 0);
       } catch {
-        return redactNode(payload);
+        return redactNode(payload, 0);
       }
     }
-    return redactNode(payload);
+    return redactNode(payload, 0);
   }
 
   function extractSafeResponseHeaders(res) {
@@ -372,7 +501,8 @@
         const known = [
           'content-type', 'content-length', 'server', 'date', 'via',
           'x-request-id', 'x-correlation-id', 'cf-ray', 'cf-cache-status',
-          'x-render-origin-server', 'x-cache', 'x-powered-by', 'age', 'cache-control'
+          'x-render-origin-server', 'x-cache', 'x-powered-by', 'age', 'cache-control',
+          'x-nf-request-id'
         ];
         for (const k of known) {
           const v = res.headers.get(k);
@@ -386,6 +516,13 @@
   }
 
   function classifyFailure(diag) {
+    if (!diag) {
+      return {
+        code: 'G',
+        title: 'Other / Unclassified',
+        description: 'No diagnostic metadata available for failure classification.'
+      };
+    }
     if (diag.stage === 'construction' || diag.isConstructionError) {
       return {
         code: 'A',
@@ -393,14 +530,7 @@
         description: 'The HTTP request could not be constructed or serialized before transmission.'
       };
     }
-    if (diag.isNetworkError || (diag.status === 0)) {
-      return {
-        code: 'B',
-        title: 'Browser / Network Failure',
-        description: 'The browser failed to establish a network connection (DNS failure, offline, timeout, or CORS preflight rejection).'
-      };
-    }
-    const status = diag.status || 0;
+    const status = diag.status !== undefined && diag.status !== null ? Number(diag.status) : null;
     if (status === 401 || status === 403) {
       return {
         code: 'F',
@@ -409,8 +539,8 @@
       };
     }
     const server = (diag.headers && diag.headers['server'] ? String(diag.headers['server']) : '').toLowerCase();
-    const isProxyServer = server.includes('cloudflare') || server.includes('nginx') || server.includes('caddy') || server.includes('envoy') || server.includes('render');
-    if (status === 502 || status === 503 || status === 504 || (status >= 500 && isProxyServer)) {
+    const isProxyServer = server.includes('cloudflare') || server.includes('nginx') || server.includes('caddy') || server.includes('envoy') || server.includes('render') || server.includes('netlify');
+    if (status === 502 || status === 503 || status === 504 || (status !== null && status >= 500 && isProxyServer)) {
       return {
         code: 'C',
         title: 'Proxy / Gateway Failure',
@@ -431,11 +561,32 @@
         description: `The server returned HTTP ${status} with non-JSON Content-Type (${diag.contentType || 'unknown'}). Likely an unhandled web server error or HTML fallback.`
       };
     }
-    if (status >= 400) {
+    if (status !== null && status >= 400) {
       return {
         code: 'D',
         title: 'Backend Application HTTP Error',
         description: `The backend application processed the request and returned HTTP ${status} with a structured error response.`
+      };
+    }
+    if (diag.isNetworkError) {
+      return {
+        code: 'B',
+        title: 'Browser / Network Failure',
+        description: 'The browser failed to establish a network connection (DNS failure, offline, timeout, or CORS preflight rejection).'
+      };
+    }
+    if (diag.isClientError || diag.error) {
+      return {
+        code: 'G',
+        title: 'Other / Client Exception',
+        description: diag.error || 'A client-side exception occurred during execution.'
+      };
+    }
+    if (status === 0) {
+      return {
+        code: 'B',
+        title: 'Browser / Network Failure',
+        description: 'The browser received no response (connection closed, refused, or aborted).'
       };
     }
     return {
@@ -461,11 +612,11 @@
       : '  (none available)';
 
     const payloadStr = req.payload
-      ? (typeof req.payload === 'string' ? req.payload : JSON.stringify(req.payload, null, 2))
+      ? (typeof req.payload === 'string' ? req.payload : safeStringify(req.payload, 2))
       : '(none)';
 
     const parsedJsonStr = res.parsed_json
-      ? JSON.stringify(res.parsed_json, null, 2)
+      ? safeStringify(res.parsed_json, 2)
       : 'null (non-JSON response)';
 
     return [
@@ -501,7 +652,8 @@
       parsedJsonStr,
       '',
       '-- 3. FRONTEND ANALYSIS -------------------------',
-      `Frontend Error: ${fe.error || '(none)'}`,
+      `Original Request Error: ${fe.original_error || fe.error || '(none)'}`,
+      `Diagnostic Capture: ${fe.diagnostic_capture_error || 'none'}`,
       `JSON Parsing Attempted: ${fe.json_parsing_attempted ? 'true' : 'false'}`,
       `Classification: ${fe.classified_as || '(unknown)'}`,
       `Parsing Error: ${fe.parsing_error || 'none'}`,
@@ -565,169 +717,225 @@
       return;
     }
 
-    const req = diag.request || {};
-    const res = diag.response || {};
-    const fe = diag.frontend || {};
-    const ids = diag.identifiers || {};
+    try {
+      const req = diag.request || {};
+      const res = diag.response || {};
+      const fe = diag.frontend || {};
+      const ids = diag.identifiers || {};
 
-    const reqHeadersFormatted = req.headers && Object.keys(req.headers).length > 0
-      ? Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
-      : '(none)';
+      const reqHeadersFormatted = req.headers && Object.keys(req.headers).length > 0
+        ? Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
+        : '(none)';
 
-    const resHeadersFormatted = res.headers && Object.keys(res.headers).length > 0
-      ? Object.entries(res.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
-      : '(none available)';
+      const resHeadersFormatted = res.headers && Object.keys(res.headers).length > 0
+        ? Object.entries(res.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
+        : '(none available)';
 
-    const payloadFormatted = req.payload
-      ? (typeof req.payload === 'string' ? req.payload : JSON.stringify(req.payload, null, 2))
-      : '(none)';
+      const payloadFormatted = req.payload
+        ? (typeof req.payload === 'string' ? req.payload : safeStringify(req.payload, 2))
+        : '(none)';
 
-    const categoryClass = fe.category ? `category-${fe.category}` : '';
+      const categoryClass = fe.category ? `category-${fe.category}` : '';
 
-    panel.innerHTML = `
-      <div class="scan-debug-card">
-        <div class="scan-debug-header">
-          <div class="scan-debug-title-wrap">
-            <span class="scan-debug-tag">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              SCAN DEBUG
-            </span>
-            <span class="scan-debug-category-badge ${categoryClass}">[CATEGORY ${fe.category || '?'}] ${escapeHtml(fe.category_label || 'Error')}</span>
+      panel.innerHTML = `
+        <div class="scan-debug-card">
+          <div class="scan-debug-header">
+            <div class="scan-debug-title-wrap">
+              <span class="scan-debug-tag">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                SCAN DEBUG
+              </span>
+              <span class="scan-debug-category-badge ${categoryClass}">[CATEGORY ${fe.category || '?'}] ${escapeHtml(fe.category_label || 'Error')}</span>
+            </div>
+            <div class="scan-debug-actions">
+              <button type="button" class="btn btn-sm btn-outline scan-debug-btn-copy" id="btn-copy-scan-debug">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <span>Copy Debug Info</span>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline scan-debug-btn-clear" id="btn-clear-scan-debug">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>Clear Debug</span>
+              </button>
+            </div>
           </div>
-          <div class="scan-debug-actions">
-            <button type="button" class="btn btn-sm btn-outline scan-debug-btn-copy" id="btn-copy-scan-debug">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              <span>Copy Debug Info</span>
-            </button>
-            <button type="button" class="btn btn-sm btn-outline scan-debug-btn-clear" id="btn-clear-scan-debug">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              <span>Clear Debug</span>
-            </button>
+
+          <div class="scan-debug-description">
+            ${escapeHtml(fe.category_description || 'Failure encountered during scan cycle dispatch.')}
+          </div>
+
+          <!-- 1. REQUEST Collapsible -->
+          <details class="scan-debug-collapsible" open>
+            <summary>
+              <span>REQUEST &bull; ${escapeHtml(req.method || 'POST')} ${escapeHtml(req.url || '')}</span>
+              <span class="mono">${diag.duration_ms !== undefined ? diag.duration_ms : '—'} ms</span>
+            </summary>
+            <div class="scan-debug-drawer-content">
+              <div class="scan-debug-row"><span class="scan-debug-label">Timestamp:</span> <span class="mono">${escapeHtml(diag.timestamp || '—')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Method:</span> <span class="mono">${escapeHtml(req.method || 'POST')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">URL:</span> <span class="mono scan-debug-scroll-x">${escapeHtml(req.url || '—')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Duration:</span> <span class="mono">${diag.duration_ms !== undefined ? diag.duration_ms : '—'} ms</span></div>
+              <div class="scan-debug-label" style="margin-top:0.4rem;">Sanitized Payload:</div>
+              <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(payloadFormatted)}</code></pre>
+              <div class="scan-debug-label" style="margin-top:0.4rem;">Sanitized Request Headers:</div>
+              <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(reqHeadersFormatted)}</code></pre>
+            </div>
+          </details>
+
+          <!-- 2. RESPONSE Collapsible -->
+          <details class="scan-debug-collapsible" open>
+            <summary>
+              <span>RESPONSE &bull; Status ${res.status !== undefined ? res.status : 'No Response'} ${escapeHtml(res.status_text || '')}</span>
+              <span class="mono">${escapeHtml(res.content_type || 'non-JSON')}</span>
+            </summary>
+            <div class="scan-debug-drawer-content">
+              <div class="scan-debug-row"><span class="scan-debug-label">HTTP Status:</span> <span class="mono badge ${res.status === 200 ? 'badge-success' : 'badge-danger'}">${res.status !== undefined ? res.status : '0 (Network failure)'} ${escapeHtml(res.status_text || '')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Content-Type:</span> <span class="mono">${escapeHtml(res.content_type || '—')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Content-Length:</span> <span class="mono">${escapeHtml(res.content_length || '—')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Raw Body Size:</span> <span class="mono">${res.raw_length !== undefined ? res.raw_length : 0} bytes</span></div>
+              
+              <div class="scan-debug-label" style="margin-top:0.4rem;">Safe Response Headers:</div>
+              <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(resHeadersFormatted)}</code></pre>
+
+              <div class="scan-debug-label" style="margin-top:0.4rem;">Raw Response Body (safely truncated):</div>
+              <pre class="scan-debug-code scan-debug-raw-body"><code>${escapeHtml(res.raw_body || '[Empty Response Body]')}</code></pre>
+
+              ${res.parsed_json ? `
+              <div class="scan-debug-label" style="margin-top:0.4rem;">Parsed JSON:</div>
+              <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(safeStringify(res.parsed_json, 2))}</code></pre>
+              ` : ''}
+            </div>
+          </details>
+
+          <!-- 3. FRONTEND Collapsible -->
+          <details class="scan-debug-collapsible" open>
+            <summary>
+              <span>FRONTEND &bull; Classification & Error Trace</span>
+              <span class="mono">${escapeHtml(fe.category || '?')}</span>
+            </summary>
+            <div class="scan-debug-drawer-content">
+              <div class="scan-debug-row"><span class="scan-debug-label">Original Error:</span> <span class="mono text-danger">${escapeHtml(fe.original_error || fe.error || '—')}</span></div>
+              ${fe.diagnostic_capture_error ? `
+              <div class="scan-debug-row"><span class="scan-debug-label">Diagnostic Capture:</span> <span class="mono text-warning">${escapeHtml(fe.diagnostic_capture_error)}</span></div>
+              ` : `
+              <div class="scan-debug-row"><span class="scan-debug-label">Diagnostic Capture:</span> <span class="mono">none</span></div>
+              `}
+              <div class="scan-debug-row"><span class="scan-debug-label">JSON Parse Attempted:</span> <span class="mono">${fe.json_parsing_attempted ? 'Yes' : 'No (classified as non-JSON)'}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Classification:</span> <span class="mono">${escapeHtml(fe.classified_as || '—')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Parsing Error:</span> <span class="mono">${fe.parsing_error ? escapeHtml(fe.parsing_error) : 'None'}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Category Code:</span> <span class="mono">${escapeHtml(fe.category || '?')} &mdash; ${escapeHtml(fe.category_label || '—')}</span></div>
+            </div>
+          </details>
+
+          <!-- 4. IDENTIFIERS Collapsible -->
+          <details class="scan-debug-collapsible">
+            <summary>
+              <span>IDENTIFIERS &bull; Request & Gateway Tracing</span>
+              <span class="mono">${escapeHtml(ids.server || '—')}</span>
+            </summary>
+            <div class="scan-debug-drawer-content">
+              <div class="scan-debug-row"><span class="scan-debug-label">Request ID:</span> <span class="mono">${escapeHtml(ids.request_id || 'none returned')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Correlation ID:</span> <span class="mono">${escapeHtml(ids.correlation_id || 'none returned')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">CF-Ray (Cloudflare):</span> <span class="mono">${escapeHtml(ids.cf_ray || 'none returned')}</span></div>
+              <div class="scan-debug-row"><span class="scan-debug-label">Server Header:</span> <span class="mono">${escapeHtml(ids.server || 'none returned')}</span></div>
+            </div>
+          </details>
+        </div>
+      `;
+
+      panel.style.display = 'block';
+
+      const btnCopy = document.getElementById('btn-copy-scan-debug');
+      if (btnCopy) {
+        btnCopy.onclick = async () => {
+          const report = formatDebugReport(diag);
+          const copied = await copyDebugToClipboard(report);
+          if (copied) {
+            showToast('Debug info copied to clipboard!');
+          } else {
+            showToast('Failed to copy to clipboard.');
+          }
+        };
+      }
+
+      const btnClear = document.getElementById('btn-clear-scan-debug');
+      if (btnClear) {
+        btnClear.onclick = () => {
+          clearScanDebugUI();
+          showToast('Debug panel cleared.');
+        };
+      }
+    } catch (renderErr) {
+      console.error('Failed to render scan debug UI:', renderErr);
+      const safeErr = safeExtractError(renderErr);
+      panel.style.display = 'block';
+      panel.innerHTML = `
+        <div class="scan-debug-card">
+          <div class="scan-debug-header">
+            <span class="scan-debug-category-badge category-G">[CATEGORY G] Diagnostic Rendering Exception</span>
+          </div>
+          <div class="scan-debug-description">
+            The diagnostic panel encountered an error while formatting: ${escapeHtml(safeErr.message)}
+          </div>
+          <div class="scan-debug-drawer-content" style="padding:0.75rem;">
+            <div class="scan-debug-row"><span class="scan-debug-label">Original Error:</span> <span class="mono text-danger">${escapeHtml(diag?.frontend?.original_error || diag?.frontend?.error || 'Unknown error')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Diagnostic Error:</span> <span class="mono text-warning">${escapeHtml(safeErr.name)}: ${escapeHtml(safeErr.message)}</span></div>
           </div>
         </div>
-
-        <div class="scan-debug-description">
-          ${escapeHtml(fe.category_description || 'Failure encountered during scan cycle dispatch.')}
-        </div>
-
-        <!-- 1. REQUEST Collapsible -->
-        <details class="scan-debug-collapsible" open>
-          <summary>
-            <span>REQUEST &bull; ${escapeHtml(req.method || 'POST')} ${escapeHtml(req.url || '')}</span>
-            <span class="mono">${diag.duration_ms !== undefined ? diag.duration_ms : '—'} ms</span>
-          </summary>
-          <div class="scan-debug-drawer-content">
-            <div class="scan-debug-row"><span class="scan-debug-label">Timestamp:</span> <span class="mono">${escapeHtml(diag.timestamp || '—')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Method:</span> <span class="mono">${escapeHtml(req.method || 'POST')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">URL:</span> <span class="mono scan-debug-scroll-x">${escapeHtml(req.url || '—')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Duration:</span> <span class="mono">${diag.duration_ms !== undefined ? diag.duration_ms : '—'} ms</span></div>
-            <div class="scan-debug-label" style="margin-top:0.4rem;">Sanitized Payload:</div>
-            <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(payloadFormatted)}</code></pre>
-            <div class="scan-debug-label" style="margin-top:0.4rem;">Sanitized Request Headers:</div>
-            <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(reqHeadersFormatted)}</code></pre>
-          </div>
-        </details>
-
-        <!-- 2. RESPONSE Collapsible -->
-        <details class="scan-debug-collapsible" open>
-          <summary>
-            <span>RESPONSE &bull; Status ${res.status !== undefined ? res.status : 'No Response'} ${escapeHtml(res.status_text || '')}</span>
-            <span class="mono">${escapeHtml(res.content_type || 'non-JSON')}</span>
-          </summary>
-          <div class="scan-debug-drawer-content">
-            <div class="scan-debug-row"><span class="scan-debug-label">HTTP Status:</span> <span class="mono badge ${res.status === 200 ? 'badge-success' : 'badge-danger'}">${res.status !== undefined ? res.status : '0 (Network failure)'} ${escapeHtml(res.status_text || '')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Content-Type:</span> <span class="mono">${escapeHtml(res.content_type || '—')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Content-Length:</span> <span class="mono">${escapeHtml(res.content_length || '—')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Raw Body Size:</span> <span class="mono">${res.raw_length !== undefined ? res.raw_length : 0} bytes</span></div>
-            
-            <div class="scan-debug-label" style="margin-top:0.4rem;">Safe Response Headers:</div>
-            <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(resHeadersFormatted)}</code></pre>
-
-            <div class="scan-debug-label" style="margin-top:0.4rem;">Raw Response Body (safely truncated):</div>
-            <pre class="scan-debug-code scan-debug-raw-body"><code>${escapeHtml(res.raw_body || '[Empty Response Body]')}</code></pre>
-
-            ${res.parsed_json ? `
-            <div class="scan-debug-label" style="margin-top:0.4rem;">Parsed JSON:</div>
-            <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(JSON.stringify(res.parsed_json, null, 2))}</code></pre>
-            ` : ''}
-          </div>
-        </details>
-
-        <!-- 3. FRONTEND Collapsible -->
-        <details class="scan-debug-collapsible" open>
-          <summary>
-            <span>FRONTEND &bull; Classification & Parsing</span>
-            <span class="mono">${escapeHtml(fe.category || '?')}</span>
-          </summary>
-          <div class="scan-debug-drawer-content">
-            <div class="scan-debug-row"><span class="scan-debug-label">Exact Frontend Error:</span> <span class="mono text-danger">${escapeHtml(fe.error || '—')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">JSON Parse Attempted:</span> <span class="mono">${fe.json_parsing_attempted ? 'Yes' : 'No (classified as non-JSON)'}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Classification:</span> <span class="mono">${escapeHtml(fe.classified_as || '—')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Parsing Error:</span> <span class="mono">${fe.parsing_error ? escapeHtml(fe.parsing_error) : 'None'}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Category Code:</span> <span class="mono">${escapeHtml(fe.category || '?')} &mdash; ${escapeHtml(fe.category_label || '—')}</span></div>
-          </div>
-        </details>
-
-        <!-- 4. IDENTIFIERS Collapsible -->
-        <details class="scan-debug-collapsible">
-          <summary>
-            <span>IDENTIFIERS &bull; Request & Gateway Tracing</span>
-            <span class="mono">${escapeHtml(ids.server || '—')}</span>
-          </summary>
-          <div class="scan-debug-drawer-content">
-            <div class="scan-debug-row"><span class="scan-debug-label">Request ID:</span> <span class="mono">${escapeHtml(ids.request_id || 'none returned')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Correlation ID:</span> <span class="mono">${escapeHtml(ids.correlation_id || 'none returned')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">CF-Ray (Cloudflare):</span> <span class="mono">${escapeHtml(ids.cf_ray || 'none returned')}</span></div>
-            <div class="scan-debug-row"><span class="scan-debug-label">Server Header:</span> <span class="mono">${escapeHtml(ids.server || 'none returned')}</span></div>
-          </div>
-        </details>
-      </div>
-    `;
-
-    panel.style.display = 'block';
-
-    const btnCopy = document.getElementById('btn-copy-scan-debug');
-    if (btnCopy) {
-      btnCopy.onclick = async () => {
-        const report = formatDebugReport(diag);
-        const copied = await copyDebugToClipboard(report);
-        if (copied) {
-          showToast('Debug info copied to clipboard!');
-        } else {
-          showToast('Failed to copy to clipboard.');
-        }
-      };
-    }
-
-    const btnClear = document.getElementById('btn-clear-scan-debug');
-    if (btnClear) {
-      btnClear.onclick = () => {
-        clearScanDebugUI();
-        showToast('Debug panel cleared.');
-      };
+      `;
     }
   }
 
-  function buildFallbackDiagnostic(err, scanMode) {
-    const classification = classifyFailure({ isNetworkError: true, status: 0 });
+  function buildFallbackDiagnostic(err, scanMode, elapsedMs = 0, reqMeta = null) {
+    const safeErr = safeExtractError(err);
+    const errText = safeErr.message.toLowerCase();
+
+    // Distinguish genuine browser network failures from internal errors
+    const isNetworkError = (safeErr.name === 'TypeError' && (errText.includes('failed to fetch') || errText.includes('networkerror') || errText.includes('load failed')))
+      || errText.includes('net::err_') || errText.includes('offline') || errText.includes('econnrefused');
+
+    const isConstruction = safeErr.name === 'URIError' || errText.includes('cannot construct') || (reqMeta && reqMeta.stage === 'construction');
+
+    let categoryCode = 'G';
+    let categoryTitle = 'Other / Client Exception';
+    let categoryDesc = safeErr.message;
+
+    if (isConstruction) {
+      const classif = classifyFailure({ stage: 'construction' });
+      categoryCode = classif.code;
+      categoryTitle = classif.title;
+      categoryDesc = classif.description;
+    } else if (isNetworkError) {
+      const classif = classifyFailure({ isNetworkError: true, status: 0 });
+      categoryCode = classif.code;
+      categoryTitle = classif.title;
+      categoryDesc = classif.description;
+    } else {
+      const classif = classifyFailure({ isClientError: true, error: safeErr.message });
+      categoryCode = classif.code;
+      categoryTitle = classif.title;
+      categoryDesc = classif.description;
+    }
+
     return {
-      timestamp: new Date().toISOString(),
-      duration_ms: 0,
+      timestamp: reqMeta?.timestamp || new Date().toISOString(),
+      duration_ms: typeof elapsedMs === 'number' && !isNaN(elapsedMs) ? elapsedMs : 0,
       request: {
-        method: 'POST',
-        url: `${API_BASE}/api/v1/scan/run`,
-        headers: sanitizeHeaders(authHeaders({ 'Content-Type': 'application/json' })),
-        payload: { scan_mode: scanMode || 'NORMAL' },
+        method: reqMeta?.method || 'POST',
+        url: reqMeta?.url || `${API_BASE}/api/v1/scan/run`,
+        headers: sanitizeHeaders(reqMeta?.headers || authHeaders({ 'Content-Type': 'application/json' })),
+        payload: sanitizePayload(reqMeta?.body || { scan_mode: scanMode || 'NORMAL' }),
       },
       response: null,
       frontend: {
-        error: String(err?.message || err || 'Unexpected client exception'),
+        error: safeErr.message,
+        original_error: `${safeErr.name}: ${safeErr.message}`,
+        diagnostic_capture_error: null,
         json_parsing_attempted: false,
-        classified_as: 'client_exception',
+        classified_as: isNetworkError ? 'network_failure' : (isConstruction ? 'construction_failure' : 'client_exception'),
         parsing_error: null,
-        category: classification.code,
-        category_label: classification.title,
-        category_description: classification.description,
+        category: categoryCode,
+        category_label: categoryTitle,
+        category_description: categoryDesc,
       },
       identifiers: {
         request_id: null,
@@ -812,7 +1020,22 @@
         headers: safeHeaders,
       });
 
-      result._diagnostic = {
+      // Crucial: Create a clean copy of parsedData without _diagnostic cycle
+      let cleanParsedJson = null;
+      if (isJson && !parseErr && parsedData) {
+        if (typeof parsedData === 'object') {
+          try {
+            cleanParsedJson = Array.isArray(parsedData) ? [...parsedData] : Object.assign({}, parsedData);
+            delete cleanParsedJson._diagnostic;
+          } catch {
+            cleanParsedJson = parsedData;
+          }
+        } else {
+          cleanParsedJson = parsedData;
+        }
+      }
+
+      const diagnostic = {
         timestamp: reqMeta?.timestamp || new Date().toISOString(),
         duration_ms: reqMeta ? Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - reqMeta.startPerf) : 0,
         request: {
@@ -829,10 +1052,12 @@
           headers: safeHeaders,
           raw_body: truncatedRaw,
           raw_length: text ? text.length : 0,
-          parsed_json: isJson && !parseErr ? parsedData : null,
+          parsed_json: cleanParsedJson,
         },
         frontend: {
           error: (result && result.errors && result.errors[0]) || (result && result.detail) || '',
+          original_error: (result && result.errors && result.errors[0]) || (result && result.detail) || (!res.ok ? `HTTP ${res.status}` : null),
+          diagnostic_capture_error: null,
           json_parsing_attempted: isJson,
           classified_as: isJson ? (parseErr ? 'invalid_json' : 'application/json') : (contentType ? `non-json (${contentType})` : 'non-json (empty content-type)'),
           parsing_error: parseErr ? parseErr.message : null,
@@ -848,14 +1073,64 @@
         },
       };
 
+      try {
+        Object.defineProperty(result, '_diagnostic', {
+          value: diagnostic,
+          writable: true,
+          enumerable: false,
+          configurable: true,
+        });
+      } catch {
+        result._diagnostic = diagnostic;
+      }
+
       return result;
     } catch (unexpectedErr) {
+      const safeErr = safeExtractError(unexpectedErr);
+      const errDiag = {
+        timestamp: reqMeta?.timestamp || new Date().toISOString(),
+        duration_ms: reqMeta ? Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - reqMeta.startPerf) : 0,
+        request: {
+          method: reqMeta?.method || 'GET',
+          url: reqMeta?.url || '',
+          headers: sanitizeHeaders(reqMeta?.headers),
+          payload: sanitizePayload(reqMeta?.body),
+        },
+        response: {
+          status: res.status || 0,
+          status_text: res.statusText || '',
+          content_type: '',
+          content_length: null,
+          headers: extractSafeResponseHeaders(res),
+          raw_body: '(Failed reading response body)',
+          raw_length: 0,
+          parsed_json: null,
+        },
+        frontend: {
+          error: safeErr.message,
+          original_error: `${safeErr.name}: ${safeErr.message}`,
+          diagnostic_capture_error: `safeJson exception: ${safeErr.message}`,
+          json_parsing_attempted: false,
+          classified_as: 'response_read_failure',
+          parsing_error: safeErr.message,
+          category: 'G',
+          category_label: 'Response Processing Failure',
+          category_description: 'An error occurred while reading or processing the server response.',
+        },
+        identifiers: {
+          request_id: null,
+          correlation_id: null,
+          cf_ray: null,
+          server: null,
+        },
+      };
       return {
         status_code: res.status || 500,
         data: null,
-        errors: [`Failed to read response: ${unexpectedErr.message}`],
-        metadata: {},
+        errors: [`Failed to read response: ${safeErr.message}`],
+        metadata: { original_error: safeErr },
         execution_time_ms: 0.0,
+        _diagnostic: errDiag,
       };
     }
   }
@@ -902,7 +1177,15 @@
       return result;
     } catch (netErr) {
       const durationMs = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - reqMeta.startPerf);
-      const classification = classifyFailure({ isNetworkError: true, status: 0 });
+      const safeErr = safeExtractError(netErr);
+      const errText = safeErr.message.toLowerCase();
+      const isNet = (safeErr.name === 'TypeError' && (errText.includes('failed to fetch') || errText.includes('networkerror') || errText.includes('load failed')))
+        || errText.includes('net::err_') || errText.includes('offline') || errText.includes('econnrefused');
+
+      const classification = isNet
+        ? classifyFailure({ isNetworkError: true, status: 0 })
+        : classifyFailure({ isClientError: true, error: safeErr.message });
+
       const diag = {
         timestamp: reqMeta.timestamp,
         duration_ms: durationMs,
@@ -914,9 +1197,11 @@
         },
         response: null,
         frontend: {
-          error: `Network error: ${netErr.message || 'Connection failed'}`,
+          error: safeErr.message,
+          original_error: `${safeErr.name}: ${safeErr.message}`,
+          diagnostic_capture_error: null,
           json_parsing_attempted: false,
-          classified_as: 'network_failure',
+          classified_as: isNet ? 'network_failure' : 'client_exception',
           parsing_error: null,
           category: classification.code,
           category_label: classification.title,
@@ -935,8 +1220,8 @@
       return {
         status_code: 0,
         data: null,
-        errors: [`Network error: ${netErr.message || 'Connection failed'}`],
-        metadata: { network_error: true },
+        errors: [`${isNet ? 'Network error' : 'Request error'}: ${safeErr.message || 'Connection failed'}`],
+        metadata: { network_error: isNet, original_error: safeErr },
         execution_time_ms: 0.0,
         _diagnostic: diag,
       };
@@ -2280,6 +2565,7 @@
 
     const selectedMode = modeSelect ? modeSelect.value : 'NORMAL';
     const isUltra = selectedMode === 'ULTRA';
+    const scanStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
     // UI Loading State (prevents duplicate triggers)
     btnRun.disabled = true;
@@ -2318,7 +2604,7 @@
 
       document.querySelectorAll('.dash-flow-stage').forEach(stg => stg.classList.remove('is-running'));
 
-      if (res.status_code === 200 && res.data) {
+      if (res && res.status_code === 200 && res.data) {
         clearScanDebugUI();
         state.latestScan = res.data;
         renderDashboardView(res.data);
@@ -2349,28 +2635,44 @@
         } else {
           showToast(`${selectedMode} Scan complete (${res.data.duration_seconds}s) — Status: ${execStatus}`);
         }
-      } else if (res.status_code === 409) {
+      } else if (res && res.status_code === 409) {
         const conflictMsg = (res.errors && res.errors[0]) || 'Scan already in progress on server.';
         showToast(conflictMsg);
         if (alertBox) {
-          alertBox.innerHTML = `<div class="alert-banner warning"><strong>Scan In Progress:</strong> ${conflictMsg}</div>`;
+          alertBox.innerHTML = `<div class="alert-banner warning"><strong>Scan In Progress:</strong> ${escapeHtml(conflictMsg)}</div>`;
         }
-        renderScanDebugUI(res._diagnostic);
+        try {
+          renderScanDebugUI(res._diagnostic);
+        } catch (diagErr) {
+          console.error('Scan diagnostic render failed:', diagErr);
+        }
       } else {
-        const errorMsg = (res.errors && res.errors[0]) || 'Scan cycle encountered an error.';
+        const errorMsg = (res && res.errors && res.errors[0]) || (res && res.detail) || 'Scan cycle encountered an error.';
         if (alertBox) {
-          alertBox.innerHTML = `<div class="alert-banner error"><strong>Scan Error:</strong> ${errorMsg}</div>`;
+          alertBox.innerHTML = `<div class="alert-banner error"><strong>Scan Error:</strong> ${escapeHtml(errorMsg)}</div>`;
         }
-        renderScanDebugUI(res._diagnostic);
+        try {
+          renderScanDebugUI(res._diagnostic);
+        } catch (diagErr) {
+          console.error('Scan diagnostic render failed:', diagErr);
+        }
         showToast('Scan failed. See details.');
       }
     } catch (err) {
       document.querySelectorAll('.dash-flow-stage').forEach(stg => stg.classList.remove('is-running'));
       console.error('Scan execution error:', err);
+      const elapsedMs = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - scanStartTime);
+      const safeErr = safeExtractError(err);
       if (alertBox) {
-        alertBox.innerHTML = `<div class="alert-banner error"><strong>Scan Error:</strong> Communication error with backend API.</div>`;
+        const isFetch = safeErr.message.toLowerCase().includes('fetch') || safeErr.name === 'TypeError';
+        const displayErr = isFetch ? 'Communication error with backend API.' : safeErr.message;
+        alertBox.innerHTML = `<div class="alert-banner error"><strong>Scan Error:</strong> ${escapeHtml(displayErr)}</div>`;
       }
-      renderScanDebugUI(buildFallbackDiagnostic(err, selectedMode));
+      try {
+        renderScanDebugUI(buildFallbackDiagnostic(err, selectedMode, elapsedMs));
+      } catch (diagErr) {
+        console.error('Scan fallback diagnostic render failed:', diagErr);
+      }
       showToast('Scan execution failed.');
     } finally {
       document.querySelectorAll('.dash-flow-stage').forEach(stg => stg.classList.remove('is-running'));

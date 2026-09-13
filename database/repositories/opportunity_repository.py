@@ -2,7 +2,7 @@
 Opportunity Repository Implementation for Persistent Lifecycle Tracking
 """
 
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Sequence
 from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -24,6 +24,16 @@ class OpportunityRepository(BaseRepository[OpportunityRecordORM]):
             .first()
         )
 
+    def get_by_fingerprints(self, fingerprints: Sequence[str]) -> List[OpportunityRecordORM]:
+        """Retrieve opportunity records by deterministic fingerprints in a single batch query."""
+        if not fingerprints:
+            return []
+        return (
+            self.session.query(OpportunityRecordORM)
+            .filter(OpportunityRecordORM.fingerprint.in_(fingerprints))
+            .all()
+        )
+
     def save_or_update(self, record: OpportunityRecordORM) -> OpportunityRecordORM:
         """Persists a new opportunity or updates an existing record.
 
@@ -33,6 +43,12 @@ class OpportunityRepository(BaseRepository[OpportunityRecordORM]):
         the winner, and applying this write as an update — last-writer-wins,
         never a 500, never a duplicate.
         """
+        from sqlalchemy.orm import object_session
+        # If record is already an attached/persistent entity in this session, flush changes directly
+        if object_session(record) == self.session and record.id:
+            self.session.flush()
+            return record
+
         existing = self.get_by_fingerprint(record.fingerprint)
         if not existing:
             self.session.add(record)
@@ -75,7 +91,7 @@ class OpportunityRepository(BaseRepository[OpportunityRecordORM]):
     def list_active(self, event_id: Optional[str] = None) -> List[OpportunityRecordORM]:
         """Fetch all non-expired opportunity records, optionally filtered by canonical_event_id."""
         query = self.session.query(OpportunityRecordORM).filter(
-            OpportunityRecordORM.status != "EXPIRED"
+            OpportunityRecordORM.status.in_(["NEW", "ALERTED", "UPDATED"])
         )
         if event_id:
             query = query.filter(OpportunityRecordORM.canonical_event_id == event_id)

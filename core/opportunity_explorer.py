@@ -248,15 +248,18 @@ class OpportunityExplorerAdapter:
         if val_edge_pp is None and prop.get("execution_edge_pct") is not None:
             val_edge_pp = prop.get("execution_edge_pct")
 
-        is_val = bool(
-            prop.get("is_valuebet")
-            or prop.get("actionability") == "VALUEBET"
-            or prop.get("execution_status") == "VALUEBET"
-            # BETTABLE promotes only when net EV is not known-negative:
-            # gross-positive / net-negative (e.g. taxed Superbet) stays BETTABLE.
-            or (prop.get("execution_status") == "BETTABLE" and gross_ev is not None and float(gross_ev) > 0.0
-                and (net_ev is None or float(net_ev) > 0.0))
-        )
+        if prop.get("is_valuebet") is False:
+            is_val = False
+        else:
+            is_val = bool(
+                prop.get("is_valuebet")
+                or prop.get("actionability") == "VALUEBET"
+                or prop.get("execution_status") == "VALUEBET"
+                # BETTABLE promotes only when net EV is not known-negative:
+                # gross-positive / net-negative (e.g. taxed Superbet) stays BETTABLE.
+                or (prop.get("execution_status") == "BETTABLE" and gross_ev is not None and float(gross_ev) > 0.0
+                    and (net_ev is None or float(net_ev) > 0.0))
+            )
 
         # Check Polish Bookmaker Price Discrepancy
         disc_details = prop.get("discrepancy_details") or prop.get("discrepancy")
@@ -322,8 +325,20 @@ class OpportunityExplorerAdapter:
 
         dto_type = OpportunityType.QUOTE_DISCREPANCY.value if is_disc else OpportunityType.PLAYER_PROP.value
 
+        raw_l_status = str(prop.get("lifecycle_status") or prop.get("status") or prop.get("execution_status") or prop.get("actionability") or "").upper()
+        is_expired = (
+            raw_l_status == "EXPIRED"
+            or (prop.get("is_active") is False)
+            or (prop.get("expired_at") is not None and raw_l_status not in ("NEW", "ALERTED", "UPDATED", "ACTIVE", "BETTABLE"))
+        )
+
         status_str = str(prop.get("actionability") or prop.get("execution_status") or prop.get("status") or "REFERENCE_ONLY")
-        if is_disc and status_str in ("AVAILABLE", "BETTABLE"):
+        if not is_val and status_str == "VALUEBET":
+            status_str = "BETTABLE" if prop.get("execution_status") in ("BETTABLE", "AVAILABLE") or prop.get("actionability") in ("BETTABLE", "AVAILABLE") else "REFERENCE_ONLY"
+        if is_expired:
+            is_val = False
+            status_str = "EXPIRED"
+        elif is_disc and status_str in ("AVAILABLE", "BETTABLE"):
             status_str = "BETTABLE"
         elif is_val and status_str in ("BETTABLE", "AVAILABLE"):
             status_str = "VALUEBET"
@@ -407,14 +422,17 @@ class OpportunityExplorerAdapter:
         if val_edge_pp is None and prop.get("execution_edge_pct") is not None:
             val_edge_pp = prop.get("execution_edge_pct")
 
-        is_val = bool(
-            prop.get("is_valuebet")
-            or prop.get("actionability") == "VALUEBET"
-            or prop.get("execution_status") == "VALUEBET"
-            # BETTABLE promotes only when net EV is not known-negative.
-            or (prop.get("execution_status") == "BETTABLE" and gross_ev is not None and float(gross_ev) > 0.0
-                and (net_ev is None or float(net_ev) > 0.0))
-        )
+        if prop.get("is_valuebet") is False:
+            is_val = False
+        else:
+            is_val = bool(
+                prop.get("is_valuebet")
+                or prop.get("actionability") == "VALUEBET"
+                or prop.get("execution_status") == "VALUEBET"
+                # BETTABLE promotes only when net EV is not known-negative.
+                or (prop.get("execution_status") == "BETTABLE" and gross_ev is not None and float(gross_ev) > 0.0
+                    and (net_ev is None or float(net_ev) > 0.0))
+            )
 
         # Check Polish Bookmaker Price Discrepancy
         disc_details = prop.get("discrepancy_details") or prop.get("discrepancy")
@@ -485,8 +503,20 @@ class OpportunityExplorerAdapter:
 
         dto_type = OpportunityType.QUOTE_DISCREPANCY.value if is_disc else OpportunityType.TEAM_PROP.value
 
+        raw_l_status = str(prop.get("lifecycle_status") or prop.get("status") or prop.get("execution_status") or prop.get("actionability") or "").upper()
+        is_expired = (
+            raw_l_status == "EXPIRED"
+            or (prop.get("is_active") is False)
+            or (prop.get("expired_at") is not None and raw_l_status not in ("NEW", "ALERTED", "UPDATED", "ACTIVE", "BETTABLE"))
+        )
+
         status_str = str(prop.get("actionability") or prop.get("execution_status") or prop.get("status") or "REFERENCE_ONLY")
-        if is_disc and status_str in ("AVAILABLE", "BETTABLE"):
+        if not is_val and status_str == "VALUEBET":
+            status_str = "BETTABLE" if prop.get("execution_status") in ("BETTABLE", "AVAILABLE") or prop.get("actionability") in ("BETTABLE", "AVAILABLE") else "REFERENCE_ONLY"
+        if is_expired:
+            is_val = False
+            status_str = "EXPIRED"
+        elif is_disc and status_str in ("AVAILABLE", "BETTABLE"):
             status_str = "BETTABLE"
         elif is_val and status_str in ("BETTABLE", "AVAILABLE"):
             status_str = "VALUEBET"
@@ -628,7 +658,11 @@ class OpportunityExplorerAdapter:
             best_bm = best_o.get("bookmaker") or (books[0] if books else None)
             best_odds = float(best_o.get("odds")) if best_o.get("odds") else (float(odds_map[best_bm]) if best_bm and best_bm in odds_map else None)
 
-        status_str = "AVAILABLE" if best_odds is not None else "NO_EXECUTION_ODDS"
+        raw_l_status = str(selection.get("status") or market.get("status") or event.get("status") or "").upper()
+        if raw_l_status == "EXPIRED":
+            status_str = "EXPIRED"
+        else:
+            status_str = "AVAILABLE" if best_odds is not None else "NO_EXECUTION_ODDS"
         dto_type = OpportunityType.QUOTE_DISCREPANCY.value if is_discrepancy else OpportunityType.QUOTE_COMPARISON.value
         can_id = f"ctp_scan_{event.get('id') or event.get('canonical_event_id')}_{team}_{m_type}_{line}_{side}"
 
@@ -783,7 +817,11 @@ class OpportunityExplorerAdapter:
                 }
 
         opp_type = OpportunityType.QUOTE_DISCREPANCY.value if is_discrepancy else OpportunityType.PLAYER_PROP.value
-        status_str = "AVAILABLE" if best_odds is not None else "NO_EXECUTION_ODDS"
+        raw_l_status = str(selection.get("status") or market.get("status") or event.get("status") or "").upper()
+        if raw_l_status == "EXPIRED":
+            status_str = "EXPIRED"
+        else:
+            status_str = "AVAILABLE" if best_odds is not None else "NO_EXECUTION_ODDS"
         p_slug = player_name.replace(" ", "_") if player_name else "prop"
         can_id = f"cpp_scan_{event.get('id') or event.get('canonical_event_id')}_{p_slug}_{m_type}_{line}_{side}"
 
@@ -902,6 +940,22 @@ class OpportunityExplorerAdapter:
             explicit_is_top_5=val.get("is_top_5"),
         )
 
+        # Invariant: LIFECYCLE STATUS > QUALIFICATION STATUS.
+        # An expired record must never be emitted as an active valuebet.
+        raw_l_status = str(val.get("lifecycle_status") or val.get("status") or "").upper()
+        is_expired = (
+            raw_l_status == "EXPIRED"
+            or (val.get("is_active") is False)
+            or (val.get("expired_at") is not None and raw_l_status not in ("NEW", "ALERTED", "UPDATED", "ACTIVE"))
+        )
+
+        if is_expired:
+            dto_status = "EXPIRED"
+            dto_is_val = False
+        else:
+            dto_status = "VALUEBET" if bool(is_q) else "REFERENCE_ONLY"
+            dto_is_val = bool(is_q)
+
         return UnifiedOpportunityDTO(
             id=str(val.get("candidate_id") or val.get("opportunity_id") or val.get("id") or "vbc_unknown"),
             type=val_type,
@@ -929,9 +983,9 @@ class OpportunityExplorerAdapter:
             fair_odds=float(fair_odds_val) if fair_odds_val is not None else None,
             model_probability_pct=model_pct,
             value_edge_pp=float(val_pct) if val_pct is not None else None,
-            is_valuebet=bool(is_q),
+            is_valuebet=dto_is_val,
             score=float(val["quality_score"]) if val.get("quality_score") is not None else (float(val_pct) * 5.0 if val_pct is not None else None),
-            status="VALUEBET" if val.get("is_qualified", True) else "REFERENCE_ONLY",
+            status=dto_status,
             quality_flags=list(val.get("quality_flags") or []),
             created_at=val.get("detected_at") or val.get("first_seen_at"),
             expires_at=val.get("expired_at"),
@@ -991,6 +1045,20 @@ class OpportunityExplorerAdapter:
             explicit_is_top_5=sb.get("is_top_5"),
         )
 
+        # Invariant: LIFECYCLE STATUS > QUALIFICATION STATUS.
+        # An expired surebet must never be emitted as AVAILABLE.
+        raw_l_status = str(sb.get("lifecycle_status") or sb.get("status") or "").upper()
+        is_expired = (
+            raw_l_status == "EXPIRED"
+            or (sb.get("is_active") is False)
+            or (sb.get("expired_at") is not None and raw_l_status not in ("NEW", "ALERTED", "UPDATED", "ACTIVE"))
+        )
+
+        if is_expired:
+            dto_status = "EXPIRED"
+        else:
+            dto_status = "AVAILABLE" if sb.get("is_qualified", True) else "EXPIRED"
+
         return UnifiedOpportunityDTO(
             id=str(sb.get("opportunity_id") or sb.get("id") or "sb_unknown"),
             type=opp_type,
@@ -1020,7 +1088,7 @@ class OpportunityExplorerAdapter:
             value_edge_pp=None,
             is_valuebet=False,
             score=float(sb["quality_score"]) if sb.get("quality_score") is not None else (float(margin_pct) * 10.0 if margin_pct is not None else None),
-            status="AVAILABLE" if sb.get("is_qualified", True) else "EXPIRED",
+            status=dto_status,
             quality_flags=list(sb.get("quality_flags") or []),
             created_at=sb.get("detected_at") or sb.get("first_seen_at"),
             expires_at=sb.get("expired_at"),
@@ -1037,6 +1105,21 @@ class OpportunityExplorerAdapter:
             existing_can_id=b.get("canonical_competition_id"),
             explicit_is_top_5=b.get("is_top_5"),
         )
+
+        # Invariant: LIFECYCLE STATUS > QUALIFICATION STATUS.
+        raw_l_status = str(b.get("lifecycle_status") or b.get("status") or "").upper()
+        is_expired = (
+            raw_l_status == "EXPIRED"
+            or (b.get("is_active") is False)
+            or (b.get("expired_at") is not None and raw_l_status not in ("NEW", "ALERTED", "UPDATED", "ACTIVE"))
+        )
+
+        if is_expired:
+            b_status = "EXPIRED"
+            b_is_val = False
+        else:
+            b_status = b.get("status", "AVAILABLE")
+            b_is_val = True if (b.get("boost_pct") and float(b["boost_pct"]) > 0.0) else False
 
         return UnifiedOpportunityDTO(
             id=str(b.get("booster_id") or b.get("id") or "booster_unknown"),
@@ -1065,9 +1148,9 @@ class OpportunityExplorerAdapter:
             fair_odds=float(b["regular_odds"]) if b.get("regular_odds") is not None else None,
             model_probability_pct=None,
             value_edge_pp=float(b["boost_pct"]) if b.get("boost_pct") is not None else None,
-            is_valuebet=True if (b.get("boost_pct") and float(b["boost_pct"]) > 0.0) else False,
+            is_valuebet=b_is_val,
             score=float(b.get("score") or 80.0),
-            status=b.get("status", "AVAILABLE"),
+            status=b_status,
             quality_flags=list(b.get("quality_flags") or []),
             created_at=b.get("created_at"),
             expires_at=b.get("expires_at"),
@@ -1122,8 +1205,19 @@ class OpportunityExplorerAdapter:
         eff_odds = d.get("effective_odds")
         fair_odds = d.get("fair_odds")
 
+        # Invariant: LIFECYCLE STATUS > QUALIFICATION STATUS.
+        raw_l_status = str(d.get("lifecycle_status") or d.get("status") or "").upper()
+        is_expired = (
+            raw_l_status == "EXPIRED"
+            or (d.get("is_active") is False)
+            or (d.get("expired_at") is not None and raw_l_status not in ("NEW", "ALERTED", "UPDATED", "ACTIVE"))
+        )
+
         is_val = cat == "VALUEBET" or (cat in ("PLAYER_PROP", "TEAM_PROP") and edge is not None and float(edge) > 0.0)
-        if cat in ("WATCHLIST", "NEAR_SUREBET"):
+        if is_expired:
+            status = "EXPIRED"
+            is_val = False
+        elif cat in ("WATCHLIST", "NEAR_SUREBET"):
             status = "WATCHLIST"
         else:
             status = "VALUEBET" if is_val else "AVAILABLE"

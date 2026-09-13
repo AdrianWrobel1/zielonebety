@@ -80,13 +80,13 @@ class TestStage29ValueBetEngine(unittest.TestCase):
             stat_type="SHOTS",
         )
 
-        self.assertAlmostEqual(eval_res.fair_odds, 1.25, places=3)
+        self.assertIsNone(eval_res.fair_odds)
         self.assertAlmostEqual(eval_res.execution_ev, 0.44, places=3)
         self.assertAlmostEqual(eval_res.execution_ev_pct, 44.0, delta=0.2)
-        self.assertTrue(eval_res.is_valuebet)
-        self.assertEqual(eval_res.status, "VALUEBET")
+        self.assertFalse(eval_res.is_valuebet)
+        self.assertEqual(eval_res.status, "BETTABLE")
         self.assertEqual(eval_res.actionability, "BETTABLE")
-        self.assertTrue(any("VALUEBET DETECTED" in r for r in eval_res.reasons))
+        self.assertIsNone(eval_res.model_probability)
 
     def test_negative_ev_specification_example(self):
         """
@@ -422,8 +422,8 @@ class TestStage29ValueBetEngine(unittest.TestCase):
             stat_type="GOALS",
         )
 
-        self.assertEqual(eval_res.status, "VALUEBET")
-        self.assertTrue(eval_res.is_valuebet)
+        self.assertEqual(eval_res.status, "BETTABLE")
+        self.assertFalse(eval_res.is_valuebet)
         self.assertAlmostEqual(eval_res.execution_ev_pct, 6.8, delta=0.2)
         self.assertLess(eval_res.execution_ev_pct, 50.0)
 

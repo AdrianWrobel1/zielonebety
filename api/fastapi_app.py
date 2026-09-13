@@ -14,6 +14,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Body, Response, Requ
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from api.auth import get_cors_origins, require_admin
 from api.routes import APIRouter
@@ -34,249 +35,6 @@ async def lifespan(app: FastAPI):
     """Graceful startup and shutdown lifecycle context manager."""
     logger.info("Application starting up...")
     db_manager_instance.create_tables()
-
-    from api.services import PlatformAPIService
-    if not PlatformAPIService._cached_global_props_results:
-        PlatformAPIService._cached_global_props_results = {
-            "status": "SUCCESS",
-            "qualified_count": 4,
-            "diagnostic_count": 3,
-            "funnel_metrics": {
-                "trends_discovered": 340,
-                "trends_deduplicated": 45,
-                "props_evaluated": 45,
-                "qualified_valuebets": 3,
-                "fixtures_discovered": 8,
-                "fixtures_selected": 8,
-            },
-            "qualified_opportunities": [
-                {
-                    "canonical_prop_key": "kylian_mbappe_real_madrid_fc_barcelona_shots_3.5_over",
-                    "prop_type": "PLAYER",
-                    "player_name": "Kylian Mbappe",
-                    "team": "Real Madrid",
-                    "opponent": "Barcelona",
-                    "match_name": "Real Madrid vs Barcelona",
-                    "competition": "La Liga",
-                    "stat_type": "SHOTS",
-                    "line": 3.5,
-                    "side": "OVER",
-                    "best_bookmaker": "betclic",
-                    "best_raw_odds": 4.50,
-                    "lower_executable_bookmaker": "superbet",
-                    "lower_executable_odds": 2.00,
-                    "superbet_odds": 2.00,
-                    "betclic_odds": 4.50,
-                    "odds_difference": 2.50,
-                    "relative_price_difference_pct": 125.0,
-                    "is_discrepancy": True,
-                    "status": "QUALIFIED",
-                    "is_valuebet": True,
-                    "net_ev_pct": 5.8,
-                    "hit_rate_pct": 60.0,
-                    "trend_window": 10,
-                    "position": "F",
-                    "discrepancy_details": {
-                        "best_bookmaker": "Betclic",
-                        "lower_bookmaker": "Superbet",
-                        "best_odds": 4.50,
-                        "lower_odds": 2.00,
-                        "odds_difference": 2.50,
-                        "relative_price_difference_pct": 125.0,
-                        "implied_probability_shift_pp": 27.78,
-                    },
-                },
-                {
-                    "canonical_prop_key": "vinicius_junior_real_madrid_fc_barcelona_shots_2.5_over",
-                    "prop_type": "PLAYER",
-                    "player_name": "Vinicius Junior",
-                    "team": "Real Madrid",
-                    "opponent": "Barcelona",
-                    "match_name": "Real Madrid vs Barcelona",
-                    "competition": "La Liga",
-                    "stat_type": "SHOTS",
-                    "line": 2.5,
-                    "side": "OVER",
-                    "best_bookmaker": "betclic",
-                    "best_raw_odds": 3.10,
-                    "lower_executable_bookmaker": "superbet",
-                    "lower_executable_odds": 1.88,
-                    "superbet_odds": 1.88,
-                    "betclic_odds": 3.10,
-                    "odds_difference": 1.22,
-                    "relative_price_difference_pct": 64.9,
-                    "is_discrepancy": True,
-                    "status": "QUALIFIED",
-                    "is_valuebet": False,
-                    "net_ev_pct": None,
-                    "hit_rate_pct": 70.0,
-                    "trend_window": 10,
-                    "position": "F",
-                    "discrepancy_details": {
-                        "best_bookmaker": "Betclic",
-                        "lower_bookmaker": "Superbet",
-                        "best_odds": 3.10,
-                        "lower_odds": 1.88,
-                        "odds_difference": 1.22,
-                        "relative_price_difference_pct": 64.9,
-                        "implied_probability_shift_pp": 20.94,
-                    },
-                },
-                {
-                    "canonical_prop_key": "rodri_manchester_city_arsenal_fouls_1.5_over",
-                    "prop_type": "PLAYER",
-                    "player_name": "Rodri",
-                    "team": "Manchester City",
-                    "opponent": "Arsenal",
-                    "match_name": "Manchester City vs Arsenal",
-                    "competition": "Premier League",
-                    "stat_type": "FOULS",
-                    "line": 1.5,
-                    "side": "OVER",
-                    "best_bookmaker": "superbet",
-                    "best_raw_odds": 2.00,
-                    "lower_executable_bookmaker": "betclic",
-                    "lower_executable_odds": 1.50,
-                    "superbet_odds": 2.00,
-                    "betclic_odds": 1.50,
-                    "odds_difference": 0.50,
-                    "relative_price_difference_pct": 33.3,
-                    "is_discrepancy": True,
-                    "status": "QUALIFIED",
-                    "is_valuebet": True,
-                    "net_ev_pct": 7.2,
-                    "hit_rate_pct": 80.0,
-                    "trend_window": 10,
-                    "position": "M",
-                    "discrepancy_details": {
-                        "best_bookmaker": "Superbet",
-                        "lower_bookmaker": "Betclic",
-                        "best_odds": 2.00,
-                        "lower_odds": 1.50,
-                        "odds_difference": 0.50,
-                        "relative_price_difference_pct": 33.3,
-                        "implied_probability_shift_pp": 16.67,
-                    },
-                },
-                {
-                    "canonical_prop_key": "erling_haaland_manchester_city_arsenal_shots_2.5_over",
-                    "prop_type": "PLAYER",
-                    "player_name": "Erling Haaland",
-                    "team": "Manchester City",
-                    "opponent": "Arsenal",
-                    "match_name": "Manchester City vs Arsenal",
-                    "competition": "Premier League",
-                    "stat_type": "SHOTS",
-                    "line": 2.5,
-                    "side": "OVER",
-                    "best_bookmaker": "betclic",
-                    "best_raw_odds": 2.00,
-                    "lower_executable_bookmaker": "superbet",
-                    "lower_executable_odds": 1.50,
-                    "superbet_odds": 1.50,
-                    "betclic_odds": 2.00,
-                    "odds_difference": 0.50,
-                    "relative_price_difference_pct": 33.3,
-                    "is_discrepancy": True,
-                    "status": "QUALIFIED",
-                    "is_valuebet": False,
-                    "net_ev_pct": None,
-                    "hit_rate_pct": 75.0,
-                    "trend_window": 10,
-                    "position": "F",
-                    "discrepancy_details": {
-                        "best_bookmaker": "Betclic",
-                        "lower_bookmaker": "Superbet",
-                        "best_odds": 2.00,
-                        "lower_odds": 1.50,
-                        "odds_difference": 0.50,
-                        "relative_price_difference_pct": 33.3,
-                        "implied_probability_shift_pp": 16.67,
-                    },
-                },
-            ],
-            "diagnostic_candidates": [
-                {
-                    "canonical_prop_key": "real_madrid_fc_barcelona_corners_6.5_over",
-                    "prop_type": "TEAM",
-                    "player_name": "Real Madrid",
-                    "team": "Real Madrid",
-                    "opponent": "Barcelona",
-                    "match_name": "Real Madrid vs Barcelona",
-                    "competition": "La Liga",
-                    "stat_type": "CORNERS",
-                    "line": 6.5,
-                    "side": "OVER",
-                    "best_bookmaker": "superbet",
-                    "best_raw_odds": 1.95,
-                    "lower_executable_bookmaker": "betclic",
-                    "lower_executable_odds": 1.90,
-                    "superbet_odds": 1.95,
-                    "betclic_odds": 1.90,
-                    "odds_difference": 0.05,
-                    "relative_price_difference_pct": 2.6,
-                    "is_discrepancy": False,
-                    "status": "BELOW_VALUE_THRESHOLD",
-                    "is_valuebet": False,
-                    "net_ev_pct": 0.5,
-                    "hit_rate_pct": 55.0,
-                    "trend_window": 10,
-                },
-                {
-                    "canonical_prop_key": "arsenal_chelsea_corners_5.5_over",
-                    "prop_type": "TEAM",
-                    "player_name": "Arsenal",
-                    "team": "Arsenal",
-                    "opponent": "Chelsea",
-                    "match_name": "Arsenal vs Chelsea",
-                    "competition": "Premier League",
-                    "stat_type": "CORNERS",
-                    "line": 5.5,
-                    "side": "OVER",
-                    "best_bookmaker": "superbet",
-                    "best_raw_odds": 1.85,
-                    "lower_executable_bookmaker": "betclic",
-                    "lower_executable_odds": 1.80,
-                    "superbet_odds": 1.85,
-                    "betclic_odds": 1.80,
-                    "odds_difference": 0.05,
-                    "relative_price_difference_pct": 2.8,
-                    "is_discrepancy": False,
-                    "status": "QUALIFIED",
-                    "is_valuebet": True,
-                    "net_ev_pct": 4.2,
-                    "hit_rate_pct": 65.0,
-                    "trend_window": 10,
-                },
-                {
-                    "canonical_prop_key": "robert_lewandowski_real_madrid_shots_2.5_over",
-                    "prop_type": "PLAYER",
-                    "player_name": "Robert Lewandowski",
-                    "team": "Barcelona",
-                    "opponent": "Real Madrid",
-                    "match_name": "Real Madrid vs Barcelona",
-                    "competition": "La Liga",
-                    "stat_type": "SHOTS",
-                    "line": 2.5,
-                    "side": "OVER",
-                    "best_bookmaker": "superbet",
-                    "best_raw_odds": 1.80,
-                    "lower_executable_bookmaker": None,
-                    "lower_executable_odds": None,
-                    "superbet_odds": 1.80,
-                    "betclic_odds": None,
-                    "odds_difference": None,
-                    "relative_price_difference_pct": None,
-                    "is_discrepancy": False,
-                    "status": "POLISH_ODDS_UNAVAILABLE",
-                    "is_valuebet": False,
-                    "net_ev_pct": -1.0,
-                    "hit_rate_pct": 60.0,
-                    "trend_window": 10,
-                    "position": "F",
-                },
-            ],
-        }
     yield
     # Graceful Shutdown
     logger.info("Application initiating graceful shutdown...")
@@ -305,6 +63,16 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 @app.exception_handler(HTTPException)
@@ -589,6 +357,10 @@ def list_unified_explorer_opportunities(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     top_5: bool = Query(False),
+    min_discrepancy: Optional[float] = Query(None),
+    min_discrepancy_pct: Optional[float] = Query(None),
+    max_lower_odds: Optional[float] = Query(None),
+    refresh: bool = Query(False),
 ):
     """Unified Opportunity Explorer — aggregated view of Player Props, Valuebets, Surebets, Boosters, and Team Props."""
     eff_type = type if isinstance(type, str) else None
@@ -607,6 +379,9 @@ def list_unified_explorer_opportunities(
     eff_limit = int(limit) if isinstance(limit, int) else 50
     eff_offset = int(offset) if isinstance(offset, int) else 0
     eff_top_5 = bool(top_5) if isinstance(top_5, bool) else False
+    eff_min_disc = float(min_discrepancy_pct) if isinstance(min_discrepancy_pct, (int, float)) else (float(min_discrepancy) if isinstance(min_discrepancy, (int, float)) else None)
+    eff_max_lower = float(max_lower_odds) if isinstance(max_lower_odds, (int, float)) else None
+    eff_refresh = bool(refresh) if isinstance(refresh, bool) else False
 
     return router_instance.handle_get_explorer_opportunities(
         opp_type=eff_type,
@@ -625,6 +400,9 @@ def list_unified_explorer_opportunities(
         limit=eff_limit,
         offset=eff_offset,
         top_5=eff_top_5,
+        min_discrepancy_pct=eff_min_disc,
+        max_lower_odds=eff_max_lower,
+        refresh=eff_refresh,
     ).to_dict()
 
 
@@ -983,12 +761,33 @@ web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
 if os.path.exists(web_dir):
     index_file = os.path.join(web_dir, "index.html")
 
+    favicon_file = os.path.join(web_dir, "favicon.svg")
+    robots_file = os.path.join(web_dir, "robots.txt")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    @app.get("/favicon.svg", include_in_schema=False)
+    def get_favicon():
+        from fastapi.responses import FileResponse
+        if os.path.exists(favicon_file):
+            return FileResponse(favicon_file, media_type="image/svg+xml")
+        return Response(status_code=404)
+
+    @app.get("/robots.txt", include_in_schema=False)
+    def get_robots_txt():
+        from fastapi.responses import FileResponse
+        if os.path.exists(robots_file):
+            return FileResponse(robots_file, media_type="text/plain")
+        return Response(content="User-agent: *\nDisallow: /\n", media_type="text/plain")
+
     # Serve SPA routes with index.html fallback if direct path navigation is used
+    @app.get("/dashboard")
     @app.get("/events")
     @app.get("/playerprops")
     @app.get("/teamprops")
     @app.get("/opportunities")
+    @app.get("/opportunity/{opp_id:path}")
     @app.get("/providers")
+    @app.get("/profiler")
     @app.get("/history")
     @app.get("/notifications")
     @app.get("/settings")

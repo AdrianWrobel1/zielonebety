@@ -37,11 +37,11 @@ class TeamPropOpportunityEvaluation:
     execution_ev: Optional[float] = None  # (historical_probability * execution_odds) - 1
     execution_ev_pct: Optional[float] = None  # execution_ev * 100.0
     # Value Bet Engine Fields
-    status: str = ""  # Distinct status: "VALUEBET", "BETTABLE", "REFERENCE_ONLY", etc.
-    model_probability: float = 0.0  # Alias for historical_probability
-    fair_odds: Optional[float] = None  # 1 / P_model
-    value_edge_pp: Optional[float] = None  # P_model * 100 - (1 / execution_odds) * 100
-    is_valuebet: bool = False  # True iff positive EV on verified Polish execution odds
+    status: str = ""  # Distinct status: "BETTABLE", "REFERENCE_ONLY", etc.
+    model_probability: Optional[float] = None  # Grounded probability model only (never hit rate)
+    fair_odds: Optional[float] = None  # Grounded fair odds only
+    value_edge_pp: Optional[float] = None  # Grounded model edge only
+    is_valuebet: bool = False  # False in statistical engine (canonical valuation required)
     reasons: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     data_quality_flags: List[str] = field(default_factory=list)
@@ -53,10 +53,10 @@ class TeamPropOpportunityEvaluation:
             "score": self.score,
             "classification": self.classification,
             "actionability": self.actionability,
-            "status": self.status or ("VALUEBET" if self.is_valuebet else self.actionability),
+            "status": self.status or self.actionability,
             "historical_probability": self.historical_probability,
-            "model_probability": self.model_probability or self.historical_probability,
-            "model_probability_pct": round((self.model_probability or self.historical_probability) * 100.0, 1),
+            "model_probability": self.model_probability,
+            "model_probability_pct": round(self.model_probability * 100.0, 1) if self.model_probability is not None else None,
             "fair_odds": self.fair_odds,
             "reference_market_probability": self.reference_market_probability,
             "reference_probability": self.reference_market_probability,
@@ -170,12 +170,14 @@ class TeamPropOpportunityEngine:
 
         hr_clamped = max(0.0, min(100.0, float(hit_rate_pct or 0.0))) if has_sample else 0.0
         historical_probability = round(hr_clamped / 100.0, 4) if has_sample else 0.0
-        model_probability = historical_probability
-        fair_odds = self.calculate_fair_odds(model_probability) if has_sample else None
+        # CRITICAL INVARIANT: Hit rate is a STATISTIC, not a calibrated probability model.
+        # It must NEVER be aliased to model_probability or used to fabricate fair_odds.
+        model_probability = None
+        fair_odds = None
         hits = hit_rate_count if hit_rate_count is not None else round(hr_clamped * effective_sample / 100.0)
 
         if effective_sample > 0:
-            reasons.append(f"{hits}/{effective_sample} ({hr_clamped:.0f}%) historical hit rate (Fair Odds: {fair_odds:.2f})" if fair_odds else f"{hits}/{effective_sample} ({hr_clamped:.0f}%) historical hit rate")
+            reasons.append(f"{hits}/{effective_sample} ({hr_clamped:.0f}%) historical hit rate")
         else:
             warnings.append("Missing or zero historical sample. Probability cannot be derived.")
 
@@ -228,19 +230,15 @@ class TeamPropOpportunityEngine:
             if has_sample:
                 exec_edge, exec_edge_pct = self.calculate_statistical_edge(historical_probability, exec_market_prob)
                 exec_ev, exec_ev_pct = self.calculate_expected_value(historical_probability, best_execution_odds)
-                value_edge_pp = self.calculate_value_edge_pp(model_probability, best_execution_odds)
+                value_edge_pp = None
 
-                if exec_ev is not None and exec_ev > 0.0 and (exec_ev_pct is not None and exec_ev_pct >= effective_min_ev):
-                    is_val = True
+                # CRITICAL INVARIANT: TeamPropOpportunityEngine is a statistical ranking engine,
+                # NOT a ValueBet engine. Hit rate cannot qualify a ValueBet.
+                is_val = False
 
             if exec_edge is not None and exec_edge > 0:
                 reasons.append(
                     f"Execution Edge: Real Polish bookmaker price yields +{exec_edge_pct:.1f}pp edge (Implied: {exec_market_prob*100:.1f}%)"
-                )
-
-            if is_val:
-                reasons.append(
-                    f"VALUEBET DETECTED: +{exec_ev_pct:.1f}% Expected Value at {best_execution_bookmaker or 'Polish Bookmaker'} (Fair Odds: {fair_odds:.2f}, Exec Odds: {best_execution_odds:.2f})"
                 )
             elif exec_edge is not None and exec_edge <= 0:
                 warnings.append(
@@ -363,7 +361,7 @@ class TeamPropOpportunityEngine:
         # 8. Actionability State & Distinct Status
         if is_bettable_execution:
             actionability = "BETTABLE"
-            distinct_status = "VALUEBET" if is_val else "BETTABLE"
+            distinct_status = "BETTABLE"
         elif execution_status == "MATCH_UNCERTAIN":
             actionability = "MATCH_UNCERTAIN"
             distinct_status = "MATCH_UNCERTAIN"
@@ -393,8 +391,6 @@ class TeamPropOpportunityEngine:
             quality_flags.append("INACTIVE_ODDS")
         if best_odds and is_bettable_execution and abs(best_odds - best_execution_odds) >= 0.35:
             quality_flags.append("LARGE_REFERENCE_EXECUTION_DISCREPANCY")
-        if is_val:
-            quality_flags.append("VALUEBET_POSITIVE_EV")
 
         warnings.append("Statistical edge only: historical sample does not guarantee future betting profitability.")
 

@@ -9,6 +9,7 @@ from database.repositories.odds_repository import OddsRepository
 from database.repositories.opportunity_repository import OpportunityRepository
 from database.repositories.player_prop_snapshot_repository import PlayerPropSnapshotRepository
 from database.repositories.provider_run_repository import ProviderRunRepository
+from database.repositories.snapshot_repository import SnapshotRepository
 
 __all__ = [
     "BaseRepository",
@@ -18,6 +19,7 @@ __all__ = [
     "OpportunityRepository",
     "PlayerPropSnapshotRepository",
     "ProviderRunRepository",
+    "SnapshotRepository",
 ]
 
 

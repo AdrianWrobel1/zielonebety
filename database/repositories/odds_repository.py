@@ -20,19 +20,23 @@ class OddsRepository(BaseRepository[OddsORM]):
     def save_canonical_odds(self, canonical_odds_list: List[CanonicalOdds]) -> List[OddsORM]:
         """Appends new canonical odds snapshots to database."""
         added_records: List[OddsORM] = []
+        provider_cache: dict = {}
 
         for co in canonical_odds_list:
-            # Ensure provider exists
-            provider = self.session.query(ProviderORM).filter_by(id=co.bookmaker).first()
+            # Ensure provider exists with local caching
+            provider = provider_cache.get(co.bookmaker)
             if not provider:
-                provider = ProviderORM(
-                    id=co.bookmaker,
-                    name=co.bookmaker.title(),
-                    code=co.bookmaker[:4].lower(),
-                    enabled=True,
-                )
-                self.session.add(provider)
-                self.session.flush()
+                provider = self.session.query(ProviderORM).filter_by(id=co.bookmaker).first()
+                if not provider:
+                    provider = ProviderORM(
+                        id=co.bookmaker,
+                        name=co.bookmaker.title(),
+                        code=co.bookmaker[:4].lower(),
+                        enabled=True,
+                    )
+                    self.session.add(provider)
+                    self.session.flush()
+                provider_cache[co.bookmaker] = provider
 
             dt_collected = datetime.now(timezone.utc)
             if co.timestamp:

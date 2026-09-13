@@ -227,6 +227,8 @@ def _extract_opp_data(opp_or_record: Any) -> Dict[str, Any]:
             "is_qualified": is_qual,
             "rejection_reasons": rej_reasons,
             "lifecycle_status": opp_or_record.status,
+            "status": opp_or_record.status,
+            "is_active": opp_or_record.status != "EXPIRED",
             "detected_at": opp_or_record.first_seen_at.isoformat() if opp_or_record.first_seen_at else None,
             "first_seen_at": opp_or_record.first_seen_at.isoformat() if opp_or_record.first_seen_at else None,
             "last_seen_at": opp_or_record.last_seen_at.isoformat() if opp_or_record.last_seen_at else None,
@@ -605,9 +607,11 @@ def serialize_opportunity_summary(opp_or_record: Any) -> Dict[str, Any]:
         "competition_tier": data.get("competition_tier", 2),
         "tier_name": data.get("tier_name", "Tier 2 (Standard)"),
         "is_qualified": data.get("is_qualified", True),
+        "status": data.get("lifecycle_status", "NEW"),
         "lifecycle_status": data.get("lifecycle_status", "NEW"),
         "detected_at": data.get("detected_at"),
         "last_seen_at": data.get("last_seen_at"),
+        "expired_at": data.get("expired_at"),
         "legs": legs_summary,
     }
 
@@ -2468,6 +2472,7 @@ def _save_scan_snapshot(
     """Persist completed scan cycle summary into database SnapshotORM table."""
     try:
         from database.models import SnapshotORM, ProviderORM
+        from database.repositories.snapshot_repository import SnapshotRepository
         with db_manager.get_session() as session:
             sys_prov = session.query(ProviderORM).filter_by(id="system").first()
             if not sys_prov:
@@ -2483,7 +2488,16 @@ def _save_scan_snapshot(
                 payload=json.dumps(serialized_result),
                 created_at=datetime.now(timezone.utc),
             )
-            session.add(snap)
+            repo = SnapshotRepository(session)
+            repo.save_snapshot(snap, compact_previous=True, keep_full_count=1)
+            # Automatic bounded retention (keep last 20 regular scans, 5 ultra scans, within 7 days)
+            repo.prune_expired_snapshots(
+                retention_days=7,
+                max_scan_keep=20,
+                max_ultra_keep=5,
+                batch_size=50,
+                dry_run=False,
+            )
             session.commit()
     except Exception as exc:
         logger.debug("Failed to persist scan snapshot: %s", exc)
@@ -2492,19 +2506,17 @@ def _save_scan_snapshot(
 def _load_scan_snapshots(db_manager: DatabaseManager, limit: int = 20) -> List[Dict[str, Any]]:
     """Load recent scan cycle summaries from database SnapshotORM table."""
     try:
-        from database.models import SnapshotORM
+        from database.repositories.snapshot_repository import SnapshotRepository
         with db_manager.get_session() as session:
-            snaps = (
-                session.query(SnapshotORM)
-                .filter(SnapshotORM.snapshot_type == "SCAN_CYCLE_RESULT")
-                .order_by(SnapshotORM.created_at.desc())
-                .limit(limit)
-                .all()
-            )
+            repo = SnapshotRepository(session)
+            snaps = repo.list_recent(snapshot_type="SCAN_CYCLE_RESULT", limit=limit)
             results = []
-            for s in snaps:
+            for idx, s in enumerate(snaps):
                 try:
                     data = json.loads(s.payload)
+                    # For historical entries after the latest one, strip massive detail map to conserve memory
+                    if idx > 0 and isinstance(data, dict):
+                        data.pop("_events_detail_map", None)
                     results.append(data)
                 except Exception:
                     continue
@@ -2517,14 +2529,10 @@ def _load_scan_snapshots(db_manager: DatabaseManager, limit: int = 20) -> List[D
 def _load_latest_ultra_scan_snapshot(db_manager: DatabaseManager) -> Optional[Dict[str, Any]]:
     """Load latest ULTRA SCAN result snapshot from database SnapshotORM table."""
     try:
-        from database.models import SnapshotORM
+        from database.repositories.snapshot_repository import SnapshotRepository
         with db_manager.get_session() as session:
-            snap = (
-                session.query(SnapshotORM)
-                .filter(SnapshotORM.snapshot_type == "ULTRA_SCAN_RESULT")
-                .order_by(SnapshotORM.created_at.desc())
-                .first()
-            )
+            repo = SnapshotRepository(session)
+            snap = repo.get_latest(snapshot_type="ULTRA_SCAN_RESULT")
             if snap and snap.payload:
                 return json.loads(snap.payload)
     except Exception as exc:
@@ -2565,6 +2573,7 @@ class PlatformAPIService:
             "team_props": None,
             "player_props": None,
         }
+        self._unified_opportunities_cache: Optional[List[Any]] = None
 
         # Restore persisted scan history from database if available
         if self.db_manager is not None:
@@ -2623,6 +2632,11 @@ class PlatformAPIService:
         # Automated scanning scheduler (loads persisted state via db_manager)
         self.scheduler = ScanScheduler(service=self, interval_minutes=15, enabled=False, db_manager=self.db_manager)
         self.scheduler.start()
+
+    def _invalidate_unified_cache(self) -> None:
+        """Atomically invalidates both instance and class unified opportunity caches."""
+        self._unified_opportunities_cache = None
+        PlatformAPIService._unified_opportunities_cache = None
 
     def get_health(self) -> Dict[str, Any]:
         """Returns aggregated platform health status conforming to Stage 8.4 specification."""
@@ -2986,7 +3000,7 @@ class PlatformAPIService:
                     if hasattr(nr, "normalized_graphs") and nr.normalized_graphs:
                         cached_graphs.extend(nr.normalized_graphs)
             self._cached_normalized_graphs = cached_graphs
-            PlatformAPIService._unified_opportunities_cache = None
+            self._invalidate_unified_cache()
 
             # Persist scan cycle summary to database
             if self.db_manager is not None:
@@ -3122,7 +3136,7 @@ class PlatformAPIService:
             self._events_cache = dict(events_detail_map)
 
             self._last_ultra_scan_result = serialized
-            PlatformAPIService._unified_opportunities_cache = None
+            self._invalidate_unified_cache()
 
             # Persist ULTRA SCAN result snapshot into database
             if self.db_manager is not None:
@@ -3228,7 +3242,24 @@ class PlatformAPIService:
                 return tr
 
         if self.db_manager is not None:
-            persisted_snaps = _load_scan_snapshots(self.db_manager, limit=20)
+            try:
+                from database.models import SnapshotORM
+                with self.db_manager.get_session() as session:
+                    # Point lookup using ix_snapshots_execution_id
+                    snap = session.query(SnapshotORM).filter(SnapshotORM.execution_id == trace_id).first()
+                    if snap and snap.payload:
+                        try:
+                            data = json.loads(snap.payload)
+                            tr = data.get("scan_trace") or {}
+                            if tr.get("trace_id") == trace_id or data.get("execution_id") == trace_id:
+                                return tr
+                        except Exception:
+                            pass
+            except Exception as exc:
+                logger.debug("Failed direct trace lookup: %s", exc)
+
+            # Fallback to checking recent snapshots if trace_id was not the execution_id
+            persisted_snaps = _load_scan_snapshots(self.db_manager, limit=5)
             for snap in persisted_snaps:
                 tr = snap.get("scan_trace") or {}
                 if tr.get("trace_id") == trace_id or snap.get("execution_id") == trace_id:
@@ -3358,10 +3389,8 @@ class PlatformAPIService:
                 elif status and isinstance(status, str) and status.strip():
                     records = repo.list_by_status(status.upper())
                 else:
-                    # Default: return active non-expired opportunities, or all if none active
+                    # Default: return active non-expired opportunities only (honest empty state)
                     records = repo.list_active()
-                    if not records:
-                        records = repo.list_all()
 
                 for rec in records:
                     serialized = serialize_opportunity_summary(rec)
@@ -3446,8 +3475,12 @@ class PlatformAPIService:
                     continue
 
             # Status filter
+            opp_st = str(o.get("lifecycle_status") or o.get("status") or "").upper()
             if status and status.upper() not in ("ALL", "ACTIVE", ""):
-                if o.get("lifecycle_status", "").upper() != status.upper():
+                if opp_st != status.upper():
+                    continue
+            elif not status or status.upper() == "ACTIVE":
+                if opp_st == "EXPIRED":
                     continue
 
             # Competition Tier filter
@@ -3481,7 +3514,7 @@ class PlatformAPIService:
 
         return results
 
-    def _collect_unified_explorer_opportunities(self) -> List[Any]:
+    def _collect_unified_explorer_opportunities(self, include_expired: bool = False) -> List[Any]:
         """Collects opportunities across engines and formats into UnifiedOpportunityDTOs."""
         from core.opportunity_explorer import (
             OpportunityExplorerAdapter,
@@ -3493,7 +3526,8 @@ class PlatformAPIService:
         seen_opp_ids = set()
 
         # 1. Collect Surebets & Valuebets from database & latest scan
-        scanned_opps = self.list_opportunities(status="ALL")
+        fetch_status = "ALL" if include_expired else "ACTIVE"
+        scanned_opps = self.list_opportunities(status=fetch_status)
         for o in scanned_opps:
             o_type = o.get("opportunity_type", "").upper()
             if o_type == "VALUEBET":
@@ -3624,6 +3658,34 @@ class PlatformAPIService:
                 dto = OpportunityExplorerAdapter.from_booster(b)
                 unified_items.append(dto)
 
+        # 5. Ingest Global Props Scanner results (Normal & Ultra)
+        try:
+            for g_cache in (
+                getattr(PlatformAPIService, "_cached_global_props_results", None),
+                getattr(PlatformAPIService, "_cached_global_props_ultra_results", None),
+            ):
+                if not isinstance(g_cache, dict):
+                    continue
+                for opp_list_key in ("qualified_opportunities", "diagnostic_candidates"):
+                    for prop in g_cache.get(opp_list_key, []):
+                        if not isinstance(prop, dict):
+                            continue
+                        p_id = str(prop.get("prop_id") or prop.get("canonical_prop_key") or "")
+                        if not p_id or p_id in seen_opp_ids:
+                            continue
+                        seen_opp_ids.add(p_id)
+                        p_type = str(prop.get("prop_type", "PLAYER")).upper()
+                        if p_type == "TEAM":
+                            dto = OpportunityExplorerAdapter.from_team_prop(prop)
+                        else:
+                            dto = OpportunityExplorerAdapter.from_player_prop(prop)
+                        unified_items.append(dto)
+        except Exception as exc:
+            logger.warning("Could not ingest global props for unified explorer: %s", exc)
+
+        if not include_expired:
+            unified_items = [item for item in unified_items if str(item.status).upper() != "EXPIRED"]
+
         return unified_items
 
     def get_unified_explorer_opportunities(
@@ -3644,6 +3706,9 @@ class PlatformAPIService:
         limit: int = 50,
         offset: int = 0,
         top_5: bool = False,
+        min_discrepancy_pct: Optional[float] = None,
+        max_lower_odds: Optional[float] = None,
+        refresh: bool = False,
     ) -> Dict[str, Any]:
         """Aggregates Player Props, Valuebets, Surebets, Boosters, and Team Props into unified DTOs."""
         from core.opportunity_explorer import (
@@ -3656,15 +3721,24 @@ class PlatformAPIService:
         counts_by_type: Dict[str, int] = {t.value: 0 for t in OpportunityType}
         counts_by_status: Dict[str, int] = {}
 
-        cached = getattr(self, "_unified_opportunities_cache", None)
-        if cached is None:
-            cached = PlatformAPIService._unified_opportunities_cache
-        if cached is not None:
+        want_expired = bool(status and status.upper() in ("ALL", "EXPIRED"))
+
+        if refresh or want_expired:
+            if refresh:
+                self._invalidate_unified_cache()
+            cached = None
+        else:
+            cached = getattr(self, "_unified_opportunities_cache", None)
+            if cached is None:
+                cached = PlatformAPIService._unified_opportunities_cache
+
+        if cached is not None and not want_expired:
             unified_items = list(cached)
         else:
-            unified_items = self._collect_unified_explorer_opportunities()
-            PlatformAPIService._unified_opportunities_cache = list(unified_items)
-            self._unified_opportunities_cache = list(unified_items)
+            unified_items = self._collect_unified_explorer_opportunities(include_expired=want_expired)
+            if not want_expired:
+                PlatformAPIService._unified_opportunities_cache = list(unified_items)
+                self._unified_opportunities_cache = list(unified_items)
 
         # Update raw type counts before filtering
         for item in unified_items:
@@ -3672,7 +3746,10 @@ class PlatformAPIService:
             counts_by_status[item.status] = counts_by_status.get(item.status, 0) + 1
 
         # Calculate all genuine valuebets across types (Valuebets + Player Props with positive EV)
-        all_valuebets_count = len([i for i in unified_items if i.type == "VALUEBET" or i.status == "VALUEBET" or i.is_valuebet])
+        all_valuebets_count = len([
+            i for i in unified_items
+            if (i.type == "VALUEBET" or i.status == "VALUEBET" or i.is_valuebet) and str(i.status).upper() != "EXPIRED"
+        ])
         counts_by_type["VALUEBET"] = all_valuebets_count
 
         # 4. Filter Unified Items Server-side
@@ -3681,6 +3758,8 @@ class PlatformAPIService:
             # Type filter (VALUEBET tab surfaces all qualified value bets)
             if opp_type and opp_type.upper() not in ("ALL", ""):
                 if opp_type.upper() == "VALUEBET":
+                    if str(item.status).upper() == "EXPIRED":
+                        continue
                     if item.type.upper() != "VALUEBET" and item.status.upper() != "VALUEBET" and not item.is_valuebet:
                         continue
                 elif item.type.upper() != opp_type.upper():
@@ -3688,7 +3767,10 @@ class PlatformAPIService:
 
             # Status filter
             if status and status.upper() not in ("ALL", ""):
-                if status.upper() == "VALUEBET":
+                if status.upper() == "ACTIVE":
+                    if str(item.status).upper() == "EXPIRED":
+                        continue
+                elif status.upper() == "VALUEBET":
                     if item.status.upper() != "VALUEBET" and not item.is_valuebet:
                         continue
                 elif item.status.upper() != status.upper():
@@ -3741,15 +3823,70 @@ class PlatformAPIService:
                 if not getattr(item, "is_top_5", False):
                     continue
 
+            # Min Discrepancy % (Actionable / Quote Discrepancy lens)
+            if min_discrepancy_pct is not None:
+                disc_pct = item.price_discrepancy_pct
+                if disc_pct is None and isinstance(item.details, dict):
+                    disc_pct = item.details.get("discrepancy", {}).get("relative_price_difference_pct")
+                if disc_pct is None or float(disc_pct) < min_discrepancy_pct:
+                    continue
+
+            # Max Lower Odds (Actionable Discovery lens)
+            if max_lower_odds is not None:
+                lower_price = item.lower_execution_odds
+                if lower_price is None and isinstance(item.details, dict):
+                    lower_price = item.details.get("discrepancy", {}).get("lower_odds")
+                if lower_price is None or float(lower_price) <= 1.0 or float(lower_price) > max_lower_odds:
+                    continue
+
             filtered.append(item)
 
         # 5. Deterministic Sort
+        is_actionable_sort = sort in ("actionability", "actionable")
         is_disc_sort = (
-            sort in ("discrepancy", "discrepancy_pct", "discrepancy_high", "discrepancy_low")
-            or (opp_type and opp_type.upper() == "QUOTE_DISCREPANCY" and sort in ("ev", "net_ev", "score"))
+            not is_actionable_sort and (
+                sort in ("discrepancy", "discrepancy_pct", "discrepancy_high", "discrepancy_low")
+                or (opp_type and opp_type.upper() == "QUOTE_DISCREPANCY" and sort in ("ev", "net_ev", "score"))
+            )
         )
 
         def sort_key(dto: UnifiedOpportunityDTO):
+            if is_actionable_sort:
+                disc_pct = dto.price_discrepancy_pct
+                if disc_pct is None and isinstance(dto.details, dict):
+                    disc_pct = dto.details.get("discrepancy", {}).get("relative_price_difference_pct")
+
+                lower_price = dto.lower_execution_odds
+                if lower_price is None and isinstance(dto.details, dict):
+                    lower_price = dto.details.get("discrepancy", {}).get("lower_odds")
+
+                has_disc = (disc_pct is not None and float(disc_pct) >= 10.0)
+                has_lower = (lower_price is not None and float(lower_price) > 1.0)
+
+                # Tier 1: Eligibility
+                # 0 = fully eligible (valid discrepancy >= 10% AND valid lower odds > 1.0)
+                # 1 = has discrepancy and lower odds, but disc < 10%
+                # 2 = has discrepancy but missing lower odds
+                # 3 = not a discrepancy / missing data
+                if has_disc and has_lower:
+                    tier1 = 0
+                elif disc_pct is not None and has_lower:
+                    tier1 = 1
+                elif disc_pct is not None:
+                    tier1 = 2
+                else:
+                    tier1 = 3
+
+                disc_val = float(disc_pct) if disc_pct is not None else 0.0
+                lower_val = float(lower_price) if lower_price is not None else 999.0
+                odds_diff = float(dto.odds_difference) if dto.odds_difference is not None else 0.0
+                can_key = str((dto.details or {}).get("canonical_prop_key") or dto.id or "")
+
+                if order.lower() == "asc":
+                    return (tier1, disc_val, -lower_val, odds_diff, can_key, dto.id)
+                else:
+                    return (tier1, -disc_val, lower_val, -odds_diff, can_key, dto.id)
+
             if is_disc_sort:
                 disc_pct = dto.price_discrepancy_pct
                 # Tier 1: Flag presence (0 = qualifies >= 10%, 1 = has some pct < 10%, 2 = None)
@@ -3827,104 +3964,112 @@ class PlatformAPIService:
         if not opportunity_id:
             return None
 
-        # 1. Search in database repository
-        try:
-            with self.db_manager.get_session() as session:
-                repo = OpportunityRepository(session)
-                # Try by fingerprint
-                rec = repo.get_by_fingerprint(opportunity_id)
-                if not rec:
-                    # Try by primary key id
-                    rec = repo.get_by_id(opportunity_id)
-                if not rec:
-                    # Search all records for matching opportunity_id in snapshot_json or market_key
-                    all_recs = repo.list_all()
-                    for r in all_recs:
-                        if r.id == opportunity_id or r.fingerprint == opportunity_id:
-                            rec = r
-                            break
-                        if r.snapshot_json and opportunity_id in r.snapshot_json:
-                            try:
-                                snap = json.loads(r.snapshot_json)
-                                if snap.get("opportunity_id") == opportunity_id:
-                                    rec = r
-                                    break
-                            except Exception:
-                                pass
-                if rec:
-                    return serialize_opportunity_detail(rec)
-        except Exception as db_err:
-            logger.warning("Error querying OpportunityRepository for detail: %s", db_err)
+        # 1. Check in Player Props & Global Props dedicated caches (instant in-memory resolution)
+        all_pp_candidates = PlatformAPIService._dedupe_props_candidates(
+            PlatformAPIService._cached_props_results,
+            PlatformAPIService._cached_props_by_stat)
 
-        # 2. Check in in-memory scan result
-        if self._last_scan_result and self._last_scan_result.get("opportunities"):
-            for opp in self._last_scan_result["opportunities"]:
-                if opp.get("id") == opportunity_id or opp.get("opportunity_id") == opportunity_id:
-                    return serialize_opportunity_detail(opp)
+        if PlatformAPIService._cached_global_props_results:
+            all_pp_candidates.extend(PlatformAPIService._cached_global_props_results.get("qualified_opportunities", []))
+            all_pp_candidates.extend(PlatformAPIService._cached_global_props_results.get("diagnostic_candidates", []))
+        if PlatformAPIService._cached_global_props_ultra_results:
+            all_pp_candidates.extend(PlatformAPIService._cached_global_props_ultra_results.get("qualified_opportunities", []))
+            all_pp_candidates.extend(PlatformAPIService._cached_global_props_ultra_results.get("diagnostic_candidates", []))
 
-        # 3. Check in Team Props dedicated caches (from scan_team_props)
+        for p in all_pp_candidates:
+            if p.get("prop_id") == opportunity_id or p.get("canonical_prop_key") == opportunity_id or p.get("opportunity_id") == opportunity_id:
+                return self._serialize_player_prop_opportunity_detail(p, opportunity_id)
+
+        # 2. Check in Team Props dedicated caches (from scan_team_props)
         all_tp_candidates = PlatformAPIService._dedupe_props_candidates(
             PlatformAPIService._cached_team_props_results,
             PlatformAPIService._cached_team_props_by_stat)
 
         for p in all_tp_candidates:
-            if p.get("prop_id") == opportunity_id or p.get("canonical_prop_key") == opportunity_id:
+            if p.get("prop_id") == opportunity_id or p.get("canonical_prop_key") == opportunity_id or p.get("opportunity_id") == opportunity_id:
                 return self._serialize_team_prop_opportunity_detail(p, opportunity_id)
 
-        # 4. Check in Team Props scan detail map (ctp_scan_...)
-        events_maps_to_search: List[Dict[str, Any]] = []
-        if self._last_scan_result:
-            ev_map = self._last_scan_result.get("_events_detail_map") or {}
-            if not ev_map and self._last_scan_result.get("events"):
-                ev_map = {e.get("id", str(i)): e for i, e in enumerate(self._last_scan_result["events"])}
-            if ev_map:
-                events_maps_to_search.append(ev_map)
+        # 3. Check in in-memory scan result
+        if self._last_scan_result and self._last_scan_result.get("opportunities"):
+            for opp in self._last_scan_result["opportunities"]:
+                if opp.get("id") == opportunity_id or opp.get("opportunity_id") == opportunity_id:
+                    return serialize_opportunity_detail(opp)
 
-        events_cache = getattr(self, "_events_cache", {})
-        if events_cache and events_cache not in events_maps_to_search:
-            events_maps_to_search.append(events_cache)
+        # 4. Check in in-memory Ultra Scan result
+        ultra_res = getattr(self, "_last_ultra_scan_result", None)
+        if ultra_res:
+            for cat_key in ("top_opportunities", "surebets", "valuebets", "player_props", "team_props", "watchlist"):
+                for opp in ultra_res.get(cat_key, []):
+                    opp_id = opp.get("opportunity_id") if isinstance(opp, dict) else getattr(opp, "opportunity_id", None)
+                    if opp_id == opportunity_id or (isinstance(opp, dict) and str(opp.get("id")) == opportunity_id):
+                        return self._serialize_ultra_opportunity_detail(opp if isinstance(opp, dict) else opp.to_dict())
 
-        for events_map in events_maps_to_search:
-            for ev_id, ev in events_map.items():
-                for m in ev.get("markets", []):
-                    m_scope = str(m.get("scope", "")).upper()
-                    m_type = str(m.get("market_type", "")).upper()
-                    if m_scope == "TEAM" or m_type.startswith("TEAM_"):
-                        for s in m.get("selections", []):
-                            from core.opportunity_explorer import OpportunityExplorerAdapter
-                            dto = OpportunityExplorerAdapter.from_matched_team_market(ev, m, s)
-                            if dto.id == opportunity_id:
-                                return self._serialize_matched_team_market_detail(ev, m, s, dto)
-                    elif m_scope in ("PLAYER", "PROP") or m_type.startswith("PLAYER_"):
-                        for s in m.get("selections", []):
-                            from core.opportunity_explorer import OpportunityExplorerAdapter
-                            dto = OpportunityExplorerAdapter.from_matched_prop_market(ev, m, s)
-                            if dto.id == opportunity_id:
-                                return self._serialize_matched_prop_market_detail(ev, m, s, dto)
+        # 5. Search in database repository by fingerprint or id
+        try:
+            with self.db_manager.get_session() as session:
+                repo = OpportunityRepository(session)
+                rec = repo.get_by_fingerprint(opportunity_id)
+                if not rec:
+                    rec = repo.get_by_id(opportunity_id)
+                if not rec:
+                    from database.models import OpportunityRecordORM
+                    rec = session.query(OpportunityRecordORM).filter(OpportunityRecordORM.snapshot_json.like(f"%{opportunity_id}%")).first()
+                if rec:
+                    return serialize_opportunity_detail(rec)
+        except Exception as db_err:
+            logger.warning("Error querying OpportunityRepository for detail: %s", db_err)
 
-        # Also search persisted scan snapshots in database if not found in memory
-        if (opportunity_id.startswith("ctp_scan_") or opportunity_id.startswith("cpp_scan_")) and self.db_manager is not None:
-            parts = opportunity_id.split("_")
-            ev_id_hint = None
-            if len(parts) >= 4 and parts[2] == "cev":
-                ev_id_hint = f"cev_{parts[3]}"
+        # 6. Check in Team Props / Player Props scan detail map (ctp_scan_... / cpp_scan_...)
+        if opportunity_id.startswith("ctp_scan_") or opportunity_id.startswith("cpp_scan_"):
+            events_maps_to_search: List[Dict[str, Any]] = []
+            if self._last_scan_result:
+                ev_map = self._last_scan_result.get("_events_detail_map") or {}
+                if not ev_map and self._last_scan_result.get("events"):
+                    ev_map = {e.get("id", str(i)): e for i, e in enumerate(self._last_scan_result["events"])}
+                if ev_map:
+                    events_maps_to_search.append(ev_map)
 
+            events_cache = getattr(self, "_events_cache", {})
+            if events_cache and events_cache not in events_maps_to_search:
+                events_maps_to_search.append(events_cache)
+
+            for events_map in events_maps_to_search:
+                for ev_id, ev in events_map.items():
+                    # Fast prune: skip events whose canonical ID is not part of this opportunity_id
+                    can_ev_id = str(ev.get("canonical_event_id") or ev.get("id") or ev_id)
+                    if can_ev_id and can_ev_id not in opportunity_id:
+                        continue
+                    for m in ev.get("markets", []):
+                        m_scope = str(m.get("scope", "")).upper()
+                        m_type = str(m.get("market_type", "")).upper()
+                        if opportunity_id.startswith("ctp_scan_") and (m_scope == "TEAM" or m_type.startswith("TEAM_")):
+                            for s in m.get("selections", []):
+                                from core.opportunity_explorer import OpportunityExplorerAdapter
+                                dto = OpportunityExplorerAdapter.from_matched_team_market(ev, m, s)
+                                if dto.id == opportunity_id:
+                                    return self._serialize_matched_team_market_detail(ev, m, s, dto)
+                        elif opportunity_id.startswith("cpp_scan_") and (m_scope in ("PLAYER", "PROP") or m_type.startswith("PLAYER_")):
+                            for s in m.get("selections", []):
+                                from core.opportunity_explorer import OpportunityExplorerAdapter
+                                dto = OpportunityExplorerAdapter.from_matched_prop_market(ev, m, s)
+                                if dto.id == opportunity_id:
+                                    return self._serialize_matched_prop_market_detail(ev, m, s, dto)
+
+        # Fallback: check persisted scan snapshot in database only if events cache is empty (cold start)
+        if (opportunity_id.startswith("ctp_scan_") or opportunity_id.startswith("cpp_scan_")) and self.db_manager is not None and not getattr(self, "_events_cache", {}):
             try:
                 from database.models import SnapshotORM
                 from core.opportunity_explorer import OpportunityExplorerAdapter
                 with self.db_manager.get_session() as session:
-                    query = (
+                    # Point lookup: load only the single latest scan snapshot without expensive payload LIKE scan
+                    latest_snap = (
                         session.query(SnapshotORM)
-                        .filter(SnapshotORM.snapshot_type.in_(["SCAN_CYCLE_RESULT", "ULTRA_SCAN_RESULT"]))
+                        .filter(SnapshotORM.snapshot_type == "SCAN_CYCLE_RESULT")
+                        .order_by(SnapshotORM.created_at.desc())
+                        .first()
                     )
-                    if ev_id_hint:
-                        query = query.filter(SnapshotORM.payload.like(f"%{ev_id_hint}%"))
-                    query = query.order_by(SnapshotORM.created_at.desc()).limit(15)
-                    target_snaps = query.all()
-                    for ts in target_snaps:
-                        if not ts or not ts.payload:
-                            continue
-                        snap = json.loads(ts.payload)
+                    if latest_snap and latest_snap.payload:
+                        snap = json.loads(latest_snap.payload)
                         snap_map = snap.get("_events_detail_map") or {}
                         if not snap_map and snap.get("events"):
                             snap_map = {e.get("id", str(i)): e for i, e in enumerate(snap["events"])}
@@ -3951,77 +4096,24 @@ class PlatformAPIService:
             except Exception as ex:
                 logger.debug("Failed targeted snapshot search: %s", ex)
 
-            persisted_snaps = _load_scan_snapshots(self.db_manager, limit=20)
-            for snap in persisted_snaps:
-                snap_map = snap.get("_events_detail_map") or {}
-                if not snap_map and snap.get("events"):
-                    snap_map = {e.get("id", str(i)): e for i, e in enumerate(snap["events"])}
-                for ev_id, ev in snap_map.items():
-                    for m in ev.get("markets", []):
-                        m_scope = str(m.get("scope", "")).upper()
-                        m_type = str(m.get("market_type", "")).upper()
-                        if opportunity_id.startswith("ctp_scan_") and (m_scope == "TEAM" or m_type.startswith("TEAM_") or m_type in ("TOTALS", "HANDICAP", "1X2", "DOUBLE_CHANCE")):
-                            for s in m.get("selections", []):
-                                try:
-                                    from core.opportunity_explorer import OpportunityExplorerAdapter
-                                    dto = OpportunityExplorerAdapter.from_matched_team_market(ev, m, s)
-                                    if dto.id == opportunity_id:
-                                        return self._serialize_matched_team_market_detail(ev, m, s, dto)
-                                except Exception:
-                                    continue
-                        elif opportunity_id.startswith("cpp_scan_") and (m_scope in ("PLAYER", "PROP") or m_type.startswith("PLAYER_")):
-                            for s in m.get("selections", []):
-                                try:
-                                    from core.opportunity_explorer import OpportunityExplorerAdapter
-                                    dto = OpportunityExplorerAdapter.from_matched_prop_market(ev, m, s)
-                                    if dto.id == opportunity_id:
-                                        return self._serialize_matched_prop_market_detail(ev, m, s, dto)
-                                except Exception:
-                                    continue
-
-        # 5. Check in Player Props dedicated caches
-        all_pp_candidates = PlatformAPIService._dedupe_props_candidates(
-            PlatformAPIService._cached_props_results,
-            PlatformAPIService._cached_props_by_stat)
-
-        for p in all_pp_candidates:
-            if p.get("prop_id") == opportunity_id or p.get("canonical_prop_key") == opportunity_id:
-                return self._serialize_player_prop_opportunity_detail(p, opportunity_id)
-
-        # 6. Check in Ultra Scan result
-        ultra_res = getattr(self, "_last_ultra_scan_result", None)
-        if ultra_res is None and self.db_manager is not None:
-            ultra_res = _load_latest_ultra_scan_snapshot(self.db_manager)
-            if ultra_res:
-                self._last_ultra_scan_result = ultra_res
-
-        if ultra_res:
-            for cat_key in ("top_opportunities", "surebets", "valuebets", "player_props", "team_props", "watchlist"):
-                for opp in ultra_res.get(cat_key, []):
-                    opp_id = opp.get("opportunity_id") if isinstance(opp, dict) else getattr(opp, "opportunity_id", None)
-                    if opp_id == opportunity_id or (isinstance(opp, dict) and str(opp.get("id")) == opportunity_id):
-                        return self._serialize_ultra_opportunity_detail(opp if isinstance(opp, dict) else opp.to_dict())
-
-        # If not found in latest ultra scan, check historical ultra scan snapshots in database
-        if self.db_manager is not None:
+        # If not found in memory, check latest ultra scan snapshot in database only if cold
+        if self.db_manager is not None and getattr(self, "_last_ultra_scan_result", None) is None:
             try:
                 from database.models import SnapshotORM
                 with self.db_manager.get_session() as session:
-                    hist_snaps = (
+                    latest_ultra = (
                         session.query(SnapshotORM)
-                        .filter(SnapshotORM.snapshot_type == "ULTRA_SCAN_RESULT", SnapshotORM.payload.like(f"%{opportunity_id}%"))
+                        .filter(SnapshotORM.snapshot_type == "ULTRA_SCAN_RESULT")
                         .order_by(SnapshotORM.created_at.desc())
-                        .limit(5)
-                        .all()
+                        .first()
                     )
-                    for hs in hist_snaps:
-                        if hs and hs.payload:
-                            hist_res = json.loads(hs.payload)
-                            for cat_key in ("top_opportunities", "surebets", "valuebets", "player_props", "team_props", "watchlist"):
-                                for opp in hist_res.get(cat_key, []):
-                                    opp_id = opp.get("opportunity_id") if isinstance(opp, dict) else getattr(opp, "opportunity_id", None)
-                                    if opp_id == opportunity_id or (isinstance(opp, dict) and str(opp.get("id")) == opportunity_id):
-                                        return self._serialize_ultra_opportunity_detail(opp if isinstance(opp, dict) else opp.to_dict())
+                    if latest_ultra and latest_ultra.payload:
+                        hist_res = json.loads(latest_ultra.payload)
+                        for cat_key in ("top_opportunities", "surebets", "valuebets", "player_props", "team_props", "watchlist"):
+                            for opp in hist_res.get(cat_key, []):
+                                opp_id = opp.get("opportunity_id") if isinstance(opp, dict) else getattr(opp, "opportunity_id", None)
+                                if opp_id == opportunity_id or (isinstance(opp, dict) and str(opp.get("id")) == opportunity_id):
+                                    return self._serialize_ultra_opportunity_detail(opp if isinstance(opp, dict) else opp.to_dict())
             except Exception as ex:
                 logger.debug("Failed historical ultra scan snapshot search: %s", ex)
 
@@ -4223,11 +4315,14 @@ class PlatformAPIService:
         exec_odds_dict = p.get("execution_odds") or {}
         bms = list(exec_odds_dict.keys()) if isinstance(exec_odds_dict, dict) else ([exec_bm] if exec_bm else [])
 
-        model_p = p.get("model_probability")
-        fair_odds = p.get("fair_odds")
-        val_edge = p.get("value_edge_pp") or p.get("execution_edge_pct") or 0.0
-        is_val = bool(p.get("is_valuebet") or p.get("execution_status") == "VALUEBET")
-        status_str = "VALUEBET" if is_val else str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY")
+        model_p = p.get("reference_fair_probability") or p.get("model_probability")
+        fair_odds = p.get("reference_fair_odds") or p.get("fair_odds")
+        val_edge = p.get("value_edge_pp") or 0.0
+        is_val = bool(p.get("is_valuebet"))
+        fallback_status = str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY")
+        if not is_val and fallback_status == "VALUEBET":
+            fallback_status = str(p.get("execution_status") or "BETTABLE")
+        status_str = "VALUEBET" if is_val else fallback_status
 
         # Build legs
         from core.tax_engine import get_tax_engine
@@ -4495,10 +4590,10 @@ class PlatformAPIService:
 
         exec_odds = p.get("best_execution_odds") or p.get("best_odds")
         exec_bm = p.get("best_execution_bookmaker") or p.get("best_bookmaker") or "superbet"
-        model_p = p.get("model_probability")
-        fair_odds = p.get("fair_odds")
-        val_edge = p.get("value_edge_pp") or p.get("execution_edge_pct") or 0.0
-        is_val = bool(p.get("is_valuebet") or p.get("execution_status") == "VALUEBET")
+        model_p = p.get("reference_fair_probability") or p.get("model_probability")
+        fair_odds = p.get("reference_fair_odds") or p.get("fair_odds")
+        val_edge = p.get("value_edge_pp") or 0.0
+        is_val = bool(p.get("is_valuebet"))
 
         # Discrepancy detection
         disc_details = p.get("discrepancy_details") or p.get("discrepancy")
@@ -4508,7 +4603,10 @@ class PlatformAPIService:
             or (p.get("relative_price_difference_pct") is not None and float(p["relative_price_difference_pct"]) >= 10.0)
         )
         opp_type_val = "QUOTE_DISCREPANCY" if is_disc else ("VALUEBET" if is_val else "PLAYER_PROP")
-        status_str = "BETTABLE" if is_disc else ("VALUEBET" if is_val else str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY"))
+        fallback_status = str(p.get("execution_status") or p.get("status") or "REFERENCE_ONLY")
+        if not is_val and fallback_status == "VALUEBET":
+            fallback_status = str(p.get("execution_status") or "BETTABLE")
+        status_str = "BETTABLE" if is_disc else ("VALUEBET" if is_val else fallback_status)
 
         from core.tax_engine import get_tax_engine
         tax_engine = get_tax_engine()
@@ -5545,7 +5643,7 @@ class PlatformAPIService:
                 "reason_code": odds_comparison.primary_reason_code,
                 "value_reason_code": val_eval.primary_reason_code,
                 "value_status": val_eval.overall_status,
-                "is_valuebet": val_eval.is_valuebet or opp_eval.is_valuebet,
+                "is_valuebet": val_eval.is_valuebet,
                 "net_ev_pct": val_eval.best_net_ev_pct,
                 "gross_ev_pct": val_eval.best_gross_ev_pct,
                 "value_evaluations": {k: v.to_dict() for k, v in val_eval.bookmaker_evaluations.items()},
@@ -5572,17 +5670,18 @@ class PlatformAPIService:
                 "last_5_avg": ps.last_5_avg,
                 "last_10_avg": ps.last_10_avg,
                 "last_15_avg": ps.last_15_avg,
-                # Probabilities & Edges & Stage 29 Value Bet
+                # Probabilities & Edges
                 "probabilities": {
                     "historical": opp_eval.historical_probability,
-                    "model": opp_eval.model_probability,
+                    "model": None,
                     "reference_implied": opp_eval.reference_market_probability,
                     "execution_implied": opp_eval.execution_market_probability,
+                    "reference_fair": val_eval.reference_calculation.fair_probability,
                 },
                 "historical_probability": opp_eval.historical_probability,
-                "model_probability": opp_eval.model_probability,
-                "model_probability_pct": round(opp_eval.model_probability * 100.0, 1),
-                "fair_odds": opp_eval.fair_odds,
+                "model_probability": None,
+                "model_probability_pct": None,
+                "fair_odds": val_eval.reference_calculation.fair_odds,
                 "market_probability": opp_eval.market_probability,
                 "reference_market_probability": opp_eval.reference_market_probability,
                 "execution_market_probability": opp_eval.execution_market_probability,
@@ -5591,7 +5690,7 @@ class PlatformAPIService:
                     "statistical_pct": opp_eval.raw_edge_pct,
                     "execution": opp_eval.execution_edge,
                     "execution_pct": opp_eval.execution_edge_pct,
-                    "value_edge_pp": opp_eval.value_edge_pp,
+                    "value_edge_pp": val_eval.bookmaker_evaluations[val_eval.best_bookmaker].value_edge_pp if (val_eval.best_bookmaker and val_eval.best_bookmaker in val_eval.bookmaker_evaluations) else None,
                     "reference_ev": opp_eval.reference_ev,
                     "reference_ev_pct": opp_eval.reference_ev_pct,
                     "execution_ev": opp_eval.execution_ev,
@@ -5601,18 +5700,17 @@ class PlatformAPIService:
                 "raw_edge_pct": opp_eval.raw_edge_pct,
                 "execution_edge": opp_eval.execution_edge,
                 "execution_edge_pct": opp_eval.execution_edge_pct,
-                "value_edge_pp": opp_eval.value_edge_pp,
+                "value_edge_pp": val_eval.bookmaker_evaluations[val_eval.best_bookmaker].value_edge_pp if (val_eval.best_bookmaker and val_eval.best_bookmaker in val_eval.bookmaker_evaluations) else None,
                 "reference_ev": opp_eval.reference_ev,
                 "reference_ev_pct": opp_eval.reference_ev_pct,
                 "execution_ev": opp_eval.execution_ev,
                 "execution_ev_pct": opp_eval.execution_ev_pct,
-                "is_valuebet": opp_eval.is_valuebet,
-                "edge_type": opp_eval.edge_type,
+                "edge_type": "VALUEBET" if val_eval.is_valuebet else opp_eval.edge_type,
                 # Decision & Scoring
                 "score": opp_eval.score,
                 "classification": opp_eval.classification,
                 "actionability": opp_eval.actionability,
-                "status": opp_eval.status or ("VALUEBET" if opp_eval.is_valuebet else opp_eval.actionability),
+                "status": "VALUEBET" if val_eval.is_valuebet else (opp_eval.status or opp_eval.actionability),
                 "data_quality_flags": opp_eval.data_quality_flags,
                 "has_odds": bool(best_odds and best_odds > 1.0) or bool(odds_comparison.best_executable_odds),
                 "decision": opp_eval.to_dict(),
@@ -6459,7 +6557,7 @@ class PlatformAPIService:
                 "reason_code": odds_comparison.primary_reason_code,
                 "value_reason_code": val_eval.primary_reason_code,
                 "value_status": val_eval.overall_status,
-                "is_valuebet": val_eval.is_valuebet or opp_eval.is_valuebet,
+                "is_valuebet": val_eval.is_valuebet,
                 "net_ev_pct": val_eval.best_net_ev_pct,
                 "gross_ev_pct": val_eval.best_gross_ev_pct,
                 "value_evaluations": {k: v.to_dict() for k, v in val_eval.bookmaker_evaluations.items()},
@@ -6489,14 +6587,15 @@ class PlatformAPIService:
                 # Probabilities & Edges
                 "probabilities": {
                     "historical": opp_eval.historical_probability,
-                    "model": opp_eval.model_probability,
+                    "model": None,
                     "reference_implied": opp_eval.reference_market_probability,
                     "execution_implied": opp_eval.execution_market_probability,
+                    "reference_fair": val_eval.reference_calculation.fair_probability,
                 },
                 "historical_probability": opp_eval.historical_probability,
-                "model_probability": opp_eval.model_probability,
-                "model_probability_pct": round(opp_eval.model_probability * 100.0, 1),
-                "fair_odds": opp_eval.fair_odds,
+                "model_probability": None,
+                "model_probability_pct": None,
+                "fair_odds": val_eval.reference_calculation.fair_odds,
                 "market_probability": opp_eval.market_probability,
                 "reference_market_probability": opp_eval.reference_market_probability,
                 "execution_market_probability": opp_eval.execution_market_probability,
@@ -6505,7 +6604,7 @@ class PlatformAPIService:
                     "statistical_pct": opp_eval.raw_edge_pct,
                     "execution": opp_eval.execution_edge,
                     "execution_pct": opp_eval.execution_edge_pct,
-                    "value_edge_pp": opp_eval.value_edge_pp,
+                    "value_edge_pp": val_eval.bookmaker_evaluations[val_eval.best_bookmaker].value_edge_pp if (val_eval.best_bookmaker and val_eval.best_bookmaker in val_eval.bookmaker_evaluations) else None,
                     "reference_ev": opp_eval.reference_ev,
                     "reference_ev_pct": opp_eval.reference_ev_pct,
                     "execution_ev": opp_eval.execution_ev,
@@ -6515,18 +6614,17 @@ class PlatformAPIService:
                 "raw_edge_pct": opp_eval.raw_edge_pct,
                 "execution_edge": opp_eval.execution_edge,
                 "execution_edge_pct": opp_eval.execution_edge_pct,
-                "value_edge_pp": opp_eval.value_edge_pp,
+                "value_edge_pp": val_eval.bookmaker_evaluations[val_eval.best_bookmaker].value_edge_pp if (val_eval.best_bookmaker and val_eval.best_bookmaker in val_eval.bookmaker_evaluations) else None,
                 "reference_ev": opp_eval.reference_ev,
                 "reference_ev_pct": opp_eval.reference_ev_pct,
                 "execution_ev": opp_eval.execution_ev,
                 "execution_ev_pct": opp_eval.execution_ev_pct,
-                "is_valuebet": opp_eval.is_valuebet,
-                "edge_type": opp_eval.edge_type,
+                "edge_type": "VALUEBET" if val_eval.is_valuebet else opp_eval.edge_type,
                 # Decision & Scoring
                 "score": opp_eval.score,
                 "classification": opp_eval.classification,
                 "actionability": opp_eval.actionability,
-                "status": opp_eval.status or ("VALUEBET" if opp_eval.is_valuebet else opp_eval.actionability),
+                "status": "VALUEBET" if val_eval.is_valuebet else (opp_eval.status or opp_eval.actionability),
                 "data_quality_flags": opp_eval.data_quality_flags,
                 "has_odds": bool(best_odds and best_odds > 1.0) or bool(odds_comparison.best_executable_odds),
                 "decision": opp_eval.to_dict(),
@@ -6923,6 +7021,7 @@ class PlatformAPIService:
                 PlatformAPIService._cached_global_props_ultra_results = res_dict
             else:
                 PlatformAPIService._cached_global_props_results = res_dict
+            self._invalidate_unified_cache()
 
             trace_obj = res_dict.get("scan_trace")
             if trace_obj:
@@ -7285,6 +7384,7 @@ class PlatformAPIService:
         res["items"] = paginated
         res["opportunities"] = paginated
         res["all_candidates"] = opportunities
+        res["raw_universe"] = list(qualified_raw) + list(diagnostic_raw)
         if is_all_candidates_view:
             res["qualified_opportunities"] = [o for o in opportunities if o.get("is_valuebet") or o.get("status") == "QUALIFIED"]
             res["total_qualified_matching_filter"] = len(res["qualified_opportunities"])

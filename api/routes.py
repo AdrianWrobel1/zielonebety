@@ -414,6 +414,9 @@ class APIRouter:
         limit: int = 50,
         offset: int = 0,
         top_5: bool = False,
+        min_discrepancy_pct: Optional[float] = None,
+        max_lower_odds: Optional[float] = None,
+        refresh: bool = False,
     ) -> APIResponse:
         """GET /api/v1/opportunities/explorer — Unified Opportunity Explorer."""
         start = time.perf_counter()
@@ -434,6 +437,9 @@ class APIRouter:
             limit=limit,
             offset=offset,
             top_5=top_5,
+            min_discrepancy_pct=min_discrepancy_pct,
+            max_lower_odds=max_lower_odds,
+            refresh=refresh,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         return APIResponse(

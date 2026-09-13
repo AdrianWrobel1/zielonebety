@@ -20,7 +20,6 @@
   function getDevPassword() {
     try {
       if (typeof window !== 'undefined' && window.ZB_DEV_PASSWORD) return window.ZB_DEV_PASSWORD;
-      if (isLocalhostOrigin()) return 'changeme-local-dev-only';
     } catch (e) { /* ignore */ }
     return null;
   }
@@ -153,7 +152,7 @@
 
   // State Management (UI & Cached Data)
   const state = {
-    currentView: 'dashboard',
+    currentView: null,
     currentRole: 'Admin',
     theme: 'dark',
     opportunities: [],
@@ -163,19 +162,26 @@
     oddsHistory: null,
     settings: {},
     latestScan: null,
+    lastScanDiagnostic: null,
     scanHistory: [],
     scanStatus: { status: 'NOT_RUN', is_scanning: false },
     schedulerStatus: { enabled: false, interval_minutes: 15, scanners: { ultra: true, global_props: true }, schedule: [] },
     selectedEventId: null,
     opportunityTop5Only: false,
+    isAutoRefreshing: false,
+    clientErrors: [],
     marketIntel: {
-      viewMode: 'workspace', // 'workspace' | 'matrix'
+      viewMode: 'workspace', // 'workspace' | 'split' | 'matrix'
       activeEventId: null,
       activeFamily: 'ALL',
       marketSearch: '',
       matrixSearch: '',
       matrixCompetition: '',
       matrixCoverage: 'ALL',
+      eventSearch: '',
+      eventCompetition: '',
+      eventTop5Only: false,
+      eventCoverage: 'ALL',
       activeDetail: null,
     },
     playerProps: {
@@ -184,6 +190,7 @@
       results: [],
       diagnosticCandidates: [],
       selectedPropId: null,
+      top5Only: false,
       isScanning: false,
       metadata: null,
       propsScope: 'ALL',
@@ -205,30 +212,648 @@
     },
   };
 
+  // ── Global Error Telemetry Buffer (Production Hardening) ──
+  if (typeof window !== 'undefined') {
+    window.addEventListener('error', (evt) => {
+      const errItem = {
+        timestamp: new Date().toISOString(),
+        message: evt.message || 'Unknown error',
+        filename: evt.filename || 'unknown',
+        lineno: evt.lineno || 0,
+        colno: evt.colno || 0,
+      };
+      state.clientErrors.push(errItem);
+      if (state.clientErrors.length > 30) state.clientErrors.shift();
+      window.__ZB_CLIENT_ERRORS__ = state.clientErrors;
+    });
+    window.addEventListener('unhandledrejection', (evt) => {
+      const reason = evt.reason;
+      const errItem = {
+        timestamp: new Date().toISOString(),
+        message: (reason && reason.message) || String(reason || 'Unhandled Promise Rejection'),
+        stack: (reason && reason.stack) || null,
+        type: 'unhandledrejection'
+      };
+      state.clientErrors.push(errItem);
+      if (state.clientErrors.length > 30) state.clientErrors.shift();
+      window.__ZB_CLIENT_ERRORS__ = state.clientErrors;
+    });
+  }
+
+  // ── Accessible Modal Focus Trapping & Restoration ──
+  let _lastActiveElementBeforeModal = null;
+  let _modalKeydownListener = null;
+
+  function trapModalFocus(modalEl) {
+    if (!modalEl) return;
+    _lastActiveElementBeforeModal = document.activeElement;
+    const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    requestAnimationFrame(() => {
+      const focusableEls = modalEl.querySelectorAll(focusableSelector);
+      if (focusableEls.length > 0) {
+        focusableEls[0].focus();
+      } else {
+        modalEl.focus();
+      }
+    });
+
+    if (_modalKeydownListener) {
+      document.removeEventListener('keydown', _modalKeydownListener);
+    }
+
+    _modalKeydownListener = function(e) {
+      if (e.key !== 'Tab') return;
+      const focusableEls = Array.from(modalEl.querySelectorAll(focusableSelector)).filter(el => el.offsetParent !== null);
+      if (focusableEls.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const firstEl = focusableEls[0];
+      const lastEl = focusableEls[focusableEls.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstEl || !modalEl.contains(document.activeElement)) {
+          e.preventDefault();
+          lastEl.focus();
+        }
+      } else {
+        if (document.activeElement === lastEl || !modalEl.contains(document.activeElement)) {
+          e.preventDefault();
+          firstEl.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', _modalKeydownListener);
+  }
+
+  function untrapModalFocus() {
+    if (_modalKeydownListener) {
+      document.removeEventListener('keydown', _modalKeydownListener);
+      _modalKeydownListener = null;
+    }
+    if (_lastActiveElementBeforeModal && typeof _lastActiveElementBeforeModal.focus === 'function') {
+      try {
+        _lastActiveElementBeforeModal.focus();
+      } catch (_) {}
+      _lastActiveElementBeforeModal = null;
+    }
+  }
+
+  // ── Diagnostic Instrumentation & Security Redaction Helpers (Mobile Debug) ──
+
+  const SENSITIVE_KEY_REGEX = /(authorization|auth|token|cookie|key|secret|password|credential|session)/i;
+
+  function sanitizeHeaders(headers) {
+    if (!headers) return {};
+    const sanitized = {};
+    try {
+      if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+        headers.forEach((val, key) => {
+          sanitized[key.toLowerCase()] = SENSITIVE_KEY_REGEX.test(key) ? '[REDACTED]' : val;
+        });
+      } else if (typeof headers === 'object') {
+        for (const k of Object.keys(headers)) {
+          sanitized[k.toLowerCase()] = SENSITIVE_KEY_REGEX.test(k) ? '[REDACTED]' : headers[k];
+        }
+      }
+    } catch {
+      // safe fallback
+    }
+    return sanitized;
+  }
+
+  function sanitizePayload(payload) {
+    if (payload === null || payload === undefined) return null;
+
+    function redactNode(val) {
+      if (typeof val === 'string') {
+        return val
+          .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+          .replace(/(password|secret|token|api_key|admin_password)=[^&\s]+/gi, '$1=[REDACTED]');
+      }
+      if (Array.isArray(val)) {
+        return val.map(redactNode);
+      }
+      if (typeof val === 'object' && val !== null) {
+        const out = {};
+        for (const [k, v] of Object.entries(val)) {
+          if (SENSITIVE_KEY_REGEX.test(k)) {
+            out[k] = '[REDACTED]';
+          } else {
+            out[k] = redactNode(v);
+          }
+        }
+        return out;
+      }
+      return val;
+    }
+
+    if (typeof payload === 'string') {
+      try {
+        const parsed = JSON.parse(payload);
+        return redactNode(parsed);
+      } catch {
+        return redactNode(payload);
+      }
+    }
+    return redactNode(payload);
+  }
+
+  function extractSafeResponseHeaders(res) {
+    const headers = {};
+    if (!res || !res.headers) return headers;
+    try {
+      if (typeof res.headers.forEach === 'function') {
+        res.headers.forEach((val, key) => {
+          headers[key.toLowerCase()] = SENSITIVE_KEY_REGEX.test(key) ? '[REDACTED]' : val;
+        });
+      } else if (typeof res.headers.get === 'function') {
+        const known = [
+          'content-type', 'content-length', 'server', 'date', 'via',
+          'x-request-id', 'x-correlation-id', 'cf-ray', 'cf-cache-status',
+          'x-render-origin-server', 'x-cache', 'x-powered-by', 'age', 'cache-control'
+        ];
+        for (const k of known) {
+          const v = res.headers.get(k);
+          if (v !== null) headers[k] = v;
+        }
+      }
+    } catch {
+      // safe fallback
+    }
+    return headers;
+  }
+
+  function classifyFailure(diag) {
+    if (diag.stage === 'construction' || diag.isConstructionError) {
+      return {
+        code: 'A',
+        title: 'Request Construction Failure',
+        description: 'The HTTP request could not be constructed or serialized before transmission.'
+      };
+    }
+    if (diag.isNetworkError || (diag.status === 0)) {
+      return {
+        code: 'B',
+        title: 'Browser / Network Failure',
+        description: 'The browser failed to establish a network connection (DNS failure, offline, timeout, or CORS preflight rejection).'
+      };
+    }
+    const status = diag.status || 0;
+    if (status === 401 || status === 403) {
+      return {
+        code: 'F',
+        title: 'Authentication / Configuration Failure',
+        description: `Server rejected request with status ${status} (${status === 401 ? 'Unauthorized: Bearer token missing/invalid' : 'Forbidden: Admin role required'}).`
+      };
+    }
+    const server = (diag.headers && diag.headers['server'] ? String(diag.headers['server']) : '').toLowerCase();
+    const isProxyServer = server.includes('cloudflare') || server.includes('nginx') || server.includes('caddy') || server.includes('envoy') || server.includes('render');
+    if (status === 502 || status === 503 || status === 504 || (status >= 500 && isProxyServer)) {
+      return {
+        code: 'C',
+        title: 'Proxy / Gateway Failure',
+        description: `Reverse proxy or edge gateway returned HTTP ${status} (${diag.statusText || 'Bad Gateway'}). Upstream application may be down, restarting, timing out, or crashing before sending headers.`
+      };
+    }
+    if (diag.parsingError) {
+      return {
+        code: 'G',
+        title: 'Frontend Response-Parsing Failure',
+        description: `The response had Content-Type application/json but could not be parsed as valid JSON: ${diag.parsingError}`
+      };
+    }
+    if (diag.isNonJson) {
+      return {
+        code: 'E',
+        title: 'Backend Returning Non-JSON',
+        description: `The server returned HTTP ${status} with non-JSON Content-Type (${diag.contentType || 'unknown'}). Likely an unhandled web server error or HTML fallback.`
+      };
+    }
+    if (status >= 400) {
+      return {
+        code: 'D',
+        title: 'Backend Application HTTP Error',
+        description: `The backend application processed the request and returned HTTP ${status} with a structured error response.`
+      };
+    }
+    return {
+      code: 'SUCCESS',
+      title: 'Success',
+      description: 'Request completed successfully.'
+    };
+  }
+
+  function formatDebugReport(diag) {
+    if (!diag) return 'No diagnostic data recorded.';
+    const req = diag.request || {};
+    const res = diag.response || {};
+    const fe = diag.frontend || {};
+    const ids = diag.identifiers || {};
+
+    const reqHeadersStr = req.headers && Object.keys(req.headers).length > 0
+      ? Object.entries(req.headers).map(([k, v]) => `  ${k}: ${v}`).join('\n')
+      : '  (none)';
+
+    const resHeadersStr = res.headers && Object.keys(res.headers).length > 0
+      ? Object.entries(res.headers).map(([k, v]) => `  ${k}: ${v}`).join('\n')
+      : '  (none available)';
+
+    const payloadStr = req.payload
+      ? (typeof req.payload === 'string' ? req.payload : JSON.stringify(req.payload, null, 2))
+      : '(none)';
+
+    const parsedJsonStr = res.parsed_json
+      ? JSON.stringify(res.parsed_json, null, 2)
+      : 'null (non-JSON response)';
+
+    return [
+      '==================================================',
+      'ZIELONEBETY — SCAN FAILURE DIAGNOSTIC REPORT',
+      '==================================================',
+      `Captured At: ${diag.timestamp || '—'}`,
+      `Duration: ${diag.duration_ms !== undefined ? diag.duration_ms : '—'} ms`,
+      `Classification: [${fe.category || '?'}] ${fe.category_label || 'Unknown'}`,
+      `Description: ${fe.category_description || '—'}`,
+      '',
+      '-- 1. REQUEST -----------------------------------',
+      `Timestamp: ${diag.timestamp || '—'}`,
+      `Method: ${req.method || 'POST'}`,
+      `URL: ${req.url || '—'}`,
+      `Duration: ${diag.duration_ms !== undefined ? diag.duration_ms : '—'} ms`,
+      'Request Payload:',
+      payloadStr,
+      'Sanitized Request Headers:',
+      reqHeadersStr,
+      '',
+      '-- 2. RESPONSE ----------------------------------',
+      `Status: ${res.status !== undefined ? res.status : 'No Response'}`,
+      `Status Text: ${res.status_text || '(none)'}`,
+      `Content-Type: ${res.content_type || '(none)'}`,
+      `Content-Length: ${res.content_length || '(none)'}`,
+      `Raw Body Size: ${res.raw_length !== undefined ? res.raw_length : 0} bytes`,
+      'Safe Response Headers:',
+      resHeadersStr,
+      'Raw Response Body (safely truncated):',
+      res.raw_body || '(empty)',
+      'Parsed JSON:',
+      parsedJsonStr,
+      '',
+      '-- 3. FRONTEND ANALYSIS -------------------------',
+      `Frontend Error: ${fe.error || '(none)'}`,
+      `JSON Parsing Attempted: ${fe.json_parsing_attempted ? 'true' : 'false'}`,
+      `Classification: ${fe.classified_as || '(unknown)'}`,
+      `Parsing Error: ${fe.parsing_error || 'none'}`,
+      `Category Code: ${fe.category || '?'} (${fe.category_label || 'Unknown'})`,
+      '',
+      '-- 4. IDENTIFIERS & CORRELATION -----------------',
+      `Request ID: ${ids.request_id || 'none returned'}`,
+      `Correlation ID: ${ids.correlation_id || 'none returned'}`,
+      `CF-Ray: ${ids.cf_ray || 'none returned'}`,
+      `Server: ${ids.server || 'none returned'}`,
+      '==================================================',
+    ].join('\n');
+  }
+
+  async function copyDebugToClipboard(text) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {
+        // Fallback below
+      }
+    }
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.top = '0';
+      textArea.style.left = '0';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const ok = document.execCommand('copy');
+      textArea.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  function clearScanDebugUI() {
+    state.lastScanDiagnostic = null;
+    const panel = document.getElementById('dash-scan-debug-panel');
+    if (panel) {
+      panel.style.display = 'none';
+      panel.innerHTML = '';
+    }
+    const alertBox = document.getElementById('dash-alert-container');
+    if (alertBox) {
+      alertBox.innerHTML = '';
+    }
+  }
+
+  function renderScanDebugUI(diag) {
+    const panel = document.getElementById('dash-scan-debug-panel');
+    if (!panel) return;
+    if (!diag) {
+      panel.style.display = 'none';
+      panel.innerHTML = '';
+      return;
+    }
+
+    const req = diag.request || {};
+    const res = diag.response || {};
+    const fe = diag.frontend || {};
+    const ids = diag.identifiers || {};
+
+    const reqHeadersFormatted = req.headers && Object.keys(req.headers).length > 0
+      ? Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
+      : '(none)';
+
+    const resHeadersFormatted = res.headers && Object.keys(res.headers).length > 0
+      ? Object.entries(res.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
+      : '(none available)';
+
+    const payloadFormatted = req.payload
+      ? (typeof req.payload === 'string' ? req.payload : JSON.stringify(req.payload, null, 2))
+      : '(none)';
+
+    const categoryClass = fe.category ? `category-${fe.category}` : '';
+
+    panel.innerHTML = `
+      <div class="scan-debug-card">
+        <div class="scan-debug-header">
+          <div class="scan-debug-title-wrap">
+            <span class="scan-debug-tag">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              SCAN DEBUG
+            </span>
+            <span class="scan-debug-category-badge ${categoryClass}">[CATEGORY ${fe.category || '?'}] ${escapeHtml(fe.category_label || 'Error')}</span>
+          </div>
+          <div class="scan-debug-actions">
+            <button type="button" class="btn btn-sm btn-outline scan-debug-btn-copy" id="btn-copy-scan-debug">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy Debug Info</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline scan-debug-btn-clear" id="btn-clear-scan-debug">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <span>Clear Debug</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="scan-debug-description">
+          ${escapeHtml(fe.category_description || 'Failure encountered during scan cycle dispatch.')}
+        </div>
+
+        <!-- 1. REQUEST Collapsible -->
+        <details class="scan-debug-collapsible" open>
+          <summary>
+            <span>REQUEST &bull; ${escapeHtml(req.method || 'POST')} ${escapeHtml(req.url || '')}</span>
+            <span class="mono">${diag.duration_ms !== undefined ? diag.duration_ms : '—'} ms</span>
+          </summary>
+          <div class="scan-debug-drawer-content">
+            <div class="scan-debug-row"><span class="scan-debug-label">Timestamp:</span> <span class="mono">${escapeHtml(diag.timestamp || '—')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Method:</span> <span class="mono">${escapeHtml(req.method || 'POST')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">URL:</span> <span class="mono scan-debug-scroll-x">${escapeHtml(req.url || '—')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Duration:</span> <span class="mono">${diag.duration_ms !== undefined ? diag.duration_ms : '—'} ms</span></div>
+            <div class="scan-debug-label" style="margin-top:0.4rem;">Sanitized Payload:</div>
+            <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(payloadFormatted)}</code></pre>
+            <div class="scan-debug-label" style="margin-top:0.4rem;">Sanitized Request Headers:</div>
+            <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(reqHeadersFormatted)}</code></pre>
+          </div>
+        </details>
+
+        <!-- 2. RESPONSE Collapsible -->
+        <details class="scan-debug-collapsible" open>
+          <summary>
+            <span>RESPONSE &bull; Status ${res.status !== undefined ? res.status : 'No Response'} ${escapeHtml(res.status_text || '')}</span>
+            <span class="mono">${escapeHtml(res.content_type || 'non-JSON')}</span>
+          </summary>
+          <div class="scan-debug-drawer-content">
+            <div class="scan-debug-row"><span class="scan-debug-label">HTTP Status:</span> <span class="mono badge ${res.status === 200 ? 'badge-success' : 'badge-danger'}">${res.status !== undefined ? res.status : '0 (Network failure)'} ${escapeHtml(res.status_text || '')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Content-Type:</span> <span class="mono">${escapeHtml(res.content_type || '—')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Content-Length:</span> <span class="mono">${escapeHtml(res.content_length || '—')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Raw Body Size:</span> <span class="mono">${res.raw_length !== undefined ? res.raw_length : 0} bytes</span></div>
+            
+            <div class="scan-debug-label" style="margin-top:0.4rem;">Safe Response Headers:</div>
+            <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(resHeadersFormatted)}</code></pre>
+
+            <div class="scan-debug-label" style="margin-top:0.4rem;">Raw Response Body (safely truncated):</div>
+            <pre class="scan-debug-code scan-debug-raw-body"><code>${escapeHtml(res.raw_body || '[Empty Response Body]')}</code></pre>
+
+            ${res.parsed_json ? `
+            <div class="scan-debug-label" style="margin-top:0.4rem;">Parsed JSON:</div>
+            <pre class="scan-debug-code scan-debug-scroll-x"><code>${escapeHtml(JSON.stringify(res.parsed_json, null, 2))}</code></pre>
+            ` : ''}
+          </div>
+        </details>
+
+        <!-- 3. FRONTEND Collapsible -->
+        <details class="scan-debug-collapsible" open>
+          <summary>
+            <span>FRONTEND &bull; Classification & Parsing</span>
+            <span class="mono">${escapeHtml(fe.category || '?')}</span>
+          </summary>
+          <div class="scan-debug-drawer-content">
+            <div class="scan-debug-row"><span class="scan-debug-label">Exact Frontend Error:</span> <span class="mono text-danger">${escapeHtml(fe.error || '—')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">JSON Parse Attempted:</span> <span class="mono">${fe.json_parsing_attempted ? 'Yes' : 'No (classified as non-JSON)'}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Classification:</span> <span class="mono">${escapeHtml(fe.classified_as || '—')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Parsing Error:</span> <span class="mono">${fe.parsing_error ? escapeHtml(fe.parsing_error) : 'None'}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Category Code:</span> <span class="mono">${escapeHtml(fe.category || '?')} &mdash; ${escapeHtml(fe.category_label || '—')}</span></div>
+          </div>
+        </details>
+
+        <!-- 4. IDENTIFIERS Collapsible -->
+        <details class="scan-debug-collapsible">
+          <summary>
+            <span>IDENTIFIERS &bull; Request & Gateway Tracing</span>
+            <span class="mono">${escapeHtml(ids.server || '—')}</span>
+          </summary>
+          <div class="scan-debug-drawer-content">
+            <div class="scan-debug-row"><span class="scan-debug-label">Request ID:</span> <span class="mono">${escapeHtml(ids.request_id || 'none returned')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Correlation ID:</span> <span class="mono">${escapeHtml(ids.correlation_id || 'none returned')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">CF-Ray (Cloudflare):</span> <span class="mono">${escapeHtml(ids.cf_ray || 'none returned')}</span></div>
+            <div class="scan-debug-row"><span class="scan-debug-label">Server Header:</span> <span class="mono">${escapeHtml(ids.server || 'none returned')}</span></div>
+          </div>
+        </details>
+      </div>
+    `;
+
+    panel.style.display = 'block';
+
+    const btnCopy = document.getElementById('btn-copy-scan-debug');
+    if (btnCopy) {
+      btnCopy.onclick = async () => {
+        const report = formatDebugReport(diag);
+        const copied = await copyDebugToClipboard(report);
+        if (copied) {
+          showToast('Debug info copied to clipboard!');
+        } else {
+          showToast('Failed to copy to clipboard.');
+        }
+      };
+    }
+
+    const btnClear = document.getElementById('btn-clear-scan-debug');
+    if (btnClear) {
+      btnClear.onclick = () => {
+        clearScanDebugUI();
+        showToast('Debug panel cleared.');
+      };
+    }
+  }
+
+  function buildFallbackDiagnostic(err, scanMode) {
+    const classification = classifyFailure({ isNetworkError: true, status: 0 });
+    return {
+      timestamp: new Date().toISOString(),
+      duration_ms: 0,
+      request: {
+        method: 'POST',
+        url: `${API_BASE}/api/v1/scan/run`,
+        headers: sanitizeHeaders(authHeaders({ 'Content-Type': 'application/json' })),
+        payload: { scan_mode: scanMode || 'NORMAL' },
+      },
+      response: null,
+      frontend: {
+        error: String(err?.message || err || 'Unexpected client exception'),
+        json_parsing_attempted: false,
+        classified_as: 'client_exception',
+        parsing_error: null,
+        category: classification.code,
+        category_label: classification.title,
+        category_description: classification.description,
+      },
+      identifiers: {
+        request_id: null,
+        correlation_id: null,
+        cf_ray: null,
+        server: null,
+      },
+    };
+  }
+
   // Safe JSON extraction helper that never throws on gateway HTML (500/502/504) or network errors
-  async function safeJson(res) {
+  async function safeJson(res, reqMeta = null) {
     if (!res) {
       return { status_code: 0, data: null, errors: ['No response received'], execution_time_ms: 0.0 };
     }
     try {
       const contentType = res.headers && res.headers.get ? (res.headers.get('content-type') || '') : '';
-      if (!contentType.includes('application/json')) {
-        const text = await res.text();
+      const isJson = contentType.includes('application/json');
+      const text = await res.text();
+      const safeHeaders = extractSafeResponseHeaders(res);
+      const contentLength = res.headers && res.headers.get ? res.headers.get('content-length') : null;
+
+      let parsedData = null;
+      let parseErr = null;
+
+      if (isJson) {
+        try {
+          parsedData = JSON.parse(text);
+        } catch (err) {
+          parseErr = err;
+        }
+      }
+
+      let result;
+      if (!isJson) {
         const snippet = text ? text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) : '';
-        return {
+        result = {
           status_code: res.status || 500,
           data: null,
           errors: [`Gateway response (${res.status || 500}): ${snippet || res.statusText || 'Non-JSON response'}`],
           metadata: { non_json: true },
           execution_time_ms: 0.0,
         };
+      } else if (parseErr) {
+        result = {
+          status_code: res.status || 500,
+          data: null,
+          errors: [`Failed to parse response: ${parseErr.message}`],
+          metadata: {},
+          execution_time_ms: 0.0,
+        };
+      } else if (typeof parsedData === 'object' && parsedData !== null) {
+        result = parsedData;
+        if (result.status_code === undefined) {
+          result.status_code = res.status;
+        }
+        if (!res.ok && (!result.errors || !result.errors.length)) {
+          result.errors = [result.detail || (result.error ? String(result.error) : null) || res.statusText || `HTTP ${res.status}`];
+        }
+      } else {
+        result = {
+          status_code: res.status,
+          data: parsedData,
+          errors: !res.ok ? [`HTTP ${res.status}`] : [],
+          metadata: {},
+          execution_time_ms: 0.0,
+        };
       }
-      return await res.json();
-    } catch (parseErr) {
+
+      // Attach diagnostic metadata to result
+      const MAX_RAW_LEN = 4000;
+      const truncatedRaw = text && text.length > MAX_RAW_LEN
+        ? text.slice(0, MAX_RAW_LEN) + `\n... [TRUNCATED ${text.length - MAX_RAW_LEN} characters]`
+        : (text || '');
+
+      const classification = classifyFailure({
+        status: res.status,
+        statusText: res.statusText,
+        contentType: contentType,
+        isNonJson: !isJson,
+        parsingError: parseErr ? parseErr.message : null,
+        headers: safeHeaders,
+      });
+
+      result._diagnostic = {
+        timestamp: reqMeta?.timestamp || new Date().toISOString(),
+        duration_ms: reqMeta ? Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - reqMeta.startPerf) : 0,
+        request: {
+          method: reqMeta?.method || 'GET',
+          url: reqMeta?.url || '',
+          headers: sanitizeHeaders(reqMeta?.headers),
+          payload: sanitizePayload(reqMeta?.body),
+        },
+        response: {
+          status: res.status,
+          status_text: res.statusText || '',
+          content_type: contentType,
+          content_length: contentLength,
+          headers: safeHeaders,
+          raw_body: truncatedRaw,
+          raw_length: text ? text.length : 0,
+          parsed_json: isJson && !parseErr ? parsedData : null,
+        },
+        frontend: {
+          error: (result && result.errors && result.errors[0]) || (result && result.detail) || '',
+          json_parsing_attempted: isJson,
+          classified_as: isJson ? (parseErr ? 'invalid_json' : 'application/json') : (contentType ? `non-json (${contentType})` : 'non-json (empty content-type)'),
+          parsing_error: parseErr ? parseErr.message : null,
+          category: classification.code,
+          category_label: classification.title,
+          category_description: classification.description,
+        },
+        identifiers: {
+          request_id: safeHeaders['x-request-id'] || safeHeaders['x-correlation-id'] || null,
+          correlation_id: safeHeaders['x-correlation-id'] || null,
+          cf_ray: safeHeaders['cf-ray'] || null,
+          server: safeHeaders['server'] || null,
+        },
+      };
+
+      return result;
+    } catch (unexpectedErr) {
       return {
         status_code: res.status || 500,
         data: null,
-        errors: [`Failed to parse response: ${parseErr.message}`],
+        errors: [`Failed to read response: ${unexpectedErr.message}`],
         metadata: {},
         execution_time_ms: 0.0,
       };
@@ -236,9 +861,17 @@
   }
 
   async function safeFetch(url, options) {
+    const reqMeta = {
+      timestamp: new Date().toISOString(),
+      startPerf: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+      method: (options && options.method) || 'GET',
+      url: url,
+      headers: options && options.headers,
+      body: options && options.body,
+    };
     try {
       const res = await fetch(url, options);
-      return await safeJson(res);
+      return await safeJson(res, reqMeta);
     } catch (netErr) {
       return {
         status_code: 0,
@@ -251,16 +884,61 @@
   }
 
   async function safeAuthedFetch(url, options) {
+    const reqMeta = {
+      timestamp: new Date().toISOString(),
+      startPerf: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+      method: (options && options.method) || 'GET',
+      url: url,
+      headers: authHeaders(options && options.headers),
+      body: options && options.body,
+    };
     try {
       const res = await authedFetch(url, options);
-      return await safeJson(res);
+      const result = await safeJson(res, reqMeta);
+      if (result && result._diagnostic) {
+        state.lastScanDiagnostic = result._diagnostic;
+        if (typeof window !== 'undefined') window.__ZB_SCAN_DEBUG__ = result._diagnostic;
+      }
+      return result;
     } catch (netErr) {
+      const durationMs = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - reqMeta.startPerf);
+      const classification = classifyFailure({ isNetworkError: true, status: 0 });
+      const diag = {
+        timestamp: reqMeta.timestamp,
+        duration_ms: durationMs,
+        request: {
+          method: reqMeta.method,
+          url: reqMeta.url,
+          headers: sanitizeHeaders(reqMeta.headers),
+          payload: sanitizePayload(reqMeta.body),
+        },
+        response: null,
+        frontend: {
+          error: `Network error: ${netErr.message || 'Connection failed'}`,
+          json_parsing_attempted: false,
+          classified_as: 'network_failure',
+          parsing_error: null,
+          category: classification.code,
+          category_label: classification.title,
+          category_description: classification.description,
+        },
+        identifiers: {
+          request_id: null,
+          correlation_id: null,
+          cf_ray: null,
+          server: null,
+        },
+      };
+      state.lastScanDiagnostic = diag;
+      if (typeof window !== 'undefined') window.__ZB_SCAN_DEBUG__ = diag;
+
       return {
         status_code: 0,
         data: null,
         errors: [`Network error: ${netErr.message || 'Connection failed'}`],
         metadata: { network_error: true },
         execution_time_ms: 0.0,
+        _diagnostic: diag,
       };
     }
   }
@@ -273,9 +951,9 @@
         method: 'POST',
       });
     },
-    async fetchGlobalPropsResults(params = {}) {
+    async fetchGlobalPropsResults(params = {}, options = {}) {
       const query = new URLSearchParams(params).toString();
-      return safeFetch(`${API_BASE}/api/v1/props/global-results?${query}`);
+      return safeFetch(`${API_BASE}/api/v1/props/global-results?${query}`, options);
     },
     async fetchPropsTaxonomy() {
       return safeFetch(`${API_BASE}/api/v1/props/taxonomy`);
@@ -327,7 +1005,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
-        });
+        }); /* return res.json(); */
       }
       return safeAuthedFetch(`${API_BASE}/api/v1/scan/run`, {
         method: 'POST',
@@ -486,10 +1164,23 @@
     }
   }
 
+  const TOP_5_LEAGUE_PATTERNS = [
+    'premier league', 'la liga', 'serie a', 'bundesliga', 'ligue 1',
+    'comp_eng_pl', 'comp_esp_laliga', 'comp_ita_serie_a', 'comp_ger_bundesliga', 'comp_fra_ligue_1',
+    'primera division', 'laliga'
+  ];
+
+  function isTop5Competition(compNameOrId) {
+    if (!compNameOrId) return false;
+    const lower = String(compNameOrId).toLowerCase();
+    return TOP_5_LEAGUE_PATTERNS.some(p => lower.includes(p));
+  }
+
   function resolveInitialRoute() {
     const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
     const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '').trim();
-    const candidate = rawHash || rawPath;
+    const fullTarget = rawHash || rawPath;
+    const candidate = fullTarget.split('?')[0];
 
     if (candidate.startsWith('opportunity/')) {
       return 'opportunities';
@@ -709,6 +1400,10 @@
       ind.textContent = viewTitles[viewName] || viewName;
     }
 
+    // Update document title for truthful navigation and browser history
+    const pageTitle = viewTitles[viewName] || 'Command Center';
+    document.title = `${pageTitle} | Zielone Bety`;
+
     // Auto-close mobile more drawer upon navigation
     closeMobileMore();
   }
@@ -790,7 +1485,7 @@
     // 3. State & navigation synchronization
     state.currentView = viewName;
     const currentHash = window.location.hash.replace(/^#\/?/, '').trim();
-    if (currentHash !== viewName && !currentHash.startsWith('opportunity/')) {
+    if (currentHash.split('?')[0] !== viewName && !currentHash.startsWith('opportunity/')) {
       window.location.hash = viewName;
     }
     syncNavLinks(viewName);
@@ -815,6 +1510,57 @@
     bootApp();
   }
 
+  function applyExplorerQueryFilters(queryString) {
+    if (!queryString) return;
+    try {
+      const params = new URLSearchParams(queryString);
+      const typeParam = params.get('type');
+      if (typeParam !== null) {
+        document.querySelectorAll('#explorer-category-tabs .opp-radar-tab').forEach(b => {
+          const bType = b.getAttribute('data-type') || '';
+          const match = bType.toUpperCase() === typeParam.toUpperCase();
+          b.classList.toggle('active', match);
+          b.setAttribute('aria-selected', match ? 'true' : 'false');
+        });
+        if (typeParam === 'QUOTE_DISCREPANCY') {
+          const filterSort = document.getElementById('filter-sort');
+          if (filterSort) filterSort.value = 'actionability';
+          state.opportunitySortOrder = 'desc';
+          const sortIndicator = document.getElementById('sort-order-indicator');
+          if (sortIndicator) sortIndicator.textContent = '↓';
+        }
+      }
+      const top5Param = params.get('top5');
+      if (top5Param !== null) {
+        const isTop5 = top5Param === 'true' || top5Param === '1';
+        state.opportunityTop5Only = isTop5;
+        const btnFilterTop5 = document.getElementById('btn-filter-top5');
+        if (btnFilterTop5) {
+          btnFilterTop5.classList.toggle('active', isTop5);
+          btnFilterTop5.setAttribute('aria-pressed', isTop5 ? 'true' : 'false');
+        }
+      }
+      const actionableParam = params.get('actionable');
+      if (actionableParam !== null && (actionableParam === 'true' || actionableParam === '1')) {
+        document.querySelectorAll('#explorer-category-tabs .opp-radar-tab').forEach(b => {
+          const isDisc = b.getAttribute('data-type') === 'QUOTE_DISCREPANCY';
+          b.classList.toggle('active', isDisc);
+          b.setAttribute('aria-selected', isDisc ? 'true' : 'false');
+        });
+        const btnDisc = document.getElementById('btn-filter-actionable-disc');
+        if (btnDisc) {
+          btnDisc.classList.add('active');
+          btnDisc.setAttribute('aria-pressed', 'true');
+        }
+        const filterSort = document.getElementById('filter-sort');
+        if (filterSort) filterSort.value = 'actionability';
+        state.opportunitySortOrder = 'desc';
+      }
+    } catch (e) {
+      console.warn('Failed to parse route query filters', e);
+    }
+  }
+
   // Navigation Router & Route Handlers
   function initRouter() {
     // Delegated click handler for any nav item or element with data-view
@@ -822,6 +1568,15 @@
       const link = e.target.closest('a[data-view], button[data-view]');
       if (link) {
         const targetView = link.getAttribute('data-view');
+        const href = link.getAttribute('href');
+        if (href && href.startsWith('#')) {
+          const hashTarget = href.replace(/^#\/?/, '').trim();
+          if (window.location.hash.replace(/^#\/?/, '').trim() !== hashTarget) {
+            e.preventDefault();
+            window.location.hash = hashTarget;
+            return;
+          }
+        }
         if (targetView && viewRegistry.has(targetView)) {
           e.preventDefault();
           switchView(targetView);
@@ -833,15 +1588,37 @@
     const handleRoute = () => {
       const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
       const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '').trim();
-      const currentTarget = rawHash || rawPath;
+      const currentTarget = rawHash || rawPath || 'dashboard';
 
       if (currentTarget.startsWith('opportunity/')) {
         const oppId = decodeURIComponent(currentTarget.replace('opportunity/', ''));
         state.selectedOpportunityId = oppId;
         if (state.currentView !== 'opportunities') switchView('opportunities');
         loadOpportunityDetail(oppId, { openModal: false });
-      } else if (currentTarget && viewRegistry.has(currentTarget)) {
-        if (state.currentView !== currentTarget) switchView(currentTarget);
+      } else {
+        const [routePath, queryString] = currentTarget.split('?');
+        let targetView = 'dashboard';
+        if (routePath && viewRegistry.has(routePath)) {
+          targetView = routePath;
+        } else if (routePath && routePath !== 'dashboard' && !routePath.startsWith('opportunity')) {
+          console.warn(`Unrecognized route: ${routePath}, redirecting to dashboard`);
+          showToast(`Page "${routePath}" not found. Redirected to Command Center.`, 'warning');
+          window.location.hash = 'dashboard';
+        }
+        if (state.currentView !== targetView) {
+          switchView(targetView);
+        }
+        if (routePath === 'opportunities' && queryString) {
+          applyExplorerQueryFilters(queryString);
+          loadOpportunitiesData();
+        } else if (routePath === 'events' && queryString) {
+          const params = new URLSearchParams(queryString);
+          const eventId = params.get('id');
+          if (eventId) {
+            state.marketIntel.activeEventId = eventId;
+            loadEventDetail(eventId);
+          }
+        }
       }
     };
 
@@ -879,21 +1656,45 @@
     const moreBackdrop = document.getElementById('mobile-more-backdrop');
     if (moreBackdrop) moreBackdrop.addEventListener('click', closeMobileMore);
 
-    // Refresh dashboard button
+    // Refresh dashboard button (atomic reload from REST API with loading state)
     const btnRefresh = document.getElementById('btn-refresh-dashboard');
     if (btnRefresh) {
-      btnRefresh.addEventListener('click', () => {
-        loadDashboardData();
-        showToast('Dashboard reloaded from REST API');
+      btnRefresh.addEventListener('click', async () => {
+        if (btnRefresh.disabled) return;
+        btnRefresh.disabled = true;
+        const origHtml = btnRefresh.innerHTML;
+        btnRefresh.innerHTML = '<span class="spinner-icon">⟳</span> <span>Refreshing...</span>';
+        try {
+          await loadDashboardData(true);
+          showToast('Dashboard reloaded from REST API');
+        } catch (err) {
+          console.error('Failed to refresh dashboard', err);
+          showToast('Failed to refresh dashboard');
+        } finally {
+          btnRefresh.disabled = false;
+          btnRefresh.innerHTML = origHtml;
+        }
       });
     }
 
-    // Refresh opportunities button
+    // Refresh opportunities button (bypasses in-memory cache with refresh=true)
     const btnRefreshOpps = document.getElementById('btn-refresh-opps');
     if (btnRefreshOpps) {
-      btnRefreshOpps.addEventListener('click', () => {
-        loadOpportunitiesData();
-        showToast('Opportunities refreshed');
+      btnRefreshOpps.addEventListener('click', async () => {
+        if (btnRefreshOpps.disabled) return;
+        btnRefreshOpps.disabled = true;
+        const origHtml = btnRefreshOpps.innerHTML;
+        btnRefreshOpps.innerHTML = '<span class="spinner-icon">⟳</span> <span>Refreshing...</span>';
+        try {
+          await loadOpportunitiesData(false, true);
+          showToast('Opportunities refreshed from REST API');
+        } catch (err) {
+          console.error('Failed to refresh opportunities', err);
+          showToast('Failed to refresh opportunities');
+        } finally {
+          btnRefreshOpps.disabled = false;
+          btnRefreshOpps.innerHTML = origHtml;
+        }
       });
     }
 
@@ -1013,13 +1814,63 @@
     const minScoreInput = document.getElementById('filter-min-score');
     const minExecEdgeInput = document.getElementById('filter-min-exec-edge');
     const minRoiInput = document.getElementById('filter-min-roi');
+    const minDiscInput = document.getElementById('filter-min-discrepancy');
+    const maxLowerOddsInput = document.getElementById('filter-max-lower-odds');
+    const btnFilterActionable = document.getElementById('btn-filter-actionable-disc');
     const searchInput = document.getElementById('filter-search-text');
     const btnClearSearch = document.getElementById('btn-clear-search');
 
+    function syncActionableButtonState() {
+      if (!btnFilterActionable) return;
+      const hasMaxLower = Boolean(maxLowerOddsInput && maxLowerOddsInput.value.trim());
+      btnFilterActionable.classList.toggle('active', hasMaxLower);
+      btnFilterActionable.setAttribute('aria-pressed', hasMaxLower ? 'true' : 'false');
+    }
+
     let _oppSearchDebounce = null;
-    [statusFilter, providerFilter, sortFilter, minScoreInput, minExecEdgeInput, minRoiInput].forEach(el => {
-      if (el) el.addEventListener('change', () => loadOpportunitiesData());
+    [statusFilter, providerFilter, sortFilter, minScoreInput, minExecEdgeInput, minRoiInput, minDiscInput, maxLowerOddsInput].forEach(el => {
+      if (el) el.addEventListener('change', () => {
+        syncActionableButtonState();
+        loadOpportunitiesData();
+      });
     });
+
+    // Actionable Discrepancy Quick Activation Toggle
+    if (btnFilterActionable) {
+      btnFilterActionable.addEventListener('click', () => {
+        const isCurrentlyActive = btnFilterActionable.classList.contains('active');
+        if (isCurrentlyActive) {
+          // Deactivate
+          btnFilterActionable.classList.remove('active');
+          btnFilterActionable.setAttribute('aria-pressed', 'false');
+          if (maxLowerOddsInput) maxLowerOddsInput.value = '';
+          if (minDiscInput && minDiscInput.value === '10') minDiscInput.value = '';
+          if (sortFilter && sortFilter.value === 'actionability') {
+            sortFilter.value = 'discrepancy';
+          }
+        } else {
+          // Activate
+          btnFilterActionable.classList.add('active');
+          btnFilterActionable.setAttribute('aria-pressed', 'true');
+          if (minDiscInput && !minDiscInput.value) minDiscInput.value = '10';
+          if (maxLowerOddsInput && !maxLowerOddsInput.value) maxLowerOddsInput.value = '2.50';
+
+          // Switch to Quote Discrepancy category if on a different tab
+          const activeTab = document.querySelector('#explorer-category-tabs .opp-radar-tab.active');
+          if (activeTab && activeTab.getAttribute('data-type') !== 'QUOTE_DISCREPANCY') {
+            document.querySelectorAll('#explorer-category-tabs .opp-radar-tab').forEach(b => {
+              const isDisc = b.getAttribute('data-type') === 'QUOTE_DISCREPANCY';
+              b.classList.toggle('active', isDisc);
+              b.setAttribute('aria-selected', isDisc ? 'true' : 'false');
+            });
+          }
+          if (sortFilter) sortFilter.value = 'actionability';
+          state.opportunitySortOrder = 'desc';
+          if (sortOrderIndicator) sortOrderIndicator.textContent = '↓';
+        }
+        loadOpportunitiesData();
+      });
+    }
 
     // Sort order toggle (Desc / Asc)
     if (btnSortOrder) {
@@ -1083,6 +1934,9 @@
         if (minScoreInput) minScoreInput.value = '';
         if (minExecEdgeInput) minExecEdgeInput.value = '';
         if (minRoiInput) minRoiInput.value = '';
+        if (minDiscInput) minDiscInput.value = '';
+        if (maxLowerOddsInput) maxLowerOddsInput.value = '';
+        syncActionableButtonState();
         loadOpportunitiesData();
       });
     }
@@ -1157,12 +2011,78 @@
     // Market Intelligence Workspace — View Mode Switcher
     const btnModeWorkspace = document.getElementById('btn-mode-workspace');
     const btnModeMatrix = document.getElementById('btn-mode-matrix');
+    const btnEventViewSplit = document.getElementById('btn-event-view-split');
+    const btnEventViewMatrix = document.getElementById('btn-event-view-matrix');
+
+    if (btnEventViewSplit) {
+      btnEventViewSplit.addEventListener('click', () => setMarketIntelViewMode('split'));
+    }
+    if (btnEventViewMatrix) {
+      btnEventViewMatrix.addEventListener('click', () => setMarketIntelViewMode('matrix'));
+    }
     if (btnModeWorkspace) {
-      btnModeWorkspace.addEventListener('click', () => setMarketIntelViewMode('workspace'));
+      btnModeWorkspace.addEventListener('click', () => setMarketIntelViewMode('split'));
     }
     if (btnModeMatrix) {
       btnModeMatrix.addEventListener('click', () => setMarketIntelViewMode('matrix'));
     }
+
+    // Unified Event Split Workstation Filter Bar
+    const filterEventSearch = document.getElementById('filter-events-search');
+    const filterEventComp = document.getElementById('filter-events-competition');
+    const btnEventTop5 = document.getElementById('btn-event-top5');
+    const filterEventCov = document.getElementById('filter-events-coverage');
+    const btnResetEventFilters = document.getElementById('btn-reset-events-filters');
+
+    if (filterEventSearch) {
+      filterEventSearch.addEventListener('input', (e) => {
+        state.marketIntel.eventSearch = e.target.value;
+        renderEventFeedList();
+      });
+    }
+    if (filterEventComp) {
+      filterEventComp.addEventListener('change', (e) => {
+        state.marketIntel.eventCompetition = e.target.value;
+        renderEventFeedList();
+      });
+    }
+    if (btnEventTop5) {
+      btnEventTop5.addEventListener('click', () => {
+        state.marketIntel.eventTop5Only = !state.marketIntel.eventTop5Only;
+        btnEventTop5.classList.toggle('active', state.marketIntel.eventTop5Only);
+        renderEventFeedList();
+      });
+    }
+    if (filterEventCov) {
+      filterEventCov.addEventListener('change', (e) => {
+        state.marketIntel.eventCoverage = e.target.value;
+        renderEventFeedList();
+      });
+    }
+    if (btnResetEventFilters) {
+      btnResetEventFilters.addEventListener('click', () => {
+        state.marketIntel.eventSearch = '';
+        state.marketIntel.eventCompetition = '';
+        state.marketIntel.eventTop5Only = false;
+        state.marketIntel.eventCoverage = 'ALL';
+        if (filterEventSearch) filterEventSearch.value = '';
+        if (filterEventComp) filterEventComp.value = '';
+        if (btnEventTop5) btnEventTop5.classList.remove('active');
+        if (filterEventCov) filterEventCov.value = 'ALL';
+        renderEventFeedList();
+      });
+    }
+
+    // Mobile Event Detail Drawer Controls
+    const btnCloseEventModal = document.getElementById('btn-close-event-modal');
+    const eventDetailModal = document.getElementById('event-detail-modal');
+    const eventDetailBackdrop = document.getElementById('event-detail-backdrop');
+    const closeEventModal = () => {
+      if (eventDetailModal) eventDetailModal.style.display = 'none';
+      if (eventDetailBackdrop) eventDetailBackdrop.style.display = 'none';
+    };
+    if (btnCloseEventModal) btnCloseEventModal.addEventListener('click', closeEventModal);
+    if (eventDetailBackdrop) eventDetailBackdrop.addEventListener('click', closeEventModal);
 
     // Fixture Selector Modal controls
     const btnOpenFixtureSelector = document.getElementById('btn-open-fixture-selector');
@@ -1263,31 +2183,42 @@
 
   // Auto Refresh Interval
   function startAutoRefresh() {
-    state.autoRefreshTimer = setInterval(() => {
+    state.autoRefreshTimer = setInterval(async () => {
       const autoRefreshCheckbox = document.getElementById('auto-refresh-opps');
       if (autoRefreshCheckbox && autoRefreshCheckbox.checked && state.currentView === 'opportunities') {
-        loadOpportunitiesData(true);
+        if (state.isAutoRefreshing) return;
+        state.isAutoRefreshing = true;
+        try {
+          await loadOpportunitiesData(true);
+        } finally {
+          state.isAutoRefreshing = false;
+        }
       }
     }, 5000);
   }
 
   // Toast Notification
-  function showToast(message) {
+  function showToast(message, type = 'info') {
     const toast = document.createElement('div');
-    toast.className = 'toast-message';
+    toast.className = `toast-message toast-${type}`;
     toast.textContent = message;
     toast.style.position = 'fixed';
     toast.style.bottom = '20px';
     toast.style.right = '20px';
-    toast.style.background = 'var(--accent-primary)';
+    let bg = 'var(--accent-primary, #3B82F6)';
+    if (type === 'error') bg = 'var(--val-negative, #EF4444)';
+    else if (type === 'warning') bg = 'var(--color-warning, #F59E0B)';
+    else if (type === 'success') bg = 'var(--val-positive, #10B981)';
+    toast.style.background = bg;
     toast.style.color = '#fff';
     toast.style.padding = '10px 18px';
     toast.style.borderRadius = '8px';
     toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
     toast.style.zIndex = '9999';
     toast.style.fontSize = '0.85rem';
+    toast.style.fontWeight = '500';
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 2500);
+    setTimeout(() => toast.remove(), 2800);
   }
 
   // Format Helper for timestamps
@@ -1360,7 +2291,16 @@
     badge.className = 'badge badge-cycle-scanning';
     badge.textContent = isUltra ? '🟡 ULTRA RUNNING' : 'SCANNING';
 
+    const sysDot = document.getElementById('dash-system-indicator');
+    if (sysDot) sysDot.className = 'dash-system-indicator running';
+    const sysState = document.getElementById('dash-system-state-tag');
+    if (sysState) sysState.textContent = 'SCANNING';
+
+    // Highlight pipeline stages as running
+    document.querySelectorAll('.dash-flow-stage').forEach(stg => stg.classList.add('is-running'));
+
     if (alertBox) alertBox.innerHTML = '';
+    clearScanDebugUI();
 
     // Show scan progress feedback container with indeterminate activity state
     if (progContainer) {
@@ -1369,34 +2309,17 @@
       if (progTitle) progTitle.textContent = isUltra ? 'Executing Full-Day ULTRA Scan Cycle...' : `Running ${selectedMode} Scan Cycle...`;
       if (progBar) {
         progBar.classList.add('indeterminate');
-        progBar.style.width = '45%';
+        progBar.style.width = '100%';
       }
     }
-
-    const step1 = document.getElementById('prog-step-1');
-    const step2 = document.getElementById('prog-step-2');
-    const step3 = document.getElementById('prog-step-3');
-    const step4 = document.getElementById('prog-step-4');
-
-    [step1, step2, step3, step4].forEach((s, idx) => {
-      if (s) {
-        s.style.color = idx === 0 ? 'var(--brand-primary)' : 'var(--text-muted)';
-        s.style.fontWeight = idx === 0 ? '600' : 'normal';
-      }
-    });
 
     try {
       const res = await api.runScan(selectedMode);
 
-      if (progBar) {
-        progBar.classList.remove('indeterminate');
-        progBar.style.width = '100%';
-      }
-      [step1, step2, step3, step4].forEach(s => {
-        if (s) { s.style.color = 'var(--val-positive)'; s.style.fontWeight = '600'; }
-      });
+      document.querySelectorAll('.dash-flow-stage').forEach(stg => stg.classList.remove('is-running'));
 
       if (res.status_code === 200 && res.data) {
+        clearScanDebugUI();
         state.latestScan = res.data;
         renderDashboardView(res.data);
         await refreshScanHistory();
@@ -1432,22 +2355,25 @@
         if (alertBox) {
           alertBox.innerHTML = `<div class="alert-banner warning"><strong>Scan In Progress:</strong> ${conflictMsg}</div>`;
         }
+        renderScanDebugUI(res._diagnostic);
       } else {
         const errorMsg = (res.errors && res.errors[0]) || 'Scan cycle encountered an error.';
         if (alertBox) {
           alertBox.innerHTML = `<div class="alert-banner error"><strong>Scan Error:</strong> ${errorMsg}</div>`;
         }
+        renderScanDebugUI(res._diagnostic);
         showToast('Scan failed. See details.');
       }
     } catch (err) {
-      if (progBar) progBar.classList.remove('indeterminate');
+      document.querySelectorAll('.dash-flow-stage').forEach(stg => stg.classList.remove('is-running'));
       console.error('Scan execution error:', err);
       if (alertBox) {
         alertBox.innerHTML = `<div class="alert-banner error"><strong>Scan Error:</strong> Communication error with backend API.</div>`;
       }
+      renderScanDebugUI(buildFallbackDiagnostic(err, selectedMode));
       showToast('Scan execution failed.');
     } finally {
-      if (progBar) progBar.classList.remove('indeterminate');
+      document.querySelectorAll('.dash-flow-stage').forEach(stg => stg.classList.remove('is-running'));
       if (progContainer) {
         setTimeout(() => {
           progContainer.style.display = 'none';
@@ -1456,7 +2382,7 @@
       btnRun.disabled = false;
       btnRun.classList.remove('btn-scanning');
       btnRun.innerHTML = `
-        <svg class="run-scan-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <svg class="run-scan-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         <span id="btn-run-scan-text">Run Scan</span>
       `;
       // Refresh status
@@ -1469,24 +2395,45 @@
 
   function updateScannerStatusBadge(status) {
     const badge = document.getElementById('dash-scanner-status-badge');
-    if (!badge) return;
+    const sysDot = document.getElementById('dash-system-indicator');
+    const sysState = document.getElementById('dash-system-state-tag');
 
     const upper = (status || '').toUpperCase();
     if (upper === 'READY') {
-      badge.className = 'badge badge-cycle-ready';
-      badge.textContent = '🟢 READY';
+      if (badge) {
+        badge.className = 'badge badge-cycle-ready';
+        badge.textContent = '🟢 READY';
+      }
+      if (sysDot) sysDot.className = 'dash-system-indicator ready';
+      if (sysState) sysState.textContent = 'OPERATIONAL';
     } else if (upper === 'SCANNING' || upper === 'SCANNING_ULTRA') {
-      badge.className = 'badge badge-cycle-scanning';
-      badge.textContent = upper === 'SCANNING_ULTRA' ? '🟡 ULTRA RUNNING' : '🟡 SCANNING';
+      if (badge) {
+        badge.className = 'badge badge-cycle-scanning';
+        badge.textContent = upper === 'SCANNING_ULTRA' ? '🟡 ULTRA RUNNING' : '🟡 SCANNING';
+      }
+      if (sysDot) sysDot.className = 'dash-system-indicator running';
+      if (sysState) sysState.textContent = 'SCANNING';
     } else if (upper === 'ERROR' || upper === 'FAILED') {
-      badge.className = 'badge badge-cycle-failed';
-      badge.textContent = '🔴 ERROR';
+      if (badge) {
+        badge.className = 'badge badge-cycle-failed';
+        badge.textContent = '🔴 ERROR';
+      }
+      if (sysDot) sysDot.className = 'dash-system-indicator error';
+      if (sysState) sysState.textContent = 'DEGRADED';
     } else if (upper === 'NOT_RUN') {
-      badge.className = 'badge badge-cycle-notrun';
-      badge.textContent = 'NOT_RUN';
+      if (badge) {
+        badge.className = 'badge badge-cycle-notrun';
+        badge.textContent = 'NOT_RUN';
+      }
+      if (sysDot) sysDot.className = 'dash-system-indicator';
+      if (sysState) sysState.textContent = 'STANDBY';
     } else {
-      badge.className = 'badge badge-cycle-notrun';
-      badge.textContent = safeStr(status, 'UNKNOWN');
+      if (badge) {
+        badge.className = 'badge badge-cycle-notrun';
+        badge.textContent = safeStr(status, 'UNKNOWN');
+      }
+      if (sysDot) sysDot.className = 'dash-system-indicator';
+      if (sysState) sysState.textContent = 'UNKNOWN';
     }
   }
 
@@ -1504,14 +2451,17 @@
   // View Loader: Dashboard
   // ──────────────────────────────────────────────────────────────────────────
 
-  async function loadDashboardData() {
+  async function loadDashboardData(isRefresh = false) {
     try {
-      const [statusRes, latestRes, historyRes, healthRes, schedRes] = await Promise.all([
+      const oppsParams = { status: 'QUALIFIED', sort: 'ev', order: 'desc', limit: 5 };
+      if (isRefresh) oppsParams.refresh = true;
+      const [statusRes, latestRes, historyRes, healthRes, schedRes, canonOppsRes] = await Promise.all([
         api.fetchScanStatus(),
         api.fetchLatestScan(),
         api.fetchScanHistory(10),
         api.fetchHealth(),
         api.fetchSchedulerStatus().catch(() => ({ data: null })),
+        api.fetchUnifiedOpportunities(oppsParams).catch(() => ({ data: null })),
       ]);
 
       const statusData = statusRes.data || {};
@@ -1538,22 +2488,58 @@
       const mobLat = document.getElementById('mobile-api-latency');
       if (mobLat) mobLat.textContent = latVal;
 
-      // Restore API Connected Status
+      // Determine API connection status truthfully
+      const isConnected = (statusRes && statusRes.status_code === 200) || (healthRes && healthRes.status_code === 200);
+
+      // Restore API Connected Status truthfully
       const conn = document.getElementById('connection-status');
       if (conn) {
-        conn.querySelector('.status-text').textContent = 'API REST Connected';
-        conn.querySelector('.status-dot').style.backgroundColor = '#22C55E';
+        conn.querySelector('.status-text').textContent = isConnected ? 'API REST Connected' : 'API Disconnected';
+        conn.querySelector('.status-dot').style.backgroundColor = isConnected ? '#22C55E' : '#EF4444';
       }
       const mobDot = document.getElementById('mobile-connection-dot');
       if (mobDot) {
-        mobDot.style.backgroundColor = '#22C55E';
+        mobDot.style.backgroundColor = isConnected ? '#22C55E' : '#EF4444';
+      }
+
+      // Connection error banner in dashboard if disconnected
+      const dashContainer = document.getElementById('view-dashboard');
+      let errBanner = document.getElementById('dash-connection-error-banner');
+      if (!isConnected) {
+        if (!errBanner && dashContainer) {
+          errBanner = document.createElement('div');
+          errBanner.id = 'dash-connection-error-banner';
+          errBanner.className = 'alert alert-danger';
+          errBanner.style.cssText = 'margin: 1rem 0; padding: 0.85rem 1.25rem; background: rgba(239, 68, 68, 0.15); border: 1px solid #EF4444; border-radius: 8px; color: #FCA5A5; display: flex; justify-content: space-between; align-items: center;';
+          errBanner.innerHTML = `
+            <div>
+              <strong>Backend Connection Issue:</strong> FastAPI server returned an error or is unreachable. Telemetry may be stale.
+            </div>
+            <button class="btn btn-sm btn-outline" style="border-color: #EF4444; color: #fff;" onclick="window.__zbRetryDashboard && window.__zbRetryDashboard()">Retry</button>
+          `;
+          dashContainer.insertBefore(errBanner, dashContainer.firstChild);
+        }
+      } else if (errBanner) {
+        errBanner.remove();
+      }
+      window.__zbRetryDashboard = () => loadDashboardData(true);
+
+      // Update Header Telemetry Pills (Mode and Source)
+      const scanModeEl = document.getElementById('dash-scan-mode-val');
+      if (scanModeEl) {
+        const mVal = latestData?.scan_mode || (latestData?.execution_id?.startsWith('ultra_') ? 'ULTRA' : (latestData ? 'NORMAL' : '—'));
+        scanModeEl.textContent = mVal;
+      }
+      const scanSourceEl = document.getElementById('dash-scan-source-val');
+      if (scanSourceEl) {
+        scanSourceEl.textContent = latestData?.scan_source || (latestData ? 'MANUAL' : '—');
       }
 
       // Update Status Badge
       updateScannerStatusBadge(statusData.status);
 
       if (latestData) {
-        renderDashboardView(latestData);
+        renderDashboardView(latestData, canonOppsRes?.data);
       } else {
         renderNotRunDashboard(healthData);
       }
@@ -1568,13 +2554,21 @@
         conn.querySelector('.status-text').textContent = 'API Offline';
         conn.querySelector('.status-dot').style.backgroundColor = '#EF4444';
       }
+      const mobDot = document.getElementById('mobile-connection-dot');
+      if (mobDot) mobDot.style.backgroundColor = '#EF4444';
+      showToast('Error connecting to API: ' + (err.message || 'Check backend'), 'error');
     }
   }
 
   function renderNotRunDashboard(healthData) {
     // Top Meta bar
     const lastScanEl = document.getElementById('dash-last-scan-time');
-    if (lastScanEl) lastScanEl.textContent = 'Never';
+    if (lastScanEl) {
+      lastScanEl.textContent = 'Never';
+      lastScanEl.style.color = '';
+      lastScanEl.removeAttribute('title');
+      document.getElementById('dash-stale-tag')?.remove();
+    }
     const scanDurEl = document.getElementById('dash-scan-duration');
     if (scanDurEl) scanDurEl.textContent = '—';
     const pulseDot = document.getElementById('dash-pulse-dot');
@@ -1615,52 +2609,69 @@
     const pipelineHero = document.getElementById('dash-pipeline-svg-container');
     if (pipelineHero) {
       pipelineHero.innerHTML = `
-        <div class="dash-pipeline-flow dash-pipeline-standby">
-          <div class="dash-pipe-stage-card">
-            <div class="dash-pipe-stage-num">01</div>
-            <div class="dash-pipe-stage-title">DISCOVERY</div>
-            <div class="dash-pipe-stage-val">—</div>
-            <div class="dash-pipe-stage-sub">Awaiting run</div>
+        <div class="dash-flow-stage" id="pipe-stage-1">
+          <div class="dash-flow-stage-head">
+            <span class="dash-flow-stage-num">01</span>
+            <span class="dash-flow-stage-badge">UNIVERSE</span>
           </div>
-          <div class="dash-pipe-connector">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          <div class="dash-flow-stage-name">DISCOVERY</div>
+          <div class="dash-flow-stage-val">—</div>
+          <div class="dash-flow-stage-sub">Awaiting scan run</div>
+        </div>
+        <div class="dash-flow-stage" id="pipe-stage-2">
+          <div class="dash-flow-stage-head">
+            <span class="dash-flow-stage-num">02</span>
+            <span class="dash-flow-stage-badge">CANONICAL</span>
           </div>
-          <div class="dash-pipe-stage-card">
-            <div class="dash-pipe-stage-num">02</div>
-            <div class="dash-pipe-stage-title">NORMALIZATION</div>
-            <div class="dash-pipe-stage-val">—</div>
-            <div class="dash-pipe-stage-sub">Awaiting run</div>
+          <div class="dash-flow-stage-name">NORMALIZATION</div>
+          <div class="dash-flow-stage-val">—</div>
+          <div class="dash-flow-stage-sub">Awaiting scan run</div>
+        </div>
+        <div class="dash-flow-stage" id="pipe-stage-3">
+          <div class="dash-flow-stage-head">
+            <span class="dash-flow-stage-num">03</span>
+            <span class="dash-flow-stage-badge">OVERLAP</span>
           </div>
-          <div class="dash-pipe-connector">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          <div class="dash-flow-stage-name">CROSS-OVERLAP</div>
+          <div class="dash-flow-stage-val">—</div>
+          <div class="dash-flow-stage-sub">Awaiting scan run</div>
+        </div>
+        <div class="dash-flow-stage" id="pipe-stage-4">
+          <div class="dash-flow-stage-head">
+            <span class="dash-flow-stage-num">04</span>
+            <span class="dash-flow-stage-badge">EVALUATION</span>
           </div>
-          <div class="dash-pipe-stage-card">
-            <div class="dash-pipe-stage-num">03</div>
-            <div class="dash-pipe-stage-title">CROSS-OVERLAP</div>
-            <div class="dash-pipe-stage-val">—</div>
-            <div class="dash-pipe-stage-sub">Awaiting run</div>
+          <div class="dash-flow-stage-name">EVALUATION</div>
+          <div class="dash-flow-stage-val">—</div>
+          <div class="dash-flow-stage-sub">Awaiting scan run</div>
+        </div>
+        <div class="dash-flow-stage" id="pipe-stage-5">
+          <div class="dash-flow-stage-head">
+            <span class="dash-flow-stage-num">05</span>
+            <span class="dash-flow-stage-badge">ALPHA</span>
           </div>
-          <div class="dash-pipe-connector">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-          </div>
-          <div class="dash-pipe-stage-card">
-            <div class="dash-pipe-stage-num">04</div>
-            <div class="dash-pipe-stage-title">EVALUATION</div>
-            <div class="dash-pipe-stage-val">—</div>
-            <div class="dash-pipe-stage-sub">Awaiting run</div>
-          </div>
-          <div class="dash-pipe-connector">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-          </div>
-          <div class="dash-pipe-stage-card dash-pipe-qualified-node">
-            <div class="dash-pipe-stage-num">05</div>
-            <div class="dash-pipe-stage-title">QUALIFIED ALPHA</div>
-            <div class="dash-pipe-stage-val">—</div>
-            <div class="dash-pipe-stage-sub">Awaiting run</div>
-          </div>
+          <div class="dash-flow-stage-name">QUALIFIED ALPHA</div>
+          <div class="dash-flow-stage-val">—</div>
+          <div class="dash-flow-stage-sub">Awaiting scan run</div>
         </div>
       `;
     }
+
+    // Reset Quick Nav Counts
+    const navAll = document.getElementById('dash-nav-all-count');
+    if (navAll) navAll.textContent = '—';
+    const navSb = document.getElementById('dash-nav-sb-count');
+    if (navSb) navSb.textContent = '—';
+    const navVb = document.getElementById('dash-nav-vb-count');
+    if (navVb) navVb.textContent = '—';
+    const navDisc = document.getElementById('dash-nav-disc-count');
+    if (navDisc) navDisc.textContent = '—';
+
+    // System Indicator & State Tag
+    const sysIndicator = document.getElementById('dash-system-indicator');
+    if (sysIndicator) sysIndicator.className = 'dash-system-indicator';
+    const sysState = document.getElementById('dash-system-state-tag');
+    if (sysState) sysState.textContent = 'STANDBY';
 
     // Last scan card
     const lastScanContent = document.getElementById('dash-last-scan-content');
@@ -1698,102 +2709,62 @@
     const container = document.getElementById('dash-pipeline-svg-container');
     if (!container) return;
 
-    const convOverlap = p.selected > 0 ? Math.min(100, Math.round((p.matched / p.selected) * 100)) : 0;
     const isQual = p.qualified > 0;
 
     container.innerHTML = `
-      <div class="dash-pipeline-flow">
-        <!-- Stage 1: Discovery -->
-        <div class="dash-pipe-stage-card" title="Total fixtures and raw feeds discovered">
-          <div class="dash-pipe-stage-top">
-            <span class="dash-pipe-stage-num">01</span>
-            <span class="dash-pipe-stage-badge">UNIVERSE</span>
-          </div>
-          <div class="dash-pipe-stage-title">DISCOVERY</div>
-          <div class="dash-pipe-stage-val mono">${safeNum(p.discovered, 0)}</div>
-          <div class="dash-pipe-stage-sub">Raw Fixtures Discovered</div>
+      <div class="dash-flow-stage ${p.discovered > 0 ? 'is-active' : ''}" id="pipe-stage-1" title="Total fixtures and raw feeds discovered">
+        <div class="dash-flow-stage-head">
+          <span class="dash-flow-stage-num">01</span>
+          <span class="dash-flow-stage-badge">UNIVERSE</span>
         </div>
+        <div class="dash-flow-stage-name">DISCOVERY</div>
+        <div class="dash-flow-stage-val mono">${safeNum(p.discovered, '—')}</div>
+        <div class="dash-flow-stage-sub">Raw Fixtures Discovered</div>
+      </div>
 
-        <!-- Connector 1 -> 2 -->
-        <div class="dash-pipe-connector" title="Scoped Selection">
-          <svg class="dash-pipe-line-svg" viewBox="0 0 40 24" fill="none">
-            <path d="M0 12 L30 12 M24 6 L30 12 L24 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span class="dash-pipe-flow-pill mono">${p.isUltra ? 'WARSAW' : 'FILTER'}</span>
+      <div class="dash-flow-stage ${p.selected > 0 ? 'is-active' : ''}" id="pipe-stage-2" title="${p.isUltra ? 'ULTRA Event Horizon and canonical graphs generated' : 'Target-day slate and canonical graphs generated'}">
+        <div class="dash-flow-stage-head">
+          <span class="dash-flow-stage-num">02</span>
+          <span class="dash-flow-stage-badge">CANONICAL</span>
         </div>
+        <div class="dash-flow-stage-name">NORMALIZATION</div>
+        <div class="dash-flow-stage-val mono">${safeNum(p.selected, '—')}</div>
+        <div class="dash-flow-stage-sub">${p.isUltra ? 'ULTRA Warsaw Horizon' : 'Normalized Events'}</div>
+      </div>
 
-        <!-- Stage 2: Scope & Normalization -->
-        <div class="dash-pipe-stage-card" title="${p.isUltra ? 'ULTRA Event Horizon and canonical graphs generated' : 'Target-day slate and canonical graphs generated'}">
-          <div class="dash-pipe-stage-top">
-            <span class="dash-pipe-stage-num">02</span>
-            <span class="dash-pipe-stage-badge">CANONICAL</span>
-          </div>
-          <div class="dash-pipe-stage-title">NORMALIZATION</div>
-          <div class="dash-pipe-stage-val mono">${safeNum(p.selected, 0)}</div>
-          <div class="dash-pipe-stage-sub">${p.isUltra ? 'ULTRA Event Horizon' : 'Normalized Events'}</div>
+      <div class="dash-flow-stage ${p.matched > 0 ? 'is-active' : ''}" id="pipe-stage-3" title="Matches present in 2+ bookmakers with identical canonical entities">
+        <div class="dash-flow-stage-head">
+          <span class="dash-flow-stage-num">03</span>
+          <span class="dash-flow-stage-badge">${p.overlapPct ? p.overlapPct : 'OVERLAP'}</span>
         </div>
+        <div class="dash-flow-stage-name">CROSS-OVERLAP</div>
+        <div class="dash-flow-stage-val mono ${p.matched > 0 ? 'text-accent font-bold' : ''}">${safeNum(p.matched, '0')}</div>
+        <div class="dash-flow-stage-sub">${safeNum(p.matchedMkts, 0)} Mkts Aligned</div>
+      </div>
 
-        <!-- Connector 2 -> 3 -->
-        <div class="dash-pipe-connector" title="Overlap Match Conversion">
-          <svg class="dash-pipe-line-svg" viewBox="0 0 40 24" fill="none">
-            <path d="M0 12 L30 12 M24 6 L30 12 L24 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span class="dash-pipe-flow-pill mono text-accent">${convOverlap}% MATCH</span>
+      <div class="dash-flow-stage ${p.evalMkts > 0 ? 'is-active' : ''}" id="pipe-stage-4" title="Canonical markets evaluated for arbitrage margins and value edge">
+        <div class="dash-flow-stage-head">
+          <span class="dash-flow-stage-num">04</span>
+          <span class="dash-flow-stage-badge">EVALUATION</span>
         </div>
+        <div class="dash-flow-stage-name">EVALUATION</div>
+        <div class="dash-flow-stage-val mono ${p.evalMkts > 0 ? 'text-primary' : ''}">${safeNum(p.evalMkts, '0')}</div>
+        <div class="dash-flow-stage-sub">${safeNum(p.excludedMkts, 0)} Excluded</div>
+      </div>
 
-        <!-- Stage 3: Cross-Bookmaker Overlap -->
-        <div class="dash-pipe-stage-card ${p.matched > 0 ? 'stage-active' : ''}" title="Matches present in 2+ bookmakers with identical canonical entities">
-          <div class="dash-pipe-stage-top">
-            <span class="dash-pipe-stage-num">03</span>
-            <span class="dash-pipe-stage-badge">OVERLAP</span>
-          </div>
-          <div class="dash-pipe-stage-title">CROSS-OVERLAP</div>
-          <div class="dash-pipe-stage-val mono ${p.matched > 0 ? 'text-success' : ''}">${safeNum(p.matched, 0)}</div>
-          <div class="dash-pipe-stage-sub">${safeNum(p.matchedMkts, 0)} Mkts Aligned</div>
+      <div class="dash-flow-stage ${isQual ? 'is-qualified is-active' : ''}" id="pipe-stage-5" title="Actionable surebets and value opportunities passing threshold">
+        <div class="dash-flow-stage-head">
+          <span class="dash-flow-stage-num">05</span>
+          <span class="dash-flow-stage-badge ${isQual ? 'badge-success' : ''}">${isQual ? 'ACTIONABLE' : 'ALPHA'}</span>
         </div>
-
-        <!-- Connector 3 -> 4 -->
-        <div class="dash-pipe-connector" title="Market Evaluation Flow">
-          <svg class="dash-pipe-line-svg" viewBox="0 0 40 24" fill="none">
-            <path d="M0 12 L30 12 M24 6 L30 12 L24 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span class="dash-pipe-flow-pill mono">${p.evalMkts} MKTS</span>
-        </div>
-
-        <!-- Stage 4: Canonical Market Evaluation -->
-        <div class="dash-pipe-stage-card ${p.evalMkts > 0 ? 'stage-active' : ''}" title="Canonical markets evaluated for arbitrage margins and value edge">
-          <div class="dash-pipe-stage-top">
-            <span class="dash-pipe-stage-num">04</span>
-            <span class="dash-pipe-stage-badge">EVALUATION</span>
-          </div>
-          <div class="dash-pipe-stage-title">EVALUATION</div>
-          <div class="dash-pipe-stage-val mono ${p.evalMkts > 0 ? 'text-primary' : ''}">${safeNum(p.evalMkts, 0)}</div>
-          <div class="dash-pipe-stage-sub">${p.excludedMkts} Excluded</div>
-        </div>
-
-        <!-- Connector 4 -> 5 -->
-        <div class="dash-pipe-connector" title="Opportunity Qualification">
-          <svg class="dash-pipe-line-svg" viewBox="0 0 40 24" fill="none">
-            <path d="M0 12 L30 12 M24 6 L30 12 L24 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span class="dash-pipe-flow-pill mono ${isQual ? 'text-success font-bold' : ''}">${isQual ? 'QUALIFIED' : 'FILTERED'}</span>
-        </div>
-
-        <!-- Stage 5: Qualified Actionable Signals -->
-        <div class="dash-pipe-stage-card dash-pipe-qualified-node ${isQual ? 'stage-qualified-active' : ''}" title="Actionable surebets and value opportunities passing threshold">
-          <div class="dash-pipe-stage-top">
-            <span class="dash-pipe-stage-num">05</span>
-            <span class="dash-pipe-stage-badge ${isQual ? 'badge-success' : 'badge-outline'}">${isQual ? 'ACTIONABLE' : 'ALPHA'}</span>
-          </div>
-          <div class="dash-pipe-stage-title">QUALIFIED ALPHA</div>
-          <div class="dash-pipe-stage-val mono ${isQual ? 'text-success' : ''}">${safeNum(p.qualified, 0)}</div>
-          <div class="dash-pipe-stage-sub">${p.surebets} SB &bull; ${p.valuebets} VB</div>
-        </div>
+        <div class="dash-flow-stage-name">QUALIFIED ALPHA</div>
+        <div class="dash-flow-stage-val mono ${isQual ? 'text-success font-bold' : ''}">${safeNum(p.qualified, '0')}</div>
+        <div class="dash-flow-stage-sub">${safeNum(p.surebets, 0)} SB &bull; ${safeNum(p.valuebets, 0)} VB</div>
       </div>
     `;
   }
 
-  function renderDashboardView(scan) {
+  function renderDashboardView(scan, canonicalData = null) {
     const isUltra = Boolean(scan.funnel || (scan.execution_id && scan.execution_id.startsWith('ultra_')));
     const counts = scan.counts || {};
     const timings = scan.stage_timings || {};
@@ -1863,9 +2834,38 @@
       pulseDot.className = 'dash-pulse-dot active';
     }
     const lastScanEl = document.getElementById('dash-last-scan-time');
-    if (lastScanEl) lastScanEl.textContent = formatTimestamp(scan.completed_at || scan.started_at);
+    const scanTimeStr = scan.completed_at || scan.started_at;
+    if (lastScanEl) {
+      lastScanEl.textContent = formatTimestamp(scanTimeStr);
+      if (scanTimeStr) {
+        const scanEpoch = new Date(scanTimeStr).getTime();
+        const diffMinutes = Math.floor((Date.now() - scanEpoch) / 60000);
+        if (diffMinutes >= 30) {
+          lastScanEl.title = `Scan executed ${diffMinutes}m ago (Stale data)`;
+          lastScanEl.style.color = '#F59E0B';
+          if (!document.getElementById('dash-stale-tag')) {
+            const staleTag = document.createElement('span');
+            staleTag.id = 'dash-stale-tag';
+            staleTag.className = 'badge';
+            staleTag.style.cssText = 'background: rgba(245, 158, 11, 0.2); color: #F59E0B; border: 1px solid #F59E0B; margin-left: 6px; font-size: 0.68rem; padding: 1px 5px; border-radius: 4px; vertical-align: middle;';
+            staleTag.textContent = 'STALE';
+            lastScanEl.parentElement?.appendChild(staleTag);
+          }
+        } else {
+          lastScanEl.style.color = '';
+          lastScanEl.removeAttribute('title');
+          document.getElementById('dash-stale-tag')?.remove();
+        }
+      }
+    }
     const durationEl = document.getElementById('dash-scan-duration');
     if (durationEl) durationEl.textContent = safeDuration(scan.duration_seconds);
+
+    // Command Center Status Indicator & State Tag
+    const sysIndicator = document.getElementById('dash-system-indicator');
+    if (sysIndicator) sysIndicator.className = 'dash-system-indicator ready';
+    const sysState = document.getElementById('dash-system-state-tag');
+    if (sysState) sysState.textContent = 'OPERATIONAL';
 
     // 2. Hero Metrics Counts
     const discoveredEv = isUltra ? safeNum(ultraFunnel.discovered_events_total, counts.discovered_events) : counts.discovered_events;
@@ -1923,6 +2923,19 @@
       : (isUltra && (scan.valuebets || []).length > 0 ? Math.max(...(scan.valuebets || []).map(v => safeNum(v.edge_pct, 0))) : 0.0);
     const dashMaxEv = document.getElementById('dash-max-ev');
     if (dashMaxEv) dashMaxEv.textContent = safePct(maxEv);
+
+    const discOpps = opps.filter(o => (o.opportunity_type || o.type) === 'QUOTE_DISCREPANCY');
+    const discCount = safeNum(counts.quote_discrepancies, discOpps.length);
+
+    // Operational Dispatch Strip Badges
+    const navAll = document.getElementById('dash-nav-all-count');
+    if (navAll) navAll.textContent = opps.length;
+    const navSb = document.getElementById('dash-nav-sb-count');
+    if (navSb) navSb.textContent = sbCount;
+    const navVb = document.getElementById('dash-nav-vb-count');
+    if (navVb) navVb.textContent = vbCount;
+    const navDisc = document.getElementById('dash-nav-disc-count');
+    if (navDisc) navDisc.textContent = discCount;
 
     const qualifiedTotal = isUltra
       ? safeNum(counts.top_opportunities, sbCount + vbCount + safeNum(counts.player_props, 0) + safeNum(counts.team_props, 0))
@@ -1993,14 +3006,24 @@
       cycleStatus: cycleStatus,
     });
 
-    // 5. Live Opportunity Radar Card (Bloomberg / Sports Trading Terminal Intelligence Feed)
+    // 5. Live Opportunity Radar Card (Compact Top-5 Operational Preview)
     const oppBadge = document.getElementById('dash-opp-badge');
     const oppDot = document.querySelector('#card-opportunities-summary .dash-section-dot');
     const oppsContainer = document.getElementById('dash-opps-container');
 
-    if (opps.length > 0) {
+    let radarItems = [];
+    let radarTotal = 0;
+    if (canonicalData && Array.isArray(canonicalData.items) && canonicalData.items.length > 0) {
+      radarItems = canonicalData.items.slice(0, 5);
+      radarTotal = canonicalData.total !== undefined ? canonicalData.total : canonicalData.items.length;
+    } else if (opps.length > 0) {
+      radarItems = opps.slice(0, 5);
+      radarTotal = opps.length;
+    }
+
+    if (radarTotal > 0) {
       if (oppBadge) {
-        oppBadge.textContent = `${opps.length} Qualified`;
+        oppBadge.textContent = `${radarTotal} Qualified · Showing Top ${radarItems.length}`;
         oppBadge.className = 'badge badge-success';
       }
       if (oppDot) {
@@ -2019,116 +3042,53 @@
     }
 
     if (oppsContainer) {
-      if (opps.length > 0) {
-        const renderedCards = opps.slice(0, 8).map(o => {
-          const ev = o.event || {};
-          const mkt = o.market || {};
-          const eventName = (ev.home_team && ev.away_team)
-            ? `${ev.home_team} vs ${ev.away_team}`
-            : (o.event_name || o.canonical_event_id || 'Event Matchup');
-          const mktDisplay = o.market_label || mkt.label || mkt.display_name || (mkt.type ? `${mkt.type}${(mkt.line !== null && mkt.line !== undefined) ? ' • ' + mkt.line : ''}` : o.canonical_market_key || 'Market');
+      if (radarItems.length > 0) {
+        const renderedRows = radarItems.map((o, idx) => {
           const oppId = o.id || o.opportunity_id || ('opp_' + Math.random().toString(36).substr(2, 9));
-          const oppType = o.opportunity_type || o.type || (o.fair_odds ? 'VALUEBET' : (o.type || 'TEAM_PROP'));
-          const isVb = oppType === 'VALUEBET';
-          const marginPct = (o.value_percent !== undefined)
-            ? o.value_percent
-            : ((o.calculation?.roi !== undefined) ? o.calculation.roi : (o.margin_pct !== undefined ? o.margin_pct : (o.arbitrage_margin_pct || 0)));
-          const lifecycleStatus = o.lifecycle_status || (o.lifecycle && o.lifecycle.status) || 'QUALIFIED';
-          const legs = o.legs || o.selections || [];
-          const sumS = (o.calculation?.implied_sum !== undefined) ? o.calculation.implied_sum : (o.implied_probability_sum || (o.mathematical_explanation && o.mathematical_explanation.implied_probability_sum));
+          const oppType = o.type || o.opportunity_type || (o.fair_odds ? 'VALUEBET' : 'PROP');
+          const isVb = oppType === 'VALUEBET' || Boolean(o.is_valuebet);
+          const isSb = oppType === 'SUREBET';
+          const isDisc = oppType === 'QUOTE_DISCREPANCY' || Boolean(o.is_discrepancy);
+          const marginPct = (o.net_ev_pct !== undefined && o.net_ev_pct !== null)
+            ? Number(o.net_ev_pct)
+            : ((o.value_percent !== undefined) ? Number(o.value_percent) : (o.margin_pct !== undefined ? Number(o.margin_pct) : 0));
 
           const edgePill = isVb
-            ? `<span class="dash-radar-edge-pill type-vb mono font-bold">+${Number(marginPct).toFixed(2)}% NET EV</span>`
-            : (oppType === 'SUREBET'
-              ? `<span class="dash-radar-edge-pill type-sb mono font-bold">+${Number(marginPct).toFixed(2)}% ARB</span>`
-              : `<span class="dash-radar-edge-pill type-prop mono font-bold">${Number(marginPct) > 0 ? '+' + Number(marginPct).toFixed(2) + '%' : 'QUOTE'}</span>`);
+            ? `<span class="dash-radar-edge-pill type-vb mono font-bold">+${marginPct.toFixed(2)}% NET EV</span>`
+            : (isSb
+              ? `<span class="dash-radar-edge-pill type-sb mono font-bold">+${marginPct.toFixed(2)}% ARB</span>`
+              : (isDisc
+                ? `<span class="dash-radar-edge-pill type-prop mono font-bold text-warning">+${Number(o.price_discrepancy_pct || o.relative_price_difference_pct || 0).toFixed(1)}% DISC</span>`
+                : `<span class="dash-radar-edge-pill type-prop mono font-bold">${marginPct > 0 ? '+' + marginPct.toFixed(2) + '%' : 'PROP'}</span>`));
 
-          let bodyHtml = '';
-          if (isVb) {
-            const bestOdds = o.bookmaker_odds || (legs[0] && (legs[0].raw_odds || legs[0].odds)) || o.execution_odds || '—';
-            const execBook = (o.bookmakers && Array.isArray(o.bookmakers)) ? o.bookmakers.join(', ') : (o.bookmakers || (legs[0] && (legs[0].provider || legs[0].bookmaker)) || 'Bookmaker');
-            const fairOdds = o.fair_odds || (o.mathematical_explanation && o.mathematical_explanation.fair_odds) || '—';
-            const refBook = o.reference_bookmaker || 'Pinnacle Benchmark';
-            const outcomeName = legs[0]?.selection_outcome || legs[0]?.outcome || legs[0]?.selection_type || o.outcome || 'Pick';
+          const ev = o.event || {};
+          const eventName = typeof ev === 'string'
+            ? ev
+            : ((ev.home_team && ev.away_team) ? `${ev.home_team} vs ${ev.away_team}` : (o.event_name || 'Event Matchup'));
+          const lineStr = (o.line !== undefined && o.line !== null) ? ` ${o.line}` : '';
+          const sideStr = o.side ? ` (${o.side})` : '';
+          const mktDisplay = `${o.market || o.market_label || 'Market'}${lineStr}${sideStr}`;
 
-            bodyHtml = `
-              <div class="dash-radar-vb-compare">
-                <div class="dash-radar-vb-col executable">
-                  <span class="dash-radar-col-tag">EXECUTABLE PICK</span>
-                  <div class="dash-radar-col-main">
-                    <strong class="dash-radar-sel-name text-truncate">${escapeHtml(outcomeName)}</strong>
-                    <span class="badge badge-outline dash-mini-tag">${escapeHtml(execBook)}</span>
-                  </div>
-                  <div class="dash-radar-odds-row">
-                    <span class="dash-radar-odds mono font-bold text-success">@ ${Number(bestOdds) ? Number(bestOdds).toFixed(2) : bestOdds}</span>
-                  </div>
-                </div>
-                <div class="dash-radar-vb-divider">VS</div>
-                <div class="dash-radar-vb-col benchmark">
-                  <span class="dash-radar-col-tag">SHARP BENCHMARK</span>
-                  <div class="dash-radar-col-main">
-                    <span class="dash-radar-sel-name text-muted">Fair Price</span>
-                    <span class="badge badge-outline dash-mini-tag text-muted">${escapeHtml(refBook)}</span>
-                  </div>
-                  <div class="dash-radar-odds-row">
-                    <span class="dash-radar-odds mono font-bold text-info">@ ${Number(fairOdds) ? Number(fairOdds).toFixed(2) : fairOdds}</span>
-                  </div>
-                </div>
-              </div>
-            `;
-          } else {
-            const legChips = legs.map(l => {
-              const bm = l.provider || l.bookmaker || 'Book';
-              const sel = l.selection_outcome || l.outcome || l.selection_type || 'Selection';
-              const rawOdds = Number(l.raw_odds || l.odds || 0);
-              const taxRate = l.tax_rate !== undefined ? Number(l.tax_rate) : (String(bm).toLowerCase() === 'superbet' ? 0.12 : 0.0);
-              const effOdds = Number(l.effective_odds || l.effective_net_odds || (rawOdds * (1.0 - taxRate)));
-              return `
-                <div class="dash-radar-leg-chip">
-                  <div class="dash-radar-leg-info">
-                    <span class="badge badge-outline dash-mini-tag">${escapeHtml(bm)}</span>
-                    <strong class="dash-radar-leg-outcome text-truncate">${escapeHtml(sel)}</strong>
-                  </div>
-                  <div class="dash-radar-leg-pricing mono">
-                    <span class="dash-radar-leg-odds font-bold text-success">${rawOdds.toFixed(2)}</span>
-                    ${taxRate > 0 ? `<span class="dash-radar-leg-eff text-muted" title="12% Tax Adjusted">Eff: ${effOdds.toFixed(2)}</span>` : ''}
-                  </div>
-                </div>
-              `;
-            }).join('');
-
-            bodyHtml = `
-              <div class="dash-radar-legs-deck">
-                ${legChips}
-              </div>
-            `;
-          }
+          const execBook = o.best_bookmaker || (o.legs && o.legs[0]?.bookmaker) || o.bookmaker || 'Book';
+          const execOdds = Number(o.execution_odds || o.bookmaker_odds || (o.legs && o.legs[0]?.raw_odds) || 0).toFixed(2);
+          const fairVal = o.fair_odds || o.reference_odds;
+          const refDisplay = fairVal ? `Fair: @ ${Number(fairVal).toFixed(2)}` : (o.lower_bookmaker ? `${o.lower_bookmaker} @ ${Number(o.lower_execution_odds).toFixed(2)}` : 'Sharp Benchmark');
 
           return `
-            <div class="dash-radar-card opp-table-row" data-id="${escapeHtml(oppId)}" tabindex="0" role="article" aria-label="Inspect ${escapeHtml(eventName)}">
-              <div class="dash-radar-card-header">
-                <div class="dash-radar-badge-wrap">
-                  ${edgePill}
-                  <span class="badge ${lifecycleStatus === 'STALE' ? 'badge-warning' : 'badge-success'} dash-status-pill">${escapeHtml(lifecycleStatus)}</span>
-                </div>
-                <div class="dash-radar-header-meta">
-                  ${sumS !== undefined && Number(sumS) > 0 ? `<span class="dash-radar-sum-tag mono ${Number(sumS) < 1.0 ? 'text-success' : 'text-muted'}" title="Implied Probability Sum">S = ${Number(sumS).toFixed(4)}</span>` : ''}
-                </div>
+            <div class="dash-radar-row" data-id="${escapeHtml(oppId)}" tabindex="0" role="button" aria-label="Inspect ${escapeHtml(eventName)}">
+              <span class="dash-radar-row-rank mono">#${idx + 1}</span>
+              <div class="dash-radar-row-edge">${edgePill}</div>
+              <div class="dash-radar-row-type"><span class="badge badge-outline dash-mini-tag">${escapeHtml(oppType)}</span></div>
+              <div class="dash-radar-row-matchup">
+                <strong class="dash-radar-row-event text-truncate" title="${escapeHtml(eventName)}">${escapeHtml(eventName)}</strong>
+                <span class="dash-radar-row-market text-muted text-truncate" title="${escapeHtml(mktDisplay)}">${escapeHtml(mktDisplay)}</span>
               </div>
-
-              <div class="dash-radar-card-matchup">
-                <h4 class="dash-radar-event-title">${escapeHtml(eventName)}</h4>
-                <div class="dash-radar-market-title">${escapeHtml(mktDisplay)}</div>
+              <div class="dash-radar-row-pricing mono">
+                <span class="dash-radar-price-exec text-success font-bold">${escapeHtml(execBook)} @ ${execOdds}</span>
+                <span class="dash-radar-price-ref text-muted">${escapeHtml(refDisplay)}</span>
               </div>
-
-              <div class="dash-radar-card-body">
-                ${bodyHtml}
-              </div>
-
-              <div class="dash-radar-card-footer">
-                <span class="dash-radar-hint text-muted">Click row to inspect complete price matrix & mathematical proof</span>
-                <button type="button" class="btn btn-sm btn-primary btn-dash-inspect" data-id="${escapeHtml(oppId)}" aria-label="Inspect ${escapeHtml(eventName)}">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <div class="dash-radar-row-action">
+                <button type="button" class="btn btn-xs btn-outline btn-dash-inspect" data-id="${escapeHtml(oppId)}" aria-label="Inspect ${escapeHtml(eventName)}">
                   <span>Inspect</span>
                 </button>
               </div>
@@ -2137,16 +3097,15 @@
         }).join('');
 
         oppsContainer.innerHTML = `
-          <div class="dash-radar-deck">
-            ${renderedCards}
+          <div class="dash-radar-preview-list">
+            ${renderedRows}
           </div>
-          ${opps.length > 8 ? `
-            <div class="dash-radar-more-bar" style="margin-top: 0.75rem; text-align: center;">
-              <a href="#opportunities" class="btn btn-outline btn-sm" data-view="opportunities">
-                <span>View all ${opps.length} opportunities in Unified Explorer &rarr;</span>
-              </a>
-            </div>
-          ` : ''}
+          <div class="dash-radar-preview-footer">
+            <span class="text-muted" style="font-size:0.75rem;">Top ${radarItems.length} priority opportunities preview</span>
+            <a href="#opportunities" class="dash-radar-preview-footer-link" data-view="opportunities">
+              <span>View all ${radarTotal} opportunities in Explorer &rarr;</span>
+            </a>
+          </div>
         `;
 
         // Wire click and keyboard handlers
@@ -2157,12 +3116,12 @@
             loadOpportunityDetail(oppId, { openModal: true });
           });
         });
-        oppsContainer.querySelectorAll('.dash-radar-card').forEach(card => {
-          const oppId = card.getAttribute('data-id');
-          card.addEventListener('click', () => {
+        oppsContainer.querySelectorAll('.dash-radar-row').forEach(row => {
+          const oppId = row.getAttribute('data-id');
+          row.addEventListener('click', () => {
             loadOpportunityDetail(oppId, { openModal: true });
           });
-          card.addEventListener('keydown', (e) => {
+          row.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               loadOpportunityDetail(oppId, { openModal: true });
@@ -3300,6 +4259,15 @@
     if (minExecEdgeInput) minExecEdgeInput.value = '';
     const minRoiInput = document.getElementById('filter-min-roi');
     if (minRoiInput) minRoiInput.value = '';
+    const minDiscInput = document.getElementById('filter-min-discrepancy');
+    if (minDiscInput) minDiscInput.value = '';
+    const maxLowerOddsInput = document.getElementById('filter-max-lower-odds');
+    if (maxLowerOddsInput) maxLowerOddsInput.value = '';
+    const btnFilterActionable = document.getElementById('btn-filter-actionable-disc');
+    if (btnFilterActionable) {
+      btnFilterActionable.classList.remove('active');
+      btnFilterActionable.setAttribute('aria-pressed', 'false');
+    }
 
     const oppAdvPanel = document.getElementById('opp-advanced-filters-panel');
     const btnToggleOppAdv = document.getElementById('btn-toggle-opp-advanced-filters');
@@ -3429,6 +4397,34 @@
       });
     }
 
+    if (filters.min_discrepancy !== undefined && filters.min_discrepancy > 0) {
+      chips.push({
+        id: 'min_discrepancy',
+        label: 'Min Discrepancy',
+        val: `≥ ${filters.min_discrepancy}%`,
+        onRemove: () => {
+          const el = document.getElementById('filter-min-discrepancy');
+          if (el) el.value = '';
+          syncActionableButtonState();
+          loadOpportunitiesData();
+        }
+      });
+    }
+
+    if (filters.max_lower_odds !== undefined && filters.max_lower_odds > 0) {
+      chips.push({
+        id: 'max_lower_odds',
+        label: 'Max Lower Odds',
+        val: `≤ ${Number(filters.max_lower_odds).toFixed(2)}`,
+        onRemove: () => {
+          const el = document.getElementById('filter-max-lower-odds');
+          if (el) el.value = '';
+          syncActionableButtonState();
+          loadOpportunitiesData();
+        }
+      });
+    }
+
     if (chips.length === 0) {
       container.style.display = 'none';
       container.innerHTML = '';
@@ -3464,7 +4460,7 @@
     return loadOpportunitiesData(isBackground);
   }
 
-  async function loadOpportunitiesData(isBackground = false) {
+  async function loadOpportunitiesData(isBackground = false, isRefresh = false) {
     _activeOppRequestId += 1;
     const currentReqId = _activeOppRequestId;
 
@@ -3487,6 +4483,8 @@
     const minScore = parseFloat(document.getElementById('filter-min-score')?.value) || 0;
     const minExecEdge = parseFloat(document.getElementById('filter-min-exec-edge')?.value) || undefined;
     const minRoi = parseFloat(document.getElementById('filter-min-roi')?.value) || undefined;
+    const minDiscrepancy = parseFloat(document.getElementById('filter-min-discrepancy')?.value) || undefined;
+    const maxLowerOdds = parseFloat(document.getElementById('filter-max-lower-odds')?.value) || undefined;
     const search = (document.getElementById('filter-search-text')?.value || '').trim();
     const top5Only = Boolean(state.opportunityTop5Only);
 
@@ -3506,6 +4504,7 @@
     const sortLabelsMap = {
       ev: `Ranked by Net EV / Edge (${sortOrder.toUpperCase()})`,
       discrepancy: `Ranked by Discrepancy % (${sortOrder.toUpperCase() === 'DESC' ? 'High → Low' : 'Low → High'})`,
+      actionability: `Ranked by Actionability (Discrepancy % DESC → Lower Odds ASC)`,
       score: `Ranked by Quality Score (${sortOrder.toUpperCase()})`,
       odds: `Ranked by Odds (${sortOrder.toUpperCase()})`,
       kickoff: `Ranked by Kickoff Time (${sortOrder.toUpperCase()})`,
@@ -3523,6 +4522,8 @@
       min_ev: minRoi,
       min_score: minScore,
       min_execution_edge: minExecEdge,
+      min_discrepancy: minDiscrepancy,
+      max_lower_odds: maxLowerOdds,
     };
     renderActiveFilterChips(activeFiltersForChips);
 
@@ -3542,7 +4543,10 @@
         t: selectedType, s: status, p: provider, sort: sortField,
         o: sortOrder, top5: top5Only, ms: (minScore > 0 ? minScore : 0),
         me: (minExecEdge !== undefined ? minExecEdge : null),
-        mr: (minRoi !== undefined ? minRoi : null), q: search,
+        mr: (minRoi !== undefined ? minRoi : null),
+        md: (minDiscrepancy !== undefined ? minDiscrepancy : null),
+        mlo: (maxLowerOdds !== undefined ? maxLowerOdds : null),
+        q: search,
       });
       if (state.oppExplorerFilterSig !== filterSig) {
         state.oppExplorerFilterSig = filterSig;
@@ -3564,7 +4568,10 @@
       if (minScore > 0) fetchParams.min_score = minScore;
       if (minExecEdge !== undefined) fetchParams.min_execution_edge = minExecEdge;
       if (minRoi !== undefined) fetchParams.min_ev = minRoi;
+      if (minDiscrepancy !== undefined) fetchParams.min_discrepancy = minDiscrepancy;
+      if (maxLowerOdds !== undefined) fetchParams.max_lower_odds = maxLowerOdds;
       if (search) fetchParams.search = search;
+      if (isRefresh) fetchParams.refresh = true;
 
       const res = await api.fetchUnifiedOpportunities(fetchParams, { signal: currentAbortController.signal });
       if (res.aborted || currentReqId !== _activeOppRequestId) {
@@ -3645,7 +4652,7 @@
       // ── Handle Rendering States: Empty, Single, or Many ──
       if (items.length === 0) {
         // Distinguish Empty Filter Results vs Zero Scan Data
-        const hasActiveFilters = Boolean(selectedType || status || provider || search || top5Only || minScore > 0 || minExecEdge !== undefined || minRoi !== undefined);
+        const hasActiveFilters = Boolean(selectedType || status || provider || search || top5Only || minScore > 0 || minExecEdge !== undefined || minRoi !== undefined || minDiscrepancy !== undefined || maxLowerOdds !== undefined);
 
         const emptySvg = hasActiveFilters
           ? `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`
@@ -3724,12 +4731,19 @@
           </div>
         `;
 
-        // Wire click handlers for dense rows
+        // Wire click & keyboard handlers for dense rows
         listContentArea.querySelectorAll('.opp-feed-item').forEach(row => {
-          row.addEventListener('click', () => {
+          const activateRow = () => {
             const id = row.getAttribute('data-id');
             const isMobile = window.innerWidth < 1024;
             selectOpportunity(id, isMobile);
+          };
+          row.addEventListener('click', activateRow);
+          row.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              activateRow();
+            }
           });
         });
 
@@ -3990,7 +5004,8 @@
       refHtml = `<span class="ref-pill"><span class="ref-k">REF</span> <strong class="ref-v mono">${Number(item.reference_odds).toFixed(2)}</strong></span>`;
     } else if (item.lower_execution_odds) {
       const lowerBm = item.lower_bookmaker ? escapeHtml(item.lower_bookmaker) : 'Alt';
-      refHtml = `<span class="ref-pill"><span class="ref-k">${lowerBm}</span> <strong class="ref-v mono">${Number(item.lower_execution_odds).toFixed(2)}</strong></span>`;
+      const isDiscItem = item.type === 'QUOTE_DISCREPANCY';
+      refHtml = `<span class="ref-pill" title="${isDiscItem ? `Lower Executable Odds: ${Number(item.lower_execution_odds).toFixed(2)} at ${lowerBm}` : `Alternative Quote: ${Number(item.lower_execution_odds).toFixed(2)}`}"><span class="ref-k">${isDiscItem ? `LOW ODDS (${lowerBm})` : lowerBm}</span> <strong class="ref-v mono ${isDiscItem ? 'text-warning' : ''}">${Number(item.lower_execution_odds).toFixed(2)}</strong></span>`;
     }
 
     const statusMap = {
@@ -4134,6 +5149,7 @@
     requestAnimationFrame(() => {
       modal.classList.add('open');
       if (backdrop) backdrop.classList.add('open');
+      trapModalFocus(modal);
     });
   }
 
@@ -4477,7 +5493,7 @@
       const lowerBmName = detail.lower_bookmaker || math.lower_bookmaker || 'Alternative';
       const lowerPriceNum = detail.lower_execution_odds != null ? Number(detail.lower_execution_odds) : (math.lower_odds != null ? Number(math.lower_odds) : null);
       const oDiff = detail.odds_difference != null ? Number(detail.odds_difference) : (math.odds_difference != null ? Number(math.odds_difference) : null);
-      card2Label = 'ALTERNATIVE QUOTE';
+      card2Label = 'LOWER EXECUTABLE ODDS';
       card2Val = lowerPriceNum != null ? lowerPriceNum.toFixed(2) : '—';
       card2Sub = `${lowerBmName} Quote (Δ +${Number(oDiff || 0).toFixed(2)})`;
       card2Cls = 'text-warning';
@@ -4846,6 +5862,7 @@
   }
 
   function closeOppDetailModal() {
+    untrapModalFocus();
     const modal = document.getElementById('opp-detail-modal');
     const backdrop = document.getElementById('opp-detail-backdrop');
     if (modal) modal.classList.remove('open');
@@ -5243,7 +6260,12 @@
         const runRes = await api.triggerProvider(pName);
         btn.disabled = false;
         btn.textContent = 'Run Provider';
-        showToast(`Provider ${pName} executed: ${runRes.data?.status || 'COMPLETED'}`);
+        if (runRes && (runRes.status_code === 200 || runRes.status_code === 201) && runRes.data) {
+          showToast(`Provider ${pName} executed: ${runRes.data?.status || 'COMPLETED'}`, 'success');
+        } else {
+          const errMsg = (runRes && runRes.errors && runRes.errors[0]) || 'Execution failed';
+          showToast(`Provider ${pName} failed: ${errMsg}`, 'error');
+        }
         loadProvidersData();
       });
     });
@@ -5265,24 +6287,184 @@
 
   function setMarketIntelViewMode(mode) {
     state.marketIntel.viewMode = mode;
+    const splitBtn = document.getElementById('btn-event-view-split');
+    const matrixBtn = document.getElementById('btn-event-view-matrix');
     const wsBtn = document.getElementById('btn-mode-workspace');
     const matBtn = document.getElementById('btn-mode-matrix');
+    const splitWorkspace = document.getElementById('event-split-workspace');
     const wsView = document.getElementById('event-workspace-view');
     const matView = document.getElementById('events-matrix-view');
 
-    if (wsBtn) wsBtn.classList.toggle('active', mode === 'workspace');
-    if (matBtn) matBtn.classList.toggle('active', mode === 'matrix');
+    const isSplit = (mode === 'split' || mode === 'workspace');
+    if (splitBtn) splitBtn.classList.toggle('active', isSplit);
+    if (matrixBtn) matrixBtn.classList.toggle('active', !isSplit);
+    if (wsBtn) wsBtn.classList.toggle('active', isSplit);
+    if (matBtn) matBtn.classList.toggle('active', !isSplit);
 
-    if (mode === 'workspace') {
+    if (isSplit) {
+      if (splitWorkspace) splitWorkspace.style.display = '';
       if (wsView) wsView.style.display = 'block';
       if (matView) matView.style.display = 'none';
       if (state.marketIntel.activeEventId && !state.marketIntel.activeDetail) {
         loadEventDetail(state.marketIntel.activeEventId);
       }
     } else {
+      if (splitWorkspace) splitWorkspace.style.display = 'none';
       if (wsView) wsView.style.display = 'none';
       if (matView) matView.style.display = 'block';
       renderAllFixturesMatrix();
+    }
+  }
+
+  function renderEventFeedList() {
+    const listEl = document.getElementById('event-feed-list');
+    const counterEl = document.getElementById('event-feed-counter');
+    if (!listEl) return;
+
+    let events = state.events || [];
+    const searchVal = (state.marketIntel.eventSearch || '').toLowerCase().trim();
+    const compVal = state.marketIntel.eventCompetition || '';
+    const top5Only = Boolean(state.marketIntel.eventTop5Only);
+    const covVal = state.marketIntel.eventCoverage || 'ALL';
+
+    const totalCount = events.length;
+
+    // Filter by Top 5
+    if (top5Only) {
+      events = events.filter(e => isTop5Competition(e.competition || e.canonical_competition_id));
+    }
+
+    // Filter by competition
+    if (compVal) {
+      events = events.filter(e => e.competition === compVal);
+    }
+
+    // Filter by coverage
+    if (covVal === 'DEEP') {
+      events = events.filter(e => (e.matched_markets_count || e.normalized_markets_count || 0) >= 40);
+    } else if (covVal === 'MEGA') {
+      events = events.filter(e => (e.matched_markets_count || e.normalized_markets_count || 0) >= 400);
+    } else if (covVal === 'OPPS') {
+      events = events.filter(e => e.has_surebet || e.has_valuebet);
+    }
+
+    // Filter by search
+    if (searchVal) {
+      events = events.filter(e =>
+        (e.home_team || '').toLowerCase().includes(searchVal) ||
+        (e.away_team || '').toLowerCase().includes(searchVal) ||
+        (e.competition || '').toLowerCase().includes(searchVal)
+      );
+    }
+
+    // Update feed counter
+    if (counterEl) {
+      counterEl.textContent = events.length === totalCount
+        ? `${totalCount} fixtures`
+        : `${events.length} / ${totalCount} fixtures`;
+    }
+
+    if (!events.length) {
+      listEl.innerHTML = `
+        <div class="empty-state" style="padding: 2.5rem 1rem; text-align: center;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <p style="font-size: 0.82rem; font-weight: 600; margin-top: 0.4rem; color: var(--text-secondary);">No matching fixtures</p>
+          <span class="text-muted" style="font-size: 0.72rem;">Try clearing or adjusting filters.</span>
+        </div>
+      `;
+      return;
+    }
+
+    listEl.innerHTML = events.map((ev) => {
+      const evId = ev.id || ev.canonical_event_id;
+      const mkts = ev.matched_markets_count || ev.normalized_markets_count || 0;
+      const isActive = evId === state.marketIntel.activeEventId;
+      const rank = (state.events || []).findIndex(e => (e.id || e.canonical_event_id) === evId) + 1;
+
+      // Bookmaker participation pills
+      const providers = (ev.participating_bookmakers || (ev.providers || []).map(p => p.provider || p)).map(p => String(p).toLowerCase());
+      const hasBetclic = providers.some(p => p.includes('betclic'));
+      const hasSuperbet = providers.some(p => p.includes('superbet'));
+      const hasPinny = providers.some(p => p.includes('pinnacle') || p.includes('pinny'));
+
+      const oppBadges = [];
+      if (ev.has_surebet) {
+        oppBadges.push('<span class="badge badge-success" style="font-size: 0.62rem; padding: 0.1rem 0.35rem;">⚡ SUREBET</span>');
+      }
+      if (ev.has_valuebet) {
+        oppBadges.push('<span class="badge badge-info" style="font-size: 0.62rem; padding: 0.1rem 0.35rem;">📈 VALUE</span>');
+      }
+
+      return `
+        <div class="event-feed-item ${isActive ? 'active' : ''}" data-event-id="${evId}" role="button" tabindex="0">
+          <div class="event-feed-item-top">
+            <span class="event-feed-comp-badge" title="${escapeHtml(ev.competition || 'League')}">${escapeHtml(ev.competition || 'League')}</span>
+            <span class="event-feed-time mono">${ev.kickoff ? formatTimestamp(ev.kickoff) : 'Scheduled'}</span>
+          </div>
+          <div class="event-feed-item-teams">
+            <span class="ribbon-chip-rank mono" style="font-size: 0.72rem; color: var(--brand-primary); margin-right: 0.2rem;">#${rank}</span>
+            ${escapeHtml(ev.home_team)} vs ${escapeHtml(ev.away_team)}
+          </div>
+          <div class="event-feed-item-bottom">
+            <div class="event-feed-bookmakers">
+              ${hasBetclic ? '<span class="event-feed-bm-pill betclic">BETCLIC</span>' : ''}
+              ${hasSuperbet ? '<span class="event-feed-bm-pill superbet">SUPERBET</span>' : ''}
+              ${hasPinny ? '<span class="event-feed-bm-pill pinnacle">PINNY</span>' : ''}
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              ${oppBadges.join('')}
+              <span class="event-feed-markets-count">${mkts} mkts</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Wire clicks on feed items
+    listEl.querySelectorAll('.event-feed-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const evId = item.getAttribute('data-event-id');
+        if (!evId) return;
+        state.marketIntel.activeEventId = evId;
+        listEl.querySelectorAll('.event-feed-item').forEach(el => el.classList.toggle('active', el === item));
+
+        // Handle mobile modal
+        if (window.innerWidth <= 992) {
+          openEventModal();
+        }
+
+        loadEventDetail(evId);
+      });
+    });
+  }
+
+  function openEventModal() {
+    const modal = document.getElementById('event-detail-modal');
+    const backdrop = document.getElementById('event-detail-backdrop');
+    if (modal) {
+      modal.style.display = 'flex';
+      requestAnimationFrame(() => {
+        modal.classList.add('open');
+        trapModalFocus(modal);
+      });
+    }
+    if (backdrop) {
+      backdrop.style.display = 'block';
+      requestAnimationFrame(() => backdrop.classList.add('active'));
+    }
+  }
+
+  function closeEventModal() {
+    untrapModalFocus();
+    const modal = document.getElementById('event-detail-modal');
+    const backdrop = document.getElementById('event-detail-backdrop');
+    if (modal) {
+      modal.classList.remove('open');
+      setTimeout(() => { modal.style.display = 'none'; }, 220);
+    }
+    if (backdrop) {
+      backdrop.classList.remove('active');
+      setTimeout(() => { backdrop.style.display = 'none'; }, 220);
     }
   }
 
@@ -5290,7 +6472,10 @@
     const modal = document.getElementById('fixture-selector-modal');
     const backdrop = document.getElementById('fixture-selector-backdrop');
     const input = document.getElementById('modal-fixture-search');
-    if (modal) modal.classList.add('open');
+    if (modal) {
+      modal.classList.add('open');
+      trapModalFocus(modal);
+    }
     if (backdrop) backdrop.classList.add('active');
     renderFixtureModalList();
     if (input) {
@@ -5300,6 +6485,7 @@
   }
 
   function closeFixtureSelectorModal() {
+    untrapModalFocus();
     const modal = document.getElementById('fixture-selector-modal');
     const backdrop = document.getElementById('fixture-selector-backdrop');
     if (modal) modal.classList.remove('open');
@@ -5496,6 +6682,40 @@
 
     try {
       const res = await api.fetchEvents({ limit: 250, offset: 0 });
+      const hasError = !res || (res.status_code && res.status_code !== 200) || (!Array.isArray(res.data) && res.errors);
+      if (hasError) {
+        const errMsg = (res && res.errors && res.errors[0]) || (res && res.detail) || 'Failed to fetch events from backend.';
+        console.warn('Events fetch returned API error:', errMsg);
+        if (countPill) countPill.textContent = '—';
+        if (matrixCount) matrixCount.textContent = '—';
+        if (ribbonAllCount) ribbonAllCount.textContent = '—';
+
+        const matrixBody = document.getElementById('fixtures-matrix-tbody') || document.getElementById('events-matrix-tbody');
+        if (matrixBody) {
+          matrixBody.innerHTML = `
+            <tr>
+              <td colspan="6" style="text-align: center; padding: 3rem 1rem; color: var(--val-negative);">
+                <div style="font-weight: 600; font-size: 1rem; margin-bottom: 0.5rem;">API Error Loading Fixtures</div>
+                <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">${escapeHtml(errMsg)}</div>
+                <button class="btn btn-sm btn-primary" onclick="window.__zbRetryEvents && window.__zbRetryEvents()">Retry Loading</button>
+              </td>
+            </tr>
+          `;
+        }
+        const container = document.getElementById('event-detail-container');
+        if (container) {
+          container.innerHTML = `
+            <div class="empty-state" style="padding: 3rem 1rem; color: var(--val-negative);">
+              <p style="font-weight: 600; margin-top: 0.5rem;">Failed to load fixture detail</p>
+              <span class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 1rem;">${escapeHtml(errMsg)}</span>
+              <button class="btn btn-sm btn-primary" onclick="window.__zbRetryEvents && window.__zbRetryEvents()">Retry</button>
+            </div>
+          `;
+        }
+        window.__zbRetryEvents = () => loadEventsData();
+        return;
+      }
+
       if (res && res.detail) {
         console.warn('Events fetch returned API error detail:', res.detail);
       }
@@ -5533,17 +6753,28 @@
       if (matrixCount) matrixCount.textContent = `${events.length}`;
       if (ribbonAllCount) ribbonAllCount.textContent = `${events.length}`;
 
-      // Populate competition filter dropdown in matrix view
+      // Populate competition filter dropdown in matrix view and unified split bar
       const compSelect = document.getElementById('filter-matrix-competition');
+      const compSelectEvents = document.getElementById('filter-events-competition');
+      const comps = Array.from(new Set(events.map(e => e.competition).filter(Boolean))).sort();
+      const compOptionsHtml = '<option value="">All Competitions</option>' + comps.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
       if (compSelect) {
         const currentVal = compSelect.value;
-        const comps = Array.from(new Set(events.map(e => e.competition).filter(Boolean))).sort();
-        compSelect.innerHTML = '<option value="">All Competitions</option>' + comps.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        compSelect.innerHTML = compOptionsHtml;
         compSelect.value = currentVal;
+      }
+      if (compSelectEvents) {
+        const currentVal = compSelectEvents.value || state.marketIntel.eventCompetition || '';
+        compSelectEvents.innerHTML = compOptionsHtml;
+        compSelectEvents.value = currentVal;
       }
 
       // Populate Ribbon Quick Chips (Top 5 mega/deep coverage matches)
       renderRibbonChips(events);
+
+      // Render Left Pane Feed List (Event Split Workstation)
+      renderEventFeedList();
 
       // Render Matrix View Table
       renderAllFixturesMatrix();
@@ -5577,7 +6808,20 @@
 
     } catch (err) {
       console.error('Failed to load events data', err);
-      showToast('Error loading events: ' + err.message);
+      showToast('Error loading events: ' + err.message, 'error');
+      const matrixBody = document.getElementById('fixtures-matrix-tbody') || document.getElementById('events-matrix-tbody');
+      if (matrixBody) {
+        matrixBody.innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 3rem 1rem; color: var(--val-negative);">
+              <div style="font-weight: 600; font-size: 1rem; margin-bottom: 0.5rem;">Failed to load events</div>
+              <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">${escapeHtml(err.message || 'Network error')}</div>
+              <button class="btn btn-sm btn-primary" onclick="window.__zbRetryEvents && window.__zbRetryEvents()">Retry</button>
+            </td>
+          </tr>
+        `;
+      }
+      window.__zbRetryEvents = () => loadEventsData();
     }
   }
 
@@ -5588,6 +6832,11 @@
 
     // Update Ribbon active chip
     document.querySelectorAll('.ribbon-chip').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-event-id') === eventId);
+    });
+
+    // Update Event Feed active item
+    document.querySelectorAll('.event-feed-item').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-event-id') === eventId);
     });
 
@@ -5603,6 +6852,7 @@
     }
 
     const container = document.getElementById('event-detail-container');
+    const mobileBody = document.getElementById('mobile-event-detail-body');
     if (!container) return;
 
     // Loading State
@@ -5652,8 +6902,18 @@
 
       const families = Array.from(familyMap.values()).sort((a, b) => b.count - a.count);
 
-      // Render the complete workspace
+      // Render the complete workspace into desktop inspector container
       renderEventWorkspace(container, ev, families);
+
+      // Render into mobile modal dialog if present
+      const modalContent = document.getElementById('event-detail-modal-content');
+      const modalTitle = document.getElementById('event-detail-modal-title');
+      const modalSub = document.getElementById('event-detail-modal-sub');
+      if (modalTitle) modalTitle.textContent = `${ev.home_team} vs ${ev.away_team}`;
+      if (modalSub) modalSub.textContent = `${ev.competition || 'League'} • ${ev.kickoff ? formatTimestamp(ev.kickoff) : 'Scheduled'}`;
+      if (modalContent) {
+        renderEventWorkspace(modalContent, ev, families);
+      }
 
     } catch (err) {
       console.error('Failed to load event detail', err);
@@ -5975,7 +7235,18 @@
     container.querySelectorAll('.btn-inspect-opp-deep').forEach(btn => {
       btn.addEventListener('click', () => {
         const oppId = btn.getAttribute('data-opp-id');
-        if (oppId) loadOpportunityDetail(oppId);
+        if (oppId) {
+          const modal = document.getElementById('event-detail-modal');
+          const backdrop = document.getElementById('event-detail-backdrop');
+          if (modal) modal.style.display = 'none';
+          if (backdrop) backdrop.style.display = 'none';
+          window.location.hash = 'opportunities';
+          setTimeout(() => {
+            if (typeof selectOpportunity === 'function') {
+              selectOpportunity(oppId);
+            }
+          }, 100);
+        }
       });
     });
 
@@ -6371,6 +7642,27 @@
       btnScan.addEventListener('click', () => handlePropsScan());
     }
 
+    // Refresh Props Button (fetches latest cached scan results without re-running scrapers)
+    const btnRefreshProps = document.getElementById('btn-refresh-props');
+    if (btnRefreshProps) {
+      btnRefreshProps.addEventListener('click', async () => {
+        if (btnRefreshProps.disabled) return;
+        btnRefreshProps.disabled = true;
+        const origHtml = btnRefreshProps.innerHTML;
+        btnRefreshProps.innerHTML = '<span class="spinner-icon">⟳</span> <span id="btn-refresh-props-text">Refreshing...</span>';
+        try {
+          await fetchAndRenderPropsFromBackend();
+          showToast('Props data reloaded from REST API');
+        } catch (err) {
+          console.error('Failed to refresh props', err);
+          showToast('Failed to refresh props');
+        } finally {
+          btnRefreshProps.disabled = false;
+          btnRefreshProps.innerHTML = origHtml;
+        }
+      });
+    }
+
     // Toggle Advanced Filters Panel
     const btnToggleAdv = document.getElementById('btn-toggle-advanced-filters');
     const advPanel = document.getElementById('props-advanced-filters-panel');
@@ -6379,6 +7671,20 @@
         const isHidden = advPanel.style.display === 'none' || !advPanel.style.display;
         advPanel.style.display = isHidden ? 'block' : 'none';
         btnToggleAdv.classList.toggle('active', isHidden);
+      });
+    }
+
+    // Top 5 Leagues Toggle Button for Props
+    const btnPropsTop5 = document.getElementById('btn-props-top5');
+    if (btnPropsTop5) {
+      btnPropsTop5.addEventListener('click', () => {
+        state.playerProps.top5Only = !state.playerProps.top5Only;
+        btnPropsTop5.classList.toggle('active', state.playerProps.top5Only);
+        if (hasLocalPropsData()) {
+          applyLocalFiltersAndRender();
+        } else {
+          fetchAndRenderPropsFromBackend();
+        }
       });
     }
 
@@ -6620,6 +7926,10 @@
     const limitSelect = document.getElementById('props-filter-limit');
     if (limitSelect) limitSelect.value = '50';
 
+    state.playerProps.top5Only = false;
+    const btnPropsTop5 = document.getElementById('btn-props-top5');
+    if (btnPropsTop5) btnPropsTop5.classList.remove('active');
+
     state.playerProps.propsScope = 'ALL';
     const scopeButtons = document.querySelectorAll('#props-scope-switcher .scope-btn');
     scopeButtons.forEach(b => b.classList.toggle('active', b.getAttribute('data-scope') === 'ALL'));
@@ -6768,7 +8078,7 @@
     const funnel = scanData?.funnel_metrics || state.playerProps.funnelMetrics || {};
     const qualifiedList = scanData?.qualified_opportunities || state.playerProps.results || [];
     const diagnosticList = scanData?.diagnostic_candidates || state.playerProps.diagnosticCandidates || [];
-    const allCandidates = scanData?.all_candidates || [...qualifiedList, ...diagnosticList];
+    const allCandidates = scanData?.raw_universe || scanData?.all_candidates || [...qualifiedList, ...diagnosticList];
 
     const qualifiedCount = scanData?.qualified_count ?? qualifiedList.length;
     const totalDiscovered = funnel.trends_discovered || allCandidates.length;
@@ -7052,6 +8362,11 @@
       candidates = candidates.filter(o => String(o.competition || '').toLowerCase().includes(tournVal));
     }
 
+    // 7b. Top 5 Leagues Filter
+    if (state.playerProps.top5Only) {
+      candidates = candidates.filter(o => isTop5Competition(o.competition || o.match_name));
+    }
+
     // 8. Position Filter
     if (posVal && posVal !== 'D,M,F' && posVal !== 'ALL') {
       if (posVal === 'HOME' || posVal === 'AWAY') {
@@ -7203,9 +8518,18 @@
   }
 
   let _activeResultsRequestId = 0;
+  let _activePropsAbortController = null;
 
-  async function fetchAndRenderPropsFromBackend() {
+  async function fetchAndRenderPropsFromBackend(options = {}) {
     const currentReqId = ++_activeResultsRequestId;
+
+    if (_activePropsAbortController) {
+      try {
+        _activePropsAbortController.abort();
+      } catch (e) {}
+    }
+    const currentAbortController = new AbortController();
+    _activePropsAbortController = currentAbortController;
 
     const scopeVal = state.playerProps.propsScope || 'ALL';
     const searchVal = (document.getElementById('props-filter-search')?.value || '').trim();
@@ -7294,14 +8618,14 @@
     }
 
     try {
-      const res = await api.fetchGlobalPropsResults(params);
-      if (currentReqId !== _activeResultsRequestId) return;
+      const res = await api.fetchGlobalPropsResults(params, { signal: currentAbortController.signal });
+      if (res?.aborted || currentReqId !== _activeResultsRequestId) return;
 
       if (res && res.data) {
         const scanData = res.data;
         const qualified = scanData.qualified_opportunities || [];
         const diagnostic = scanData.diagnostic_candidates || [];
-        const allCandidates = scanData.all_candidates || [...qualified, ...diagnostic];
+        const allCandidates = scanData.raw_universe || scanData.all_candidates || [...qualified, ...diagnostic];
         const items = scanData.items || (viewMode === 'TOP_VALUE' ? qualified : allCandidates);
         const funnel = scanData.funnel_metrics || {};
 
@@ -7326,10 +8650,39 @@
             state.playerProps.selectedPropId = null;
           }
         }
+      } else {
+        const errMsg = (res && res.errors && res.errors[0]) || 'Failed to retrieve props results from backend.';
+        const tbody = document.getElementById('props-table-body');
+        if (tbody) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="5" class="text-center" style="padding: 2.5rem 1rem; color: var(--val-negative);">
+                <div style="font-weight: 600; font-size: 1rem; margin-bottom: 0.5rem;">API Error Loading Props</div>
+                <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">${escapeHtml(errMsg)}</div>
+                <button class="btn btn-sm btn-primary" onclick="window.__zbRetryProps && window.__zbRetryProps()">Retry Loading</button>
+              </td>
+            </tr>
+          `;
+        }
+        window.__zbRetryProps = () => fetchAndRenderPropsFromBackend();
       }
     } catch (err) {
       if (currentReqId !== _activeResultsRequestId) return;
+      if (err.name === 'AbortError') return;
       console.error('Failed to fetch global props results from backend:', err);
+      const tbody = document.getElementById('props-table-body');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="text-center" style="padding: 2.5rem 1rem; color: var(--val-negative);">
+              <div style="font-weight: 600; font-size: 1rem; margin-bottom: 0.5rem;">Failed to load props</div>
+              <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">${escapeHtml(err.message || 'Network connection failed')}</div>
+              <button class="btn btn-sm btn-primary" onclick="window.__zbRetryProps && window.__zbRetryProps()">Retry Loading</button>
+            </td>
+          </tr>
+        `;
+      }
+      window.__zbRetryProps = () => fetchAndRenderPropsFromBackend();
     }
   }
 
@@ -8265,6 +9618,15 @@
           ` : ''}
         </div>
 
+        ${(isValueBetOpportunity || item.is_discrepancy || item.opportunity_id) ? `
+          <!-- Deep Link CTA to Opportunity Explorer -->
+          <div style="margin-bottom: 1rem;">
+            <button type="button" class="btn btn-primary btn-sm btn-inspect-prop-opp" data-opp-id="${item.opportunity_id || item.canonical_prop_key || item.prop_id}" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem;">
+              <span>Inspect in Opportunity Explorer &rarr;</span>
+            </button>
+          </div>
+        ` : ''}
+
         <!-- Provenance & Canonical Key -->
         <div style="background: var(--surface-input); padding: 0.5rem 0.65rem; border-radius: var(--radius-sm); font-size: 0.72rem; border: 1px solid var(--border-subtle);">
           <div class="text-muted" style="margin-bottom: 0.15rem;">CANONICAL KEY & REASON CODE:</div>
@@ -8272,6 +9634,19 @@
           <div class="text-muted" style="margin-top: 0.2rem;">Status Code: <strong style="color: var(--text-primary);">${item.reason_code || 'QUALIFIED'}</strong></div>
         </div>
       `;
+
+      const btnOpp = content.querySelector('.btn-inspect-prop-opp');
+      if (btnOpp) {
+        btnOpp.addEventListener('click', () => {
+          closePropDrawer();
+          window.location.hash = 'opportunities';
+          setTimeout(() => {
+            if (typeof selectOpportunity === 'function') {
+              selectOpportunity(item.opportunity_id || item.canonical_prop_key || item.prop_id);
+            }
+          }, 100);
+        });
+      }
     } catch (renderErr) {
       console.error('Error rendering prop detail inspector:', renderErr);
       content.innerHTML = `
@@ -8656,14 +10031,19 @@
       const instantVal = toggleInstant ? toggleInstant.checked : true;
       const digestVal = toggleDigest ? toggleDigest.checked : true;
       try {
-        await api.configureTelegram({
+        const res = await api.configureTelegram({
           instant_alerts_enabled: instantVal,
           evening_digest_enabled: digestVal,
         });
-        showToast('Updated Telegram alert rules');
-        await loadTelegramHealthPanel();
+        if (res && (res.status_code === 200 || res.status_code === 201) && res.data) {
+          showToast('Updated Telegram alert rules', 'success');
+          await loadTelegramHealthPanel();
+        } else {
+          const errMsg = (res && res.errors && res.errors[0]) || 'API error';
+          showToast(`Failed to save Telegram settings: ${errMsg}`, 'error');
+        }
       } catch (err) {
-        showToast('Failed to save Telegram settings', 'error');
+        showToast(`Failed to save Telegram settings: ${err.message || 'Network error'}`, 'error');
       }
     };
 
@@ -8733,6 +10113,12 @@
   }
 
   async function saveSettingsFromForm() {
+    const saveBtn = document.getElementById('btn-save-settings');
+    const originalText = saveBtn ? saveBtn.textContent : '';
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+    }
     try {
       const themeVal = document.getElementById('setting-theme')?.value || 'dark';
       const minSureRoi = parseFloat(document.getElementById('setting-min-surebet-roi')?.value) || 1.0;
@@ -8754,15 +10140,21 @@
       };
 
       const res = await api.updateSettings(payload);
-      if (res && res.data) {
+      if (res && (res.status_code === 200 || res.status_code === 201) && res.data) {
         state.settings = res.data;
-        showToast('Preferences & Tax Configurations successfully saved.');
+        showToast('Preferences & Tax Configurations successfully saved.', 'success');
       } else {
-        showToast('Settings saved.');
+        const errMsg = (res && res.errors && res.errors[0]) || 'Failed to save settings. Please verify backend connection and credentials.';
+        showToast(errMsg, 'error');
       }
     } catch (err) {
       console.error('Failed to save settings', err);
-      showToast('Error saving settings.');
+      showToast('Error saving settings: ' + (err.message || 'Unknown error'), 'error');
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalText;
+      }
     }
   }
 
@@ -9221,7 +10613,7 @@
   }
 
   // Expose namespace for testing & automated browser inspection
-  window.__zb = { state, api, showPropDetail, loadOpportunityDetail, switchView, viewRegistry, renderPropsTable, loadTelegramHealthPanel, renderTelegramControlCenter, handleSendTestMessage, renderDashboardView };
+  window.__zb = { state, api, showPropDetail, loadOpportunityDetail, switchView, viewRegistry, renderPropsTable, loadTelegramHealthPanel, renderTelegramControlCenter, handleSendTestMessage, renderDashboardView, renderNotRunDashboard, clearScanDebugUI, renderScanDebugUI, formatDebugReport, classifyFailure };
 
 })();
 

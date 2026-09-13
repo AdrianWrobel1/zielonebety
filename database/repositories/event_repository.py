@@ -55,10 +55,14 @@ class EventRepository(BaseRepository[EventORM]):
             self.session.add(event_orm)
             self.session.flush()
 
-        # 4. Save Markets and Outcomes
-        mkt_map = {m.internal_id: m for m in graph.markets}
+        # 4. Save Markets and Outcomes (batch pre-fetch to avoid N+1 query loops)
+        mkt_ids = [m.internal_id for m in graph.markets]
+        existing_mkts = {}
+        if mkt_ids:
+            existing_mkts = {m.id: m for m in self.session.query(MarketORM).filter(MarketORM.id.in_(mkt_ids)).all()}
+
         for mkt in graph.markets:
-            mkt_orm = self.session.query(MarketORM).filter_by(id=mkt.internal_id).first()
+            mkt_orm = existing_mkts.get(mkt.internal_id)
             if not mkt_orm:
                 mkt_orm = MarketORM(
                     id=mkt.internal_id,
@@ -71,8 +75,13 @@ class EventRepository(BaseRepository[EventORM]):
 
         self.session.flush()
 
+        sel_ids = [s.internal_id for s in graph.selections]
+        existing_sels = {}
+        if sel_ids:
+            existing_sels = {s.id: s for s in self.session.query(OutcomeORM).filter(OutcomeORM.id.in_(sel_ids)).all()}
+
         for sel in graph.selections:
-            out_orm = self.session.query(OutcomeORM).filter_by(id=sel.internal_id).first()
+            out_orm = existing_sels.get(sel.internal_id)
             if not out_orm:
                 out_orm = OutcomeORM(
                     id=sel.internal_id,

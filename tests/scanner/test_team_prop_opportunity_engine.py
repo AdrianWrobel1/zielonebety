@@ -39,15 +39,14 @@ def test_valuebet_engine_math_positive_ev():
     )
 
     assert eval_res.historical_probability == 0.80
-    assert eval_res.model_probability == 0.80
-    assert eval_res.fair_odds == 1.25
+    assert eval_res.model_probability is None
+    assert eval_res.fair_odds is None
     assert eval_res.execution_ev == 0.20
     assert eval_res.execution_ev_pct == 20.0
-    assert eval_res.value_edge_pp == pytest.approx(13.33, 0.1)
-    assert eval_res.is_valuebet is True
-    assert eval_res.status == "VALUEBET"
+    assert eval_res.value_edge_pp is None
+    assert eval_res.is_valuebet is False
+    assert eval_res.status == "BETTABLE"
     assert eval_res.actionability == "BETTABLE"
-    assert "VALUEBET_POSITIVE_EV" in eval_res.data_quality_flags
 
 
 def test_missing_execution_odds_cannot_be_valuebet():

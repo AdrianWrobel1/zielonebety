@@ -74,7 +74,7 @@ class EventORM(BaseORM):
     __tablename__ = "events"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    competition_id: Mapped[str] = mapped_column(String(64), ForeignKey("competitions.id"), nullable=False)
+    competition_id: Mapped[str] = mapped_column(String(64), ForeignKey("competitions.id"), index=True, nullable=False)
     home_team_name: Mapped[str] = mapped_column(String(256), nullable=False)
     away_team_name: Mapped[str] = mapped_column(String(256), nullable=False)
     kickoff: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -89,7 +89,7 @@ class MarketORM(BaseORM):
     __tablename__ = "markets"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    event_id: Mapped[str] = mapped_column(String(64), ForeignKey("events.id"), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(64), ForeignKey("events.id"), index=True, nullable=False)
     market_type: Mapped[str] = mapped_column(String(64), nullable=False)
     line: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="OPEN", nullable=False)
@@ -102,7 +102,7 @@ class OutcomeORM(BaseORM):
     __tablename__ = "outcomes"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    market_id: Mapped[str] = mapped_column(String(64), ForeignKey("markets.id"), nullable=False)
+    market_id: Mapped[str] = mapped_column(String(64), ForeignKey("markets.id"), index=True, nullable=False)
     outcome_type: Mapped[str] = mapped_column(String(64), nullable=False)
     label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     handicap: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -114,10 +114,13 @@ class OutcomeORM(BaseORM):
 class OddsORM(BaseORM):
     """Append-only immutable historical odds snapshot table."""
     __tablename__ = "odds"
+    __table_args__ = (
+        Index("ix_odds_outcome_collected", "outcome_id", "collected_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     provider_id: Mapped[str] = mapped_column(String(64), ForeignKey("providers.id"), nullable=False)
-    outcome_id: Mapped[str] = mapped_column(String(64), ForeignKey("outcomes.id"), nullable=False)
+    outcome_id: Mapped[str] = mapped_column(String(64), ForeignKey("outcomes.id"), index=True, nullable=False)
     decimal_odds: Mapped[float] = mapped_column(Float, nullable=False)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -141,10 +144,13 @@ class ProviderRunORM(BaseORM):
 
 class SnapshotORM(BaseORM):
     __tablename__ = "snapshots"
+    __table_args__ = (
+        Index("ix_snapshots_type_created", "snapshot_type", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     provider_id: Mapped[str] = mapped_column(String(64), ForeignKey("providers.id"), nullable=False)
-    execution_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    execution_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     snapshot_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -159,7 +165,7 @@ class OpportunityRecordORM(BaseORM):
     opportunity_type: Mapped[str] = mapped_column(String(32), default="SUREBET", nullable=False)
     canonical_event_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
     market_key: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
-    status: Mapped[str] = mapped_column(String(32), default="NEW", nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="NEW", index=True, nullable=False)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     last_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -176,6 +182,9 @@ class OpportunityRecordORM(BaseORM):
 class DeliveryRecordORM(BaseORM):
     """Authoritative persistent record of an individual notification delivery stream attempt."""
     __tablename__ = "delivery_records"
+    __table_args__ = (
+        Index("ix_delivery_records_state_retry_created", "state", "next_retry_at", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     idempotency_key: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
@@ -199,6 +208,9 @@ class DeliveryRecordORM(BaseORM):
 class PlayerPropSnapshotORM(BaseORM):
     """Immutable persistent record of a pre-match Player Prop state for OOS validation."""
     __tablename__ = "player_prop_snapshots"
+    __table_args__ = (
+        Index("ix_player_prop_snapshots_status_kickoff", "outcome_status", "kickoff_at"),
+    )
 
     # Identity
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -212,7 +224,7 @@ class PlayerPropSnapshotORM(BaseORM):
     stat_type: Mapped[str] = mapped_column(String(32), default="SHOTS", nullable=False)
     line: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
     direction: Mapped[str] = mapped_column(String(16), default="OVER", nullable=False)
-    kickoff_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    kickoff_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True, nullable=True)
 
     # Temporal Metadata
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

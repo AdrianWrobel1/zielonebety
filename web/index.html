@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Zielone Bety — Betting Opportunities & Quantitative Analytics Platform</title>
   <meta name="description" content="Production-grade monitoring dashboard for sports betting surebets, valuebets, and provider framework status.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -149,21 +151,20 @@
         <!-- DASHBOARD VIEW -->
         <!-- DASHBOARD VIEW — FLAGSHIP COMMAND CENTER -->
         <section id="view-dashboard" class="view-section active dash-command-center" aria-labelledby="dash-heading">
-          <!-- Command Center Hero Header -->
-          <div class="dash-command-header">
+          <!-- Command Center Operational Control Header -->
+          <div class="dash-command-header" role="region" aria-label="Command Center Control Header">
             <div class="dash-command-brand">
-              <div class="dash-badge-eyebrow">
-                <span class="dash-pulse-dot" id="dash-pulse-dot"></span>
-                <span>INTELLIGENCE WORKSTATION</span>
-                <span class="dash-version-tag">PRO V2.1</span>
+              <div class="dash-command-identity">
+                <span class="dash-system-indicator" id="dash-system-indicator" aria-hidden="true"></span>
+                <h1 class="page-title dash-main-title" id="dash-heading">Command Center</h1>
+                <span class="dash-system-state-tag" id="dash-system-state-tag">OPERATIONAL</span>
               </div>
-              <h1 class="page-title dash-main-title" id="dash-heading">Command Center</h1>
-              <p class="page-subtitle dash-subtitle">Autonomous multi-bookmaker pipeline control, live scan telemetry, and real-time betting intelligence.</p>
+              <p class="page-subtitle dash-subtitle">Cross-bookmaker pipeline intelligence, truthful telemetry, and actionable alpha detection.</p>
             </div>
             
             <div class="dash-command-actions">
-              <!-- Telemetry Status Pills Cluster -->
-              <div class="dash-telemetry-cluster">
+              <!-- Telemetry Status Ribbon -->
+              <div class="dash-telemetry-cluster" role="group" aria-label="System Telemetry">
                 <div class="dash-tele-pill" title="Scanner Engine Status">
                   <span class="dash-tele-label">SYSTEM</span>
                   <span class="badge badge-cycle-notrun" id="dash-scanner-status-badge">NOT_RUN</span>
@@ -172,9 +173,17 @@
                   <span class="dash-tele-label">LAST SCAN</span>
                   <strong id="dash-last-scan-time" class="dash-tele-val mono">Never</strong>
                 </div>
-                <div class="dash-tele-pill" title="Scan Duration">
+                <div class="dash-tele-pill" title="Scan Cycle Duration">
                   <span class="dash-tele-label">CYCLE TIME</span>
                   <strong id="dash-scan-duration" class="dash-tele-val mono">—</strong>
+                </div>
+                <div class="dash-tele-pill" title="Last Scan Mode">
+                  <span class="dash-tele-label">MODE</span>
+                  <strong id="dash-scan-mode-val" class="dash-tele-val mono">—</strong>
+                </div>
+                <div class="dash-tele-pill" title="Last Execution Source">
+                  <span class="dash-tele-label">SOURCE</span>
+                  <strong id="dash-scan-source-val" class="dash-tele-val mono">—</strong>
                 </div>
               </div>
 
@@ -182,20 +191,20 @@
               <div class="dash-control-actions">
                 <div class="scan-mode-selector-wrapper">
                   <label for="dash-scan-mode-select" class="scan-mode-label">Mode:</label>
-                  <select id="dash-scan-mode-select" class="form-control form-control-sm dash-mode-select">
-                    <option value="NORMAL" selected>Normal Scan (15 details)</option>
-                    <option value="DEEP">Deep Scan (50 details)</option>
+                  <select id="dash-scan-mode-select" class="form-control form-control-sm dash-mode-select" aria-label="Select scan mode">
+                    <option value="NORMAL" selected>Normal (15 details)</option>
+                    <option value="DEEP">Deep (50 details)</option>
                     <option value="ULTRA">ULTRA Scan (Full Day)</option>
                   </select>
                 </div>
 
-                <button class="btn btn-outline dash-btn-refresh" id="btn-refresh-dashboard" title="Refresh dashboard data">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <button class="btn btn-outline btn-sm dash-btn-refresh" id="btn-refresh-dashboard" title="Refresh dashboard data" aria-label="Refresh dashboard data">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                   <span>Refresh</span>
                 </button>
 
-                <button class="btn btn-primary dash-btn-launch" id="btn-run-scan">
-                  <svg class="run-scan-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <button class="btn btn-primary btn-sm dash-btn-launch" id="btn-run-scan" aria-label="Trigger scan execution">
+                  <svg class="run-scan-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   <span id="btn-run-scan-text">Run Scan</span>
                 </button>
               </div>
@@ -204,108 +213,82 @@
 
           <!-- Alert / Diagnostic Banner Container -->
           <div id="dash-alert-container"></div>
+          <div id="dash-scan-debug-panel" class="scan-debug-container" style="display: none;" role="region" aria-label="Scan Diagnostic Telemetry"></div>
 
-          <!-- Scan Progress Phase Feedback Container -->
-          <div id="dash-scan-progress-container" class="dash-scan-progress" style="display: none;">
-            <div class="card dash-progress-card">
+          <!-- Scan Progress Phase Feedback Container (Operational Banner) -->
+          <div id="dash-scan-progress-container" class="dash-scan-progress" style="display: none;" role="status" aria-live="polite">
+            <div class="dash-progress-card card">
               <div class="dash-progress-meta">
                 <div class="dash-progress-title-group">
-                  <div class="dash-spinner-ring"></div>
+                  <div class="dash-spinner-ring" aria-hidden="true"></div>
                   <strong id="dash-progress-title">Executing Scan Cycle...</strong>
                 </div>
                 <span class="badge badge-accent mono" id="dash-progress-mode-badge">NORMAL MODE</span>
               </div>
               <div class="dash-progress-track">
-                <div id="dash-progress-bar-fill" class="dash-progress-fill"></div>
+                <div id="dash-progress-bar-fill" class="dash-progress-fill indeterminate"></div>
               </div>
-              <div class="dash-progress-steps-row" id="dash-progress-steps">
-                <span id="prog-step-1" class="dash-step-item active">1. Discovering Fixtures</span>
-                <span id="prog-step-2" class="dash-step-item">2. Matching Overlap</span>
-                <span id="prog-step-3" class="dash-step-item">3. Acquiring Details</span>
-                <span id="prog-step-4" class="dash-step-item">4. Evaluating Surebets</span>
+              <div class="dash-progress-notice mono text-muted">
+                Processing live feeds and matching canonical entities across Superbet & Betclic...
               </div>
             </div>
           </div>
 
-          <!-- Primary Metric Matrix (Analytical KPI Deck) -->
-          <div class="dash-kpi-grid">
-            <div class="dash-kpi-card card-kpi-primary">
-              <div class="dash-kpi-top">
-                <span class="dash-kpi-label">Qualified Opportunities</span>
-                <span class="dash-kpi-icon-pill">ALPHA</span>
+          <!-- Consolidated Pipeline & Telemetry Console (Anti-Card-Soup Unified Surface) -->
+          <div class="dash-pipeline-console card" id="dash-pipeline-console" role="region" aria-label="Scan Pipeline Telemetry Console">
+            <div class="dash-pipeline-console-head">
+              <div class="dash-pipeline-console-title-wrap">
+                <span class="dash-tele-section-tag mono">PIPELINE FLOW & TELEMETRY</span>
+                <span class="dash-scan-id-tag mono" id="dash-scan-id">scan_id: —</span>
               </div>
-              <div class="dash-kpi-body">
-                <span class="dash-kpi-val mono text-success" id="dash-qualified-total">—</span>
-                <div class="dash-kpi-sub">
-                  <span class="dash-kpi-sub-item"><strong id="dash-surebets-count" class="mono text-success">—</strong> SB (<span id="dash-max-margin" class="mono text-success">—</span>)</span>
-                  <span class="dash-kpi-sep">&bull;</span>
-                  <span class="dash-kpi-sub-item"><strong id="dash-valuebets-count" class="mono text-info">—</strong> VB (<span id="dash-max-ev" class="mono text-info">—</span>)</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="dash-kpi-card">
-              <div class="dash-kpi-top">
-                <span class="dash-kpi-label">1. Discovered Universe</span>
-                <span class="dash-kpi-icon-pill">UNIVERSE</span>
-              </div>
-              <div class="dash-kpi-body">
-                <span class="dash-kpi-val mono" id="dash-events-discovered">—</span>
-                <div class="dash-kpi-sub">
-                  <strong id="dash-events-selected" class="mono text-primary">—</strong>
-                  <span id="dash-events-selected-label">normalized / selected</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="dash-kpi-card">
-              <div class="dash-kpi-top">
-                <span class="dash-kpi-label">2. Cross-Bookmaker Overlap</span>
-                <span class="dash-kpi-icon-pill">MATCHED</span>
-              </div>
-              <div class="dash-kpi-body">
-                <span class="dash-kpi-val mono" id="dash-events-matched">—</span>
-                <div class="dash-kpi-sub" id="dash-events-matched-foot">
-                  Cross-Bookmaker Event Overlap
-                </div>
-              </div>
-            </div>
-
-            <div class="dash-kpi-card">
-              <div class="dash-kpi-top">
-                <span class="dash-kpi-label">3. Evaluated Markets</span>
-                <span class="dash-kpi-icon-pill">MARKETS</span>
-              </div>
-              <div class="dash-kpi-body">
-                <span class="dash-kpi-val mono" id="dash-markets-evaluated">—</span>
-                <div class="dash-kpi-sub" id="dash-markets-evaluated-foot">
-                  Comparable Canonical Markets
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Scan Pipeline Visual Flow Hero Container -->
-          <div id="dash-pipeline-flow-hero" class="dash-pipeline-hero-card card">
-            <div class="dash-pipeline-header">
-              <div class="dash-pipeline-title-group">
-                <div class="dash-header-icon-box">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                </div>
-                <div>
-                  <h3 class="dash-card-title">Real-Time Scan Pipeline & Drop-Off Funnel</h3>
-                  <p class="dash-card-subtitle">End-to-end data progression from bookmaker discovery to qualified arbitrage & value signals.</p>
-                </div>
-              </div>
-              <div class="dash-pipeline-meta">
+              <div class="dash-pipeline-console-status">
                 <span class="badge badge-cycle-notrun" id="dash-cycle-status-badge">NOT_RUN</span>
-                <span class="mono dash-scan-id-tag" id="dash-scan-id">scan_id: —</span>
               </div>
             </div>
-            
-            <!-- SVG Connected Flow Container (Rendered dynamically by app.js) -->
-            <div id="dash-pipeline-svg-container" class="dash-pipeline-svg-wrapper">
-              <!-- Dynamically populated -->
+
+            <!-- Telemetry accessibility hooks -->
+            <span id="dash-events-selected-label" style="display:none;" aria-hidden="true"></span>
+            <span id="dash-events-matched-foot" style="display:none;" aria-hidden="true"></span>
+            <span id="dash-markets-evaluated-foot" style="display:none;" aria-hidden="true"></span>
+
+            <!-- 5-Stage Integrated Flow & Metric Row -->
+            <div class="dash-pipeline-flow-ribbon" id="dash-pipeline-svg-container">
+              <!-- Dynamically populated by renderSvgPipelineFlow -->
+            </div>
+          </div>
+
+          <!-- Operational Quick-Action & Deep-Link Strip -->
+          <div class="dash-quick-nav-strip card" role="navigation" aria-label="Quick Access Workspaces">
+            <span class="dash-quick-nav-label">DISPATCH:</span>
+            <div class="dash-quick-links-wrap">
+              <a href="#opportunities" class="dash-quick-link" data-view="opportunities" title="All Opportunities in Explorer">
+                <span class="dash-quick-link-name">Explorer</span>
+                <span class="dash-quick-link-count mono" id="dash-nav-all-count">—</span>
+              </a>
+              <a href="#opportunities?type=SUREBET" class="dash-quick-link" data-view="opportunities" title="View Filtered Surebets">
+                <span class="dash-quick-link-name">Surebets</span>
+                <span class="dash-quick-link-count mono text-success" id="dash-nav-sb-count">—</span>
+              </a>
+              <a href="#opportunities?type=VALUEBET" class="dash-quick-link" data-view="opportunities" title="View Filtered Valuebets">
+                <span class="dash-quick-link-name">Valuebets</span>
+                <span class="dash-quick-link-count mono text-info" id="dash-nav-vb-count">—</span>
+              </a>
+              <a href="#opportunities?type=QUOTE_DISCREPANCY" class="dash-quick-link" data-view="opportunities" title="View Quote Discrepancies">
+                <span class="dash-quick-link-name">Discrepancies</span>
+                <span class="dash-quick-link-count mono text-warning" id="dash-nav-disc-count">—</span>
+              </a>
+              <a href="#opportunities?top5=true" class="dash-quick-link" data-view="opportunities" title="Top 5 European Leagues">
+                <span class="dash-quick-link-name">Top 5</span>
+              </a>
+              <a href="#playerprops" class="dash-quick-link" data-view="playerprops" title="Global Player Props Scanner">
+                <span class="dash-quick-link-name">Props</span>
+              </a>
+              <a href="#providers" class="dash-quick-link" data-view="providers" title="Provider Monitor & Feed Telemetry">
+                <span class="dash-quick-link-name">Providers</span>
+              </a>
+              <a href="#profiler" class="dash-quick-link" data-view="profiler" title="Diagnostic Execution Profiler">
+                <span class="dash-quick-link-name">Profiler</span>
+              </a>
             </div>
           </div>
 
@@ -317,13 +300,13 @@
               <div class="card dash-card" id="card-opportunities-summary">
                 <div class="card-header dash-card-header">
                   <div class="card-title-group">
-                    <div class="dash-section-dot pulse-emerald"></div>
-                    <h3 class="card-title">Live Opportunity Radar</h3>
-                    <span class="badge badge-accent" id="dash-opp-badge">0 Found</span>
+                    <span class="dash-section-indicator" aria-hidden="true"></span>
+                    <h3 class="card-title">Actionable Intelligence Radar</h3>
+                    <span class="badge badge-accent mono" id="dash-opp-badge">0 Found</span>
                   </div>
-                  <a href="#opportunities" class="btn btn-outline btn-sm dash-btn-explorer" data-view="opportunities">
+                  <a href="#opportunities" class="btn btn-outline btn-sm dash-btn-explorer" data-view="opportunities" aria-label="Open Opportunity Explorer">
                     <span>Explorer</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                   </a>
                 </div>
                 <div id="dash-opps-container" class="dash-opps-content">
@@ -337,13 +320,14 @@
               <div class="card dash-card" id="card-last-scan-summary">
                 <div class="card-header dash-card-header">
                   <div class="card-title-group">
-                    <h3 class="card-title">Coverage & Telemetry Intelligence</h3>
+                    <span class="dash-section-indicator" aria-hidden="true"></span>
+                    <h3 class="card-title">Data Trust & Provider Ingestion</h3>
                   </div>
                   <span class="dash-tele-pill-mini mono" id="dash-coverage-overlap-badge">Coverage Engine</span>
                 </div>
                 <div id="dash-last-scan-content" class="dash-execution-content">
                   <div class="not-run-state">
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     <p>No scan has been executed yet. Click <strong>Run Scan</strong> above to execute the production pipeline.</p>
                   </div>
                 </div>
@@ -356,7 +340,7 @@
               <div class="card dash-card" id="card-provider-health">
                 <div class="card-header dash-card-header">
                   <div class="card-title-group">
-                    <div class="dash-section-dot pulse-blue"></div>
+                    <span class="dash-section-indicator" aria-hidden="true"></span>
                     <h3 class="card-title">Subsystem & Provider Pulse</h3>
                   </div>
                   <span class="badge badge-outline" id="dash-health-badge">Live Status</span>
@@ -593,6 +577,7 @@
                   <select id="filter-sort" class="form-control form-control-sm opp-select">
                     <option value="ev">Sort: Net EV (High)</option>
                     <option value="discrepancy">Sort: Discrepancy %</option>
+                    <option value="actionability">Sort: Actionability</option>
                     <option value="score">Sort: Quality Score</option>
                     <option value="odds">Sort: Odds (High)</option>
                     <option value="kickoff">Sort: Kickoff (Soonest)</option>
@@ -606,6 +591,10 @@
 
                 <button type="button" class="btn btn-outline btn-sm opp-btn-toggle" id="btn-filter-top5" title="Filter to matches in Top 5 European Leagues (Premier League, La Liga, Serie A, Bundesliga, Ligue 1)" aria-pressed="false">
                   Top 5
+                </button>
+
+                <button type="button" class="btn btn-outline btn-sm opp-btn-toggle" id="btn-filter-actionable-disc" title="Actionable Discrepancy: Large bookmaker gap (≥10%) with conservative lower executable odds (≤2.50)" aria-pressed="false">
+                  Actionable
                 </button>
 
                 <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-opp-advanced-filters" title="Threshold filters">
@@ -643,6 +632,22 @@
                   <div class="opp-input-affix">
                     <input type="number" id="filter-min-exec-edge" class="form-control form-control-sm" placeholder="e.g. 2.0" step="1.0">
                     <span class="affix">%</span>
+                  </div>
+                </div>
+
+                <div class="opp-tray-field" id="field-min-discrepancy">
+                  <label for="filter-min-discrepancy">Min Discrepancy %</label>
+                  <div class="opp-input-affix">
+                    <input type="number" id="filter-min-discrepancy" class="form-control form-control-sm" placeholder="e.g. 10.0" step="1.0" min="0">
+                    <span class="affix">%</span>
+                  </div>
+                </div>
+
+                <div class="opp-tray-field" id="field-max-lower-odds">
+                  <label for="filter-max-lower-odds">Max Lower Odds</label>
+                  <div class="opp-input-affix">
+                    <input type="number" id="filter-max-lower-odds" class="form-control form-control-sm" placeholder="e.g. 2.50" step="0.10" min="1.01">
+                    <span class="affix">x</span>
                   </div>
                 </div>
 
@@ -762,26 +767,26 @@
           </div>
         </section>
 
-        <!-- CANONICAL EVENT BROWSER: MARKET INTELLIGENCE WORKSPACE -->
+        <!-- CANONICAL EVENT BROWSER 2.0: SPORTS INTELLIGENCE WORKSTATION -->
         <section id="view-events" class="view-section" aria-labelledby="events-heading">
-          <!-- Workspace Header -->
-          <div class="section-header">
+          <!-- Command Control Header -->
+          <div class="section-header event-workstation-header">
             <div>
               <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
-                <h1 class="page-title" id="events-heading" style="margin-bottom: 0;">Market Intelligence Workspace</h1>
-                <span class="badge badge-accent" style="font-size: 0.72rem; letter-spacing: 0.04em;">EVENT COVERAGE</span>
+                <h1 class="page-title" id="events-heading" style="margin-bottom: 0;">Event & Market Browser</h1>
+                <span class="badge badge-accent" style="font-size: 0.72rem; letter-spacing: 0.04em;">INTELLIGENCE 2.0</span>
               </div>
-              <p class="page-subtitle">Multi-bookmaker market normalization, depth coverage analytics, and cross-bookmaker odds comparison.</p>
+              <p class="page-subtitle">Cross-bookmaker market normalization, price matrix discovery, and multi-market comparison across Polish bookmakers.</p>
             </div>
             <div class="action-group">
               <div class="workspace-view-switcher" role="radiogroup" aria-label="View Mode">
-                <button type="button" class="view-mode-btn active" id="btn-mode-workspace" data-mode="workspace" title="Focused Event Workspace">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                  Event Workspace
+                <button type="button" class="view-mode-btn active" id="btn-mode-workspace" data-mode="workspace" title="Dual-Pane Split Workstation">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+                  Split View
                 </button>
-                <button type="button" class="view-mode-btn" id="btn-mode-matrix" data-mode="matrix" title="All Fixtures Coverage Matrix">
+                <button type="button" class="view-mode-btn" id="btn-mode-matrix" data-mode="matrix" title="Full Fixtures Coverage Table">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                  All Fixtures Matrix (<span id="events-matrix-count" class="mono">—</span>)
+                  All Fixtures Table (<span id="events-matrix-count" class="mono">—</span>)
                 </button>
               </div>
               <span class="meta-pill">
@@ -794,39 +799,62 @@
             </div>
           </div>
 
-          <!-- Sticky / Top Fixture Ribbon (Discovery & Fast Switcher) -->
-          <div class="card fixture-switch-ribbon" id="fixture-switch-ribbon">
-            <div class="ribbon-label">
-              <span class="ribbon-tag">ACTIVE FIXTURE</span>
-              <div class="ribbon-match-info" id="ribbon-match-info">
-                <strong class="ribbon-teams" id="ribbon-active-teams">Loading top event...</strong>
-                <span class="ribbon-meta" id="ribbon-active-meta">—</span>
-              </div>
-            </div>
-            <div class="ribbon-chips-container" id="ribbon-quick-chips">
-              <!-- Dynamically populated with top ranked matches chips: [ #1 Real Sociedad (612) ], [ #2 Raków (468) ], etc. -->
-            </div>
-            <div class="ribbon-actions">
-              <button type="button" class="btn btn-outline btn-sm" id="btn-open-fixture-selector">
+          <!-- Unified Event Filter Bar (Design System 2.0) -->
+          <div class="card event-filter-bar" id="event-filter-bar">
+            <div class="event-filter-row">
+              <div class="search-input-wrapper event-search-box">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                Browse All (<span id="ribbon-all-count">0</span>)
+                <input type="text" id="filter-events-search" placeholder="Search team, match, or competition..." class="form-input" aria-label="Search Events">
+              </div>
+              <select id="filter-events-competition" class="form-select" aria-label="Filter by Competition">
+                <option value="">All Competitions</option>
+              </select>
+              <button type="button" class="btn btn-outline btn-sm event-top5-btn" id="btn-event-top5" aria-pressed="false" title="Filter to Top 5 European Leagues">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>Top 5</span>
+              </button>
+              <select id="filter-events-coverage" class="form-select" aria-label="Filter by Coverage">
+                <option value="ALL">All Coverage</option>
+                <option value="MATCHED">Matched Both (Superbet + Betclic)</option>
+                <option value="OPPS">Has Opportunity (SB/VB)</option>
+                <option value="DEEP">Deep (&ge; 40 mkts)</option>
+              </select>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-reset-events-filters" title="Reset filters to default">
+                Reset
               </button>
             </div>
           </div>
 
-          <!-- VIEW MODE 1: FOCUSED EVENT WORKSPACE -->
-          <div id="event-workspace-view" class="intel-view-mode">
-            <!-- Event Intelligence Container (rendered dynamically by loadEventDetail) -->
-            <div id="event-detail-container" class="event-workspace-canvas">
-              <div class="empty-state" style="padding: 3rem 1rem;">
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <p style="margin-top: 0.75rem; font-weight: 600;">Loading Market Intelligence Workspace...</p>
-                <span class="text-muted" style="font-size: 0.8rem;">Resolving cross-bookmaker market coverage and depth...</span>
+          <!-- VIEW MODE 1: UNIFIED DUAL-PANE WORKSTATION (Default) -->
+          <div id="event-workspace-view" class="event-split-workspace">
+            <!-- Left Pane: Fixture Discovery Feed (Sticky / Scrollable) -->
+            <div class="event-feed-pane" id="event-feed-pane">
+              <div class="event-feed-header">
+                <span class="event-feed-title mono">SCHEDULED FIXTURES</span>
+                <span class="badge badge-outline mono" id="event-feed-counter">0</span>
+              </div>
+              <div class="event-feed-list" id="event-feed-list" role="listbox" aria-label="Fixtures List">
+                <!-- Dynamically populated by renderEventFeedList() -->
+                <div class="text-center text-muted" style="padding: 2.5rem 1rem;">
+                  <div class="spinner-icon" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: inline-block;">⟳</div>
+                  <div style="font-weight: 600; font-size: 0.86rem;">Loading Scheduled Fixtures...</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Pane: Market Matrix & Event Inspector (Sticky flex-1) -->
+            <div class="event-inspector-pane" id="event-inspector-pane">
+              <div id="event-detail-container" class="event-workspace-canvas">
+                <div class="empty-state" style="padding: 3rem 1rem;">
+                  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <p style="margin-top: 0.75rem; font-weight: 600;">Select a Fixture to Explore</p>
+                  <span class="text-muted" style="font-size: 0.8rem;">Click any fixture in the left feed to compare multi-bookmaker markets and odds.</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- VIEW MODE 2: ALL FIXTURES COVERAGE MATRIX (High-density Table) -->
+          <!-- VIEW MODE 2: ALL FIXTURES FULL MATRIX TABLE (Preserved for mode toggle) -->
           <div id="events-matrix-view" class="intel-view-mode" style="display: none;">
             <div class="card" style="margin-bottom: 0;">
               <div class="matrix-filter-bar">
@@ -870,21 +898,39 @@
           <!-- Hidden container to preserve legacy element if any external script queries it -->
           <div id="canonical-events-list" style="display: none;"></div>
 
-          <!-- FIXTURE QUICK SELECTOR MODAL -->
-          <div id="fixture-selector-backdrop" class="modal-backdrop"></div>
-          <div id="fixture-selector-modal" class="fixture-modal" role="dialog" aria-modal="true" aria-labelledby="fixture-selector-title">
-            <div class="fixture-modal-header">
-              <div>
-                <h3 id="fixture-selector-title" style="margin: 0; font-size: 1.1rem; font-weight: 700;">Select Fixture to Inspect</h3>
-                <p class="text-muted" style="margin: 0.2rem 0 0 0; font-size: 0.78rem;">Sorted by matched market coverage (highest overlap first).</p>
+          <!-- Legacy Compatibility Ribbon and Modal (kept in DOM with display:none to prevent reference errors) -->
+          <div id="fixture-switch-ribbon" style="display: none;">
+            <div id="ribbon-match-info">
+              <span id="ribbon-active-teams"></span>
+              <span id="ribbon-active-meta"></span>
+            </div>
+            <div id="ribbon-quick-chips"></div>
+            <button id="btn-open-fixture-selector"></button>
+            <span id="ribbon-all-count">0</span>
+          </div>
+          <div id="fixture-selector-backdrop" class="modal-backdrop" style="display: none;"></div>
+          <div id="fixture-selector-modal" class="fixture-modal" style="display: none;" role="dialog" aria-modal="true" aria-label="Fixture Selector">
+            <button id="btn-close-fixture-modal" aria-label="Close fixture selector"></button>
+            <input type="text" id="modal-fixture-search" placeholder="Search fixtures..." aria-label="Search fixtures">
+            <div id="modal-fixture-list"></div>
+          </div>
+
+          <!-- Mobile Slide-Over Event Detail Modal (<=900px) -->
+          <div id="event-detail-backdrop" class="modal-backdrop" style="display: none;"></div>
+          <div id="event-detail-modal" class="opp-detail-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="event-detail-modal-title">
+            <div class="opp-detail-modal-dialog">
+              <div class="opp-detail-modal-header">
+                <div>
+                  <h3 id="event-detail-modal-title" style="margin: 0; font-size: 1.05rem; font-weight: 700;">Event Market Matrix</h3>
+                  <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 0.15rem;" id="event-detail-modal-sub">Cross-Bookmaker Odds</div>
+                </div>
+                <button type="button" class="btn btn-icon" id="btn-close-event-modal" aria-label="Close Event Modal">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </div>
-              <button type="button" class="btn-close-modal" id="btn-close-fixture-modal" aria-label="Close Fixture Selector">✕</button>
-            </div>
-            <div class="fixture-modal-search">
-              <input type="text" id="modal-fixture-search" placeholder="Type team or league to filter instantly..." class="form-input" autofocus>
-            </div>
-            <div class="fixture-modal-list" id="modal-fixture-list">
-              <!-- Dynamically populated with fast-selectable fixture items -->
+              <div class="opp-detail-modal-body" id="event-detail-modal-content">
+                <!-- Populated on mobile item click -->
+              </div>
             </div>
           </div>
         </section>
@@ -914,6 +960,10 @@
                 <button type="button" class="scope-btn active" id="props-mode-normal" data-mode="NORMAL" title="Normal Scan: Fast standard evaluation">NORMAL</button>
                 <button type="button" class="scope-btn" id="props-mode-ultra" data-mode="ULTRA" title="Ultra Scan: Exhaustive multi-page trends & maximum fixture coverage">ULTRA</button>
               </div>
+              <button class="btn btn-outline btn-sm dash-btn-refresh" id="btn-refresh-props" title="Refresh props data from REST API" aria-label="Refresh props data">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span id="btn-refresh-props-text">Refresh</span>
+              </button>
               <button class="btn btn-primary" id="btn-scan-props">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <span id="btn-scan-props-text">Scan Props</span>
@@ -926,54 +976,37 @@
             ⚡ <strong>ULTRA SCAN Active:</strong> Searches maximum practical coverage across StatsHub multi-page trends, expanding candidate fixtures and dual-bookmaker market depth. Ultra scans can take 1–3 minutes to complete.
           </div>
 
-          <!-- Summary Telemetry Cards -->
-          <div class="metrics-grid">
-            <div class="card metric-card border-accent">
-              <div class="metric-icon">📡</div>
-              <div class="metric-details">
-                <span class="metric-title">Raw Trends Discovered</span>
-                <span class="metric-num mono" id="props-stat-scanned">0</span>
-                <span class="metric-foot" id="props-stat-source-total">Ingested StatsHub Trends</span>
-              </div>
+          <!-- Compact Telemetry Ribbon (Anti-Card-Soup Workstation Design) -->
+          <div class="props-telemetry-ribbon card" id="props-telemetry-ribbon" role="region" aria-label="Props Telemetry">
+            <div class="props-tele-item">
+              <span class="props-tele-lbl">TRENDS</span>
+              <strong class="props-tele-val mono" id="props-stat-scanned">0</strong>
             </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">🔍</div>
-              <div class="metric-details">
-                <span class="metric-title">Candidates Scanned</span>
-                <span class="metric-num mono" id="props-stat-unique">0</span>
-                <span class="metric-foot">Unique Canonical Props</span>
-              </div>
+            <div class="props-tele-sep"></div>
+            <div class="props-tele-item">
+              <span class="props-tele-lbl">CANDIDATES</span>
+              <strong class="props-tele-val mono" id="props-stat-unique">0</strong>
             </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">🇵🇱</div>
-              <div class="metric-details">
-                <span class="metric-title">Matched — Betclic + Superbet</span>
-                <span class="metric-num mono text-info" id="props-stat-matched-both">0</span>
-                <span id="props-stat-polish-odds" style="display:none;">0</span>
-                <span class="metric-foot">Verified Quotes on Both</span>
-              </div>
+            <div class="props-tele-sep"></div>
+            <div class="props-tele-item">
+              <span class="props-tele-lbl">MATCHED (PL)</span>
+              <strong class="props-tele-val mono text-info" id="props-stat-matched-both">0</strong>
+              <span id="props-stat-polish-odds" style="display:none;">0</span>
             </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">🏆</div>
-              <div class="metric-details">
-                <span class="metric-title">Top Valuebets</span>
-                <span class="metric-num mono text-success" id="props-stat-bettable">0</span>
-                <span class="metric-foot">Qualified (Net EV &ge; Min)</span>
-              </div>
+            <div class="props-tele-sep"></div>
+            <div class="props-tele-item">
+              <span class="props-tele-lbl">VALUEBETS</span>
+              <strong class="props-tele-val mono text-success" id="props-stat-bettable">0</strong>
             </div>
-
-            <div class="card metric-card">
-              <div class="metric-icon">⚡</div>
-              <div class="metric-details">
-                <span class="metric-title">Quote Discrepancy</span>
-                <span class="metric-num mono text-warning" id="props-stat-discrepancy">0</span>
-                <span id="props-stat-ref-only" style="display:none;">0</span>
-                <span id="props-stat-uncertain" style="display:none;">0</span>
-                <span class="metric-foot">Relative Price Diff &ge; 10%</span>
-              </div>
+            <div class="props-tele-sep"></div>
+            <div class="props-tele-item">
+              <span class="props-tele-lbl">DISCREPANCY</span>
+              <strong class="props-tele-val mono text-warning" id="props-stat-discrepancy">0</strong>
+              <span id="props-stat-ref-only" style="display:none;">0</span>
+              <span id="props-stat-uncertain" style="display:none;">0</span>
+            </div>
+            <div class="props-tele-item" style="margin-left: auto;">
+              <span class="text-muted" style="font-size: 0.72rem;">StatsHub Multi-Fixture Live</span>
             </div>
           </div>
 
@@ -1111,6 +1144,9 @@
               </div>
 
               <div style="display: flex; gap: 0.4rem; align-items: flex-end;">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-props-top5" title="Filter to Top 5 European Leagues (Premier League, La Liga, Serie A, Bundesliga, Ligue 1)">
+                  <span>🏆 Top 5</span>
+                </button>
                 <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-advanced-filters" title="Toggle more filters">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
                   <span>More Filters</span>

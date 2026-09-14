@@ -2577,6 +2577,19 @@ class PlatformAPIService:
         }
         self._unified_opportunities_cache: Optional[List[Any]] = None
 
+        # Global Props Concurrency & Scanner Control State (isolated from Main Scanner)
+        self._props_scan_lock = threading.Lock()
+        self._is_props_scanning = False
+        self._props_scanner_status = "READY"
+        self._current_props_execution_id: Optional[str] = None
+        self._current_props_scan_thread: Optional[threading.Thread] = None
+        self._last_props_scan_error: Optional[str] = None
+        self._last_props_scan_status: str = "NOT_RUN"
+        self._last_props_scan_id: Optional[str] = None
+        self._props_scan_started_at: Optional[str] = None
+        self._props_scan_completed_at: Optional[str] = None
+        self._last_props_scan_mode: str = "NORMAL"
+
         # Restore persisted scan history from database if available
         if self.db_manager is not None:
             self._last_ultra_scan_result = _load_latest_ultra_scan_snapshot(self.db_manager)
@@ -7030,8 +7043,22 @@ class PlatformAPIService:
     _cached_global_props_ultra_results: Optional[Dict[str, Any]] = None
     _unified_opportunities_cache: Optional[List[Any]] = None
 
-    def scan_global_props(self, scope_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Executes a bounded global props scan across Player Props and Team Props for multiple fixtures."""
+    def scan_global_props(
+        self,
+        scope_params: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[str] = None,
+        _lock_acquired: bool = False,
+    ) -> Dict[str, Any]:
+        """Executes a bounded global props scan across Player Props and Team Props for multiple fixtures.
+
+        Args:
+            scope_params: Optional filter & budget parameters.
+            execution_id: Optional explicit execution ID generated at trigger time.
+            _lock_acquired: True if caller already acquired self._props_scan_lock.
+
+        Raises:
+            APIError(status_code=409) if a props scan is already running.
+        """
         from scanner.global_props_scanner import (
             GlobalPropsScanner,
             GlobalScanScope,
@@ -7041,6 +7068,21 @@ class PlatformAPIService:
         params = scope_params or {}
         scan_mode = str(params.get("scan_mode") or "NORMAL").upper()
         is_ultra = (scan_mode == "ULTRA")
+
+        if not _lock_acquired:
+            acquired = self._props_scan_lock.acquire(blocking=False)
+            if not acquired:
+                raise APIError("Global props scan is already in progress. Please wait for the current cycle to complete.", status_code=409)
+
+        self._is_props_scanning = True
+        self._props_scanner_status = "SCANNING"
+        self._last_props_scan_status = "SCANNING"
+        now_dt = datetime.now(timezone.utc)
+        exec_id = execution_id or f"props_scan_{now_dt.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        self._current_props_execution_id = exec_id
+        self._props_scan_started_at = now_dt.isoformat()
+        self._last_props_scan_error = None
+        self._last_props_scan_mode = scan_mode
 
         time_horizon = int(params.get("time_horizon_days") or params.get("days_ahead") or 7)
         tournaments = params.get("tournaments")
@@ -7114,12 +7156,18 @@ class PlatformAPIService:
             scan_result = scanner.execute_scan(scope=scope, budget=budget)
             res_dict = scan_result.to_dict()
             res_dict["scan_mode"] = scan_mode
+            res_dict["execution_id"] = exec_id
             res_dict["total_qualified_matching_filter"] = res_dict.get("qualified_count", len(scan_result.qualified_opportunities))
             if is_ultra:
                 PlatformAPIService._cached_global_props_ultra_results = res_dict
             else:
                 PlatformAPIService._cached_global_props_results = res_dict
             self._invalidate_unified_cache()
+
+            self._props_scanner_status = "READY"
+            self._last_props_scan_status = "SUCCESS"
+            self._last_props_scan_id = exec_id
+            self._props_scan_completed_at = datetime.now(timezone.utc).isoformat()
 
             trace_obj = res_dict.get("scan_trace")
             if trace_obj:
@@ -7133,12 +7181,119 @@ class PlatformAPIService:
                     self._latest_traces["player_props"] = trace_obj
 
             return res_dict
+        except Exception as exc:
+            self._props_scanner_status = "ERROR"
+            self._last_props_scan_status = "FAILED"
+            self._last_props_scan_error = str(exc)
+            self._last_props_scan_id = exec_id
+            self._props_scan_completed_at = datetime.now(timezone.utc).isoformat()
+            logger.error("Global props scan cycle execution failed at service layer", exc_info=True)
+            sanitized_msg = _sanitize_text(str(exc))
+            raise APIError(f"Global props scan execution failed: {sanitized_msg}", status_code=500)
         finally:
+            self._is_props_scanning = False
+            self._current_props_execution_id = None
+            if self._props_scan_lock.locked():
+                self._props_scan_lock.release()
             if session is not None:
                 try:
                     session.close()
                 except Exception:
                     pass
+
+    def trigger_global_props_scan_async(
+        self,
+        scope_params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Initiates a bounded global props scan asynchronously with concurrency protection.
+
+        Returns immediately with status='SCANNING', execution_id, and scan_mode.
+        Raises APIError(status_code=409) if a props scan is already running.
+        """
+        acquired = self._props_scan_lock.acquire(blocking=False)
+        if not acquired:
+            raise APIError("Global props scan is already in progress. Please wait for the current cycle to complete.", status_code=409)
+
+        params = scope_params or {}
+        scan_mode = str(params.get("scan_mode") or "NORMAL").upper()
+
+        self._is_props_scanning = True
+        self._props_scanner_status = "SCANNING"
+        self._last_props_scan_status = "SCANNING"
+        now_dt = datetime.now(timezone.utc)
+        exec_id = f"props_scan_{now_dt.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        self._current_props_execution_id = exec_id
+        self._props_scan_started_at = now_dt.isoformat()
+        self._last_props_scan_error = None
+        self._last_props_scan_mode = scan_mode
+
+        def _worker():
+            try:
+                self.scan_global_props(
+                    scope_params=scope_params,
+                    execution_id=exec_id,
+                    _lock_acquired=True,
+                )
+                self._props_scanner_status = "READY"
+                self._last_props_scan_status = "SUCCESS"
+                self._last_props_scan_id = exec_id
+                self._props_scan_completed_at = datetime.now(timezone.utc).isoformat()
+            except Exception as exc:
+                logger.error("Asynchronous global props scan worker caught exception for %s: %s", exec_id, exc, exc_info=True)
+                self._props_scanner_status = "ERROR"
+                self._last_props_scan_status = "FAILED"
+                self._last_props_scan_id = exec_id
+                self._last_props_scan_error = str(exc)
+                self._props_scan_completed_at = datetime.now(timezone.utc).isoformat()
+            finally:
+                self._is_props_scanning = False
+                self._current_props_execution_id = None
+                if self._props_scan_lock.locked():
+                    self._props_scan_lock.release()
+
+        worker_thread = threading.Thread(
+            target=_worker,
+            name=f"PropsScanWorker-{exec_id}",
+            daemon=True,
+        )
+        self._current_props_scan_thread = worker_thread
+        worker_thread.start()
+
+        return {
+            "status": "SCANNING",
+            "execution_id": exec_id,
+            "scan_mode": scan_mode,
+            "started_at": now_dt.isoformat(),
+        }
+
+    def wait_for_current_props_scan(self, timeout: float = 10.0) -> bool:
+        """Helper for tests to await background global props scan completion deterministically."""
+        th = getattr(self, "_current_props_scan_thread", None)
+        if th is not None and th.is_alive():
+            th.join(timeout=timeout)
+            return not th.is_alive()
+        return True
+
+    def get_props_scan_status(self) -> Dict[str, Any]:
+        """Returns current operational and execution status of the Global Props Scanner."""
+        current_id = getattr(self, "_current_props_execution_id", None)
+        last_id = current_id if (self._is_props_scanning and current_id) else getattr(self, "_last_props_scan_id", None)
+        last_status = "SCANNING" if self._is_props_scanning else getattr(self, "_last_props_scan_status", "NOT_RUN")
+
+        return {
+            "status": self._props_scanner_status,
+            "is_scanning": self._is_props_scanning,
+            "current_execution_id": current_id,
+            "last_scan_id": last_id,
+            "execution_id": current_id or last_id,
+            "last_scan_time": getattr(self, "_props_scan_completed_at", None),
+            "started_at": getattr(self, "_props_scan_started_at", None),
+            "last_cycle_status": last_status,
+            "last_scan_status": last_status,
+            "scan_mode": getattr(self, "_last_props_scan_mode", "NORMAL"),
+            "error": getattr(self, "_last_props_scan_error", None),
+            "error_message": getattr(self, "_last_props_scan_error", None),
+        }
 
     def get_global_props_results(
         self,
@@ -7491,8 +7646,10 @@ class PlatformAPIService:
             res["total_qualified_matching_filter"] = total
         else:
             res["qualified_opportunities"] = paginated
-            res["total_qualified_matching_filter"] = total
-        res["diagnostic_candidates"] = [o for o in opportunities if not (o.get("is_valuebet") or o.get("status") == "QUALIFIED")]
+        if is_all_candidates_view:
+            res["diagnostic_candidates"] = [o for o in opportunities if not (o.get("is_valuebet") or o.get("status") == "QUALIFIED")]
+        else:
+            res["diagnostic_candidates"] = list(diagnostic_raw)
         res["total_items_matching_filter"] = total
         res["limit"] = limit
         res["offset"] = offset

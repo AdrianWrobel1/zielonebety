@@ -1236,6 +1236,9 @@
         method: 'POST',
       });
     },
+    async fetchPropsScanStatus() {
+      return safeFetch(`${API_BASE}/api/v1/props/scan/status`);
+    },
     async fetchGlobalPropsResults(params = {}, options = {}) {
       const query = new URLSearchParams(params).toString();
       return safeFetch(`${API_BASE}/api/v1/props/global-results?${query}`, options);
@@ -8344,6 +8347,63 @@
 
   let _activePropsRequestId = 0;
 
+  async function pollPropsScanUntilComplete(selectedMode, isUltra, currentReqId, execId, scanStartTime) {
+    const alertContainer = document.getElementById('props-alert-container');
+    const btnScanText = document.getElementById('btn-scan-props-text');
+    const maxWaitMs = 600000; // 10 minutes max timeout
+    const pollIntervalMs = 2000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+      if (currentReqId !== _activePropsRequestId) return;
+
+      try {
+        const statusRes = await api.fetchPropsScanStatus();
+        const statusData = statusRes.data || {};
+
+        if (statusData.is_scanning) {
+          const elapsedSec = Math.round((Date.now() - scanStartTime) / 1000);
+          if (btnScanText) {
+            btnScanText.textContent = isUltra
+              ? `Scanning Global Props (Ultra)... (${elapsedSec}s)`
+              : `Scanning Global Props... (${elapsedSec}s)`;
+          }
+          continue;
+        }
+
+        // Scan has completed or reached terminal state
+        const lastCycleStatus = (statusData.last_cycle_status || statusData.last_scan_status || 'SUCCESS').toUpperCase();
+        const scannerStatus = (statusData.status || '').toUpperCase();
+        const isSuccess = (lastCycleStatus === 'SUCCESS' || lastCycleStatus === 'PARTIAL' || (scannerStatus === 'READY' && lastCycleStatus !== 'FAILED' && lastCycleStatus !== 'ERROR'));
+        if (isSuccess) {
+          if (alertContainer) alertContainer.innerHTML = '';
+          await fetchAndRenderPropsFromBackend();
+          const durSec = Math.round((Date.now() - scanStartTime) / 1000);
+          showToast(`Global ${isUltra ? 'Ultra ' : ''}scan complete (${durSec}s) — Status: ${lastCycleStatus}`);
+        } else if (lastCycleStatus === 'FAILED' || lastCycleStatus === 'ERROR' || scannerStatus === 'ERROR') {
+          const errDetail = statusData.error || statusData.error_message || 'The props scan cycle encountered a failure during execution.';
+          if (alertContainer) {
+            alertContainer.innerHTML = `
+              <div class="alert alert-danger" style="margin-bottom: 1rem; padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); color: #FCA5A5;">
+                <strong>Scan Failed:</strong> ${escapeHtml(errDetail)}
+              </div>
+            `;
+          }
+          showToast(`Global ${isUltra ? 'Ultra ' : ''}scan FAILED.`, 'error');
+        } else {
+          showToast(`Global Props scan ended with status: ${lastCycleStatus}`);
+        }
+        return;
+      } catch (pollErr) {
+        console.warn('Props scan status poll error (retrying):', pollErr);
+      }
+    }
+
+    // Polling timeout exceeded
+    showToast('Props scan is taking longer than expected. Please check results later.', 'warning');
+  }
+
   async function handlePropsScan() {
     const btnScan = document.getElementById('btn-scan-props');
     const btnText = document.getElementById('btn-scan-props-text');
@@ -8355,6 +8415,7 @@
     const currentReqId = ++_activePropsRequestId;
     const mode = state.playerProps.scanMode || 'NORMAL';
     const isUltra = (mode === 'ULTRA');
+    const scanStartTime = Date.now();
 
     if (btnScan) {
       btnScan.disabled = true;
@@ -8387,7 +8448,22 @@
       const res = await api.scanGlobalProps(params);
       if (currentReqId !== _activePropsRequestId) return;
 
-      if (res && res.data) {
+      if (res && (res.status_code === 202 || (res.status_code === 200 && res.data && res.data.status === 'SCANNING'))) {
+        const execId = res.data?.execution_id || res.metadata?.execution_id;
+        showToast(`Global ${isUltra ? 'Ultra ' : ''}scan initiated in background...`);
+        await pollPropsScanUntilComplete(mode, isUltra, currentReqId, execId, scanStartTime);
+      } else if (res && res.status_code === 409) {
+        const conflictMsg = (res.errors && res.errors[0]) || 'Global props scan is already in progress on server.';
+        showToast(conflictMsg, 'warning');
+        if (alertContainer) {
+          alertContainer.innerHTML = `
+            <div class="alert alert-warning" style="margin-bottom: 1rem; padding: 0.75rem 1rem; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: var(--radius-sm); color: #FDE047;">
+              <strong>Scan In Progress:</strong> ${escapeHtml(conflictMsg)}
+            </div>
+          `;
+        }
+      } else if (res && res.data && (res.data.qualified_opportunities || res.data.items)) {
+        // Fallback for direct synchronous responses (e.g. test mocks)
         const scanData = res.data;
         const qualified = scanData.qualified_opportunities || [];
         const diagnostic = scanData.diagnostic_candidates || [];

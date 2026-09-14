@@ -519,11 +519,15 @@ class TestGlobalPropsScanner(unittest.TestCase):
                 "qualified_opportunities": [],
             }
 
-            # POST /api/v1/props/global-scan
+            # POST /api/v1/props/global-scan (Asynchronous trigger returns 202)
             post_res = router.handle_post_global_props_scan({"props_scope": "ALL", "min_ev_percent": 3.0})
-            self.assertEqual(post_res.status_code, 200)
-            self.assertEqual(post_res.data["status"], "SUCCESS")
-            mock_scan.assert_called_once_with(scope_params={"props_scope": "ALL", "min_ev_percent": 3.0})
+            self.assertEqual(post_res.status_code, 202)
+            self.assertEqual(post_res.data["status"], "SCANNING")
+            self.assertTrue(post_res.data["execution_id"].startswith("props_scan_"))
+            service.wait_for_current_props_scan(timeout=2.0)
+            mock_scan.assert_called_once()
+            call_kwargs = mock_scan.call_args[1]
+            self.assertEqual(call_kwargs.get("scope_params"), {"props_scope": "ALL", "min_ev_percent": 3.0})
 
             # GET /api/v1/props/global-results
             get_res = router.handle_get_global_props_results(props_scope="PLAYER", min_net_ev=5.0)
@@ -536,6 +540,7 @@ class TestGlobalPropsScanner(unittest.TestCase):
                 min_net_ev=5.0,
                 limit=50,
                 offset=0,
+                scan_mode="NORMAL",
             )
 
     def test_get_global_props_results_empty_cache_returns_not_run(self):

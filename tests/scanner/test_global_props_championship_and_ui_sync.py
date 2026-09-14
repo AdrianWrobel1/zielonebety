@@ -115,7 +115,7 @@ class TestGlobalPropsChampionshipAndUISync(unittest.TestCase):
         self.assertEqual(res["diagnostic_candidates"][0]["player_name"], "Rejected Player")
 
     def test_problem_a3_post_and_get_symmetric_filtered_count(self):
-        """Both POST and GET responses must provide total_qualified_matching_filter."""
+        """POST triggers async scan (202), and GET returns total_qualified_matching_filter."""
         mock_opp = {
             "canonical_prop_key": "prop:saka:shots:1.5:OVER",
             "player_name": "Bukayo Saka",
@@ -137,9 +137,16 @@ class TestGlobalPropsChampionshipAndUISync(unittest.TestCase):
             "scanned_at": "2026-08-31T21:00:00Z",
         }
 
+        PlatformAPIService._cached_global_props_results = mock_scan_res
         with patch.object(PlatformAPIService, "scan_global_props", return_value=mock_scan_res):
             post_res = self.router.handle_post_global_props_scan({"props_scope": "PLAYER"})
-            self.assertEqual(post_res.data.get("total_qualified_matching_filter"), 1)
+            self.assertEqual(post_res.status_code, 202)
+            self.assertEqual(post_res.data.get("status"), "SCANNING")
+            self.service.wait_for_current_props_scan(timeout=2.0)
+
+            get_res = self.router.handle_get_global_props_results(props_scope="PLAYER")
+            self.assertEqual(get_res.status_code, 200)
+            self.assertEqual(get_res.data.get("total_qualified_matching_filter"), 1)
 
     # =========================================================================
     # PROBLEM B: CHAMPIONSHIP / LOWER LEAGUES MATCHING & PIPELINE

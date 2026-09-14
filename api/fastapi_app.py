@@ -597,7 +597,7 @@ def get_props_health():
     return router_instance.handle_get_props_health().to_dict()
 
 
-@app.post("/api/v1/props/global-scan")
+@app.post("/api/v1/props/global-scan", status_code=202)
 def post_global_props_scan(
     admin: dict = Depends(require_admin),
     time_horizon_days: int = Query(7, ge=1, le=14),
@@ -612,7 +612,7 @@ def post_global_props_scan(
     scan_mode: str = Query("NORMAL"),
     response: Response = None,
 ):
-    """Trigger bounded multi-fixture global scan for Player Props and Team Props."""
+    """Trigger bounded multi-fixture global scan for Player Props and Team Props asynchronously."""
     params = {
         "time_horizon_days": time_horizon_days,
         "tournaments": tournaments,
@@ -633,6 +633,14 @@ def post_global_props_scan(
     if response:
         response.status_code = api_res.status_code
     return api_res.to_dict()
+
+
+@app.get("/api/v1/props/scan/status")
+@app.get("/api/v1/props/status")
+@app.get("/api/v1/props/global-status")
+def get_props_scan_status():
+    """Fetch current operational and execution status of the Global Props Scanner."""
+    return router_instance.handle_get_props_scan_status().to_dict()
 
 
 @app.get("/api/v1/props/global-results")

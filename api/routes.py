@@ -812,14 +812,22 @@ class APIRouter:
         )
 
     def handle_post_global_props_scan(self, scope_params: Optional[Dict[str, Any]] = None) -> APIResponse:
-        """POST /api/v1/props/global-scan"""
+        """POST /api/v1/props/global-scan - Asynchronously triggers a bounded global props scan."""
         start = time.perf_counter()
         try:
-            results = self.service.scan_global_props(scope_params=scope_params)
+            trigger_data = self.service.trigger_global_props_scan_async(scope_params=scope_params)
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             return APIResponse(
-                status_code=200,
-                data=results,
+                status_code=202,
+                data=trigger_data,
+                metadata={"execution_id": trigger_data.get("execution_id")},
+                execution_time_ms=round(elapsed_ms, 2),
+            )
+        except APIError as api_err:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            return APIResponse(
+                status_code=api_err.status_code,
+                errors=[api_err.message],
                 execution_time_ms=round(elapsed_ms, 2),
             )
         except Exception as e:
@@ -827,9 +835,20 @@ class APIRouter:
             return APIResponse(
                 status_code=500,
                 data=None,
-                errors=[f"Global props scan failed: {str(e)}"],
+                errors=[f"Global props scan trigger error: {str(e)}"],
                 execution_time_ms=round(elapsed_ms, 2),
             )
+
+    def handle_get_props_scan_status(self) -> APIResponse:
+        """GET /api/v1/props/scan/status"""
+        start = time.perf_counter()
+        status_data = self.service.get_props_scan_status()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return APIResponse(
+            status_code=200,
+            data=status_data,
+            execution_time_ms=round(elapsed_ms, 2),
+        )
 
     def handle_get_global_props_results(
         self,

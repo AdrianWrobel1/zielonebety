@@ -64,22 +64,22 @@ class TestStage25BRegressionAndScanUI:
     def test_api_handle_post_run_scan_accepts_scan_mode(self):
         """Verify that APIRouter passes scan_mode to the scanner service."""
         mock_service = MagicMock()
-        mock_service.run_scan.return_value = {
+        mock_service.trigger_scan_async.return_value = {
             "execution_id": "test_exec_01",
-            "cycle_status": "SUCCESS",
+            "status": "SCANNING",
         }
         router = APIRouter(service=mock_service)
 
         # 1. Normal mode
         res_normal = router.handle_post_run_scan(payload={"scan_mode": "NORMAL"})
-        assert res_normal.status_code == 200
-        called_config = mock_service.run_scan.call_args[1]["config"]
+        assert res_normal.status_code == 202
+        called_config = mock_service.trigger_scan_async.call_args[1]["config"]
         assert called_config.scan_mode == "NORMAL"
         assert called_config.effective_max_detail_requests == 40
 
         # 2. Deep mode
         res_deep = router.handle_post_run_scan(payload={"scan_mode": "DEEP"})
-        assert res_deep.status_code == 200
-        called_config_deep = mock_service.run_scan.call_args[1]["config"]
+        assert res_deep.status_code == 202
+        called_config_deep = mock_service.trigger_scan_async.call_args[1]["config"]
         assert called_config_deep.scan_mode == "DEEP"
         assert called_config_deep.effective_max_detail_requests == 100

@@ -106,15 +106,14 @@ class TestUltraDashboardIntegration(unittest.TestCase):
     # Test 4: Normal Scan behavior remains unchanged
     # ──────────────────────────────────────────────────────────────────────────
     def test_04_normal_scan_behavior_unchanged(self):
-        self.mock_service.run_scan.return_value = {
+        self.mock_service.trigger_scan_async.return_value = {
+            "status": "SCANNING",
             "execution_id": "scan_norm_04",
-            "cycle_status": "SUCCESS",
-            "counts": {"discovered_events": 15},
         }
         res = self.router.handle_post_run_scan({"scan_mode": "NORMAL"})
-        self.assertEqual(res.status_code, 200)
-        self.mock_service.run_scan.assert_called_once()
-        config_arg = self.mock_service.run_scan.call_args[1].get("config")
+        self.assertEqual(res.status_code, 202)
+        self.mock_service.trigger_scan_async.assert_called_once()
+        config_arg = self.mock_service.trigger_scan_async.call_args[1].get("config")
         self.assertIsNotNone(config_arg)
         self.assertEqual(config_arg.scan_mode, "NORMAL")
 
@@ -122,15 +121,14 @@ class TestUltraDashboardIntegration(unittest.TestCase):
     # Test 5: Deep Scan behavior remains unchanged
     # ──────────────────────────────────────────────────────────────────────────
     def test_05_deep_scan_behavior_unchanged(self):
-        self.mock_service.run_scan.return_value = {
+        self.mock_service.trigger_scan_async.return_value = {
+            "status": "SCANNING",
             "execution_id": "scan_deep_05",
-            "cycle_status": "SUCCESS",
-            "counts": {"discovered_events": 50},
         }
         res = self.router.handle_post_run_scan({"scan_mode": "DEEP"})
-        self.assertEqual(res.status_code, 200)
-        self.mock_service.run_scan.assert_called_once()
-        config_arg = self.mock_service.run_scan.call_args[1].get("config")
+        self.assertEqual(res.status_code, 202)
+        self.mock_service.trigger_scan_async.assert_called_once()
+        config_arg = self.mock_service.trigger_scan_async.call_args[1].get("config")
         self.assertIsNotNone(config_arg)
         self.assertEqual(config_arg.scan_mode, "DEEP")
 

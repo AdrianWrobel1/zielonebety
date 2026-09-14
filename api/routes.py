@@ -120,7 +120,7 @@ class APIRouter:
     # ──────────────────────────────────────────────────────────────────────────
 
     def handle_post_run_scan(self, payload: Optional[Dict[str, Any]] = None) -> APIResponse:
-        """POST /api/v1/scan/run"""
+        """POST /api/v1/scan/run - Asynchronously triggers a scan cycle."""
         start = time.perf_counter()
         try:
             from orchestration.models import ScanConfig
@@ -135,12 +135,12 @@ class APIRouter:
                     max_detail_requests=int(max_details) if max_details is not None else None,
                 )
 
-            scan_data = self.service.run_scan(config=config_override)
+            trigger_data = self.service.trigger_scan_async(config=config_override, scan_source="MANUAL")
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             return APIResponse(
-                status_code=200,
-                data=scan_data,
-                metadata={"execution_id": scan_data.get("execution_id")},
+                status_code=202,
+                data=trigger_data,
+                metadata={"execution_id": trigger_data.get("execution_id")},
                 execution_time_ms=round(elapsed_ms, 2),
             )
         except APIError as api_err:
@@ -154,7 +154,7 @@ class APIRouter:
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             return APIResponse(
                 status_code=500,
-                errors=[f"Scan execution error: {str(exc)}"],
+                errors=[f"Scan trigger error: {str(exc)}"],
                 execution_time_ms=round(elapsed_ms, 2),
             )
 

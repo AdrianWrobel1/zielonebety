@@ -144,8 +144,10 @@ class TestScannerControlSuite(unittest.TestCase):
         self.service.scan_orchestrator = mock_orchestrator
 
         run_res = self.router.handle_post_run_scan()
-        self.assertEqual(run_res.status_code, 200)
-        data = run_res.data
+        self.assertEqual(run_res.status_code, 202)
+        self.assertEqual(run_res.data["status"], "SCANNING")
+        self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
+        data = self.service.get_latest_scan()
 
         self.assertEqual(data["execution_id"], "scan_20260817_test_001")
         self.assertEqual(data["cycle_status"], "SUCCESS")
@@ -189,8 +191,9 @@ class TestScannerControlSuite(unittest.TestCase):
         self.service.scan_orchestrator = mock_orchestrator
 
         run_res = self.router.handle_post_run_scan()
-        self.assertEqual(run_res.status_code, 200)
-        data = run_res.data
+        self.assertEqual(run_res.status_code, 202)
+        self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
+        data = self.service.get_latest_scan()
 
         self.assertEqual(data["counts"]["detected_opportunities"], 0)
         self.assertEqual(len(data["opportunities"]), 0)
@@ -217,8 +220,9 @@ class TestScannerControlSuite(unittest.TestCase):
         self.service.scan_orchestrator = mock_orchestrator
 
         run_res = self.router.handle_post_run_scan()
-        self.assertEqual(run_res.status_code, 200)
-        data = run_res.data
+        self.assertEqual(run_res.status_code, 202)
+        self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
+        data = self.service.get_latest_scan()
         self.assertEqual(data["cycle_status"], "PARTIAL")
         self.assertEqual(data["provider_results"]["betclic"]["status"], "FAILED")
         self.assertIn("Provider 'betclic' failed", data["warnings"][0])
@@ -237,8 +241,10 @@ class TestScannerControlSuite(unittest.TestCase):
         self.service.scan_orchestrator = mock_orchestrator
 
         run_res = self.router.handle_post_run_scan()
-        self.assertEqual(run_res.status_code, 200)
-        self.assertEqual(run_res.data["cycle_status"], "FAILED")
+        self.assertEqual(run_res.status_code, 202)
+        self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
+        data = self.service.get_latest_scan()
+        self.assertEqual(data["cycle_status"], "FAILED")
 
         # Check status endpoint reflects ERROR
         status_res = self.router.handle_get_scan_status()
@@ -274,7 +280,9 @@ class TestScannerControlSuite(unittest.TestCase):
                 discovered_events_count=200 + i,
             )
             self.service.scan_orchestrator = mock_orchestrator
-            self.router.handle_post_run_scan()
+            res = self.router.handle_post_run_scan()
+            self.assertEqual(res.status_code, 202)
+            self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
 
         hist_res = self.router.handle_get_scan_history(limit=5)
         self.assertEqual(hist_res.status_code, 200)
@@ -351,8 +359,10 @@ class TestScannerControlSuite(unittest.TestCase):
         self.service.scan_orchestrator = mock_orchestrator
 
         run_res = self.router.handle_post_run_scan()
-        self.assertEqual(run_res.status_code, 200)
-        opps = run_res.data["opportunities"]
+        self.assertEqual(run_res.status_code, 202)
+        self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
+        data = self.service.get_latest_scan()
+        opps = data["opportunities"]
         self.assertEqual(len(opps), 1)
         self.assertEqual(opps[0]["opportunity_id"], "opp_test_123")
         self.assertEqual(opps[0]["arbitrage_margin_pct"], 3.45)
@@ -400,8 +410,10 @@ class TestScannerControlSuite(unittest.TestCase):
                     duration_seconds=1.0,
                 )
                 scan_run_json = trigger_scan(response=resp)
-                self.assertEqual(resp.status_code, 200)
-                self.assertEqual(scan_run_json["data"]["execution_id"], "fastapi_test_scan")
+                self.assertEqual(resp.status_code, 202)
+                self.assertEqual(scan_run_json["status_code"], 202)
+                self.assertEqual(scan_run_json["data"]["status"], "SCANNING")
+                self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
 
 
 class TestSchedulerControlIntegration(unittest.TestCase):

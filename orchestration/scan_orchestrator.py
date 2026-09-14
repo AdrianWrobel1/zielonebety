@@ -321,6 +321,7 @@ class ProductionScanOrchestrator:
         self,
         providers: Optional[Dict[str, BaseProvider]] = None,
         evaluation_time: Optional[datetime] = None,
+        execution_id: Optional[str] = None,
     ) -> ScanCycleResult:
         """Executes one complete, discrete scan cycle.
 
@@ -328,6 +329,7 @@ class ProductionScanOrchestrator:
             providers: Optional explicit dict of provider instances {provider_name: provider}.
                        If not supplied, instances are created via ProviderFactory / configured providers.
             evaluation_time: Optional explicit timestamp for deterministic testing.
+            execution_id: Optional explicit execution ID generated at trigger time.
 
         Returns:
             ScanCycleResult containing complete structured diagnostic telemetry.
@@ -338,7 +340,7 @@ class ProductionScanOrchestrator:
         cycle_t0 = time.perf_counter()
         now_dt = evaluation_time or datetime.now(timezone.utc)
         started_at = now_dt.isoformat()
-        execution_id = f"scan_{now_dt.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        execution_id = execution_id or f"scan_{now_dt.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
         from orchestration.profiler import (
             ScanExecutionProfiler,

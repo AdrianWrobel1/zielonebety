@@ -2550,8 +2550,80 @@
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Scan Execution Controller
+  // Scan Execution Controller & Background Polling
   // ──────────────────────────────────────────────────────────────────────────
+
+  async function pollScanUntilComplete(selectedMode, isUltra, scanStartTime, execId) {
+    const progTitle = document.getElementById('dash-progress-title');
+    const alertBox = document.getElementById('dash-alert-container');
+    const maxWaitMs = 300000; // 5 minutes max timeout
+    const pollIntervalMs = 2000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+
+      try {
+        const statusRes = await api.fetchScanStatus();
+        const statusData = statusRes.data || {};
+
+        if (statusData.is_scanning) {
+          const elapsedSec = Math.round((Date.now() - scanStartTime) / 1000);
+          if (progTitle) {
+            progTitle.textContent = isUltra
+              ? `Executing Full-Day ULTRA Scan Cycle... (${elapsedSec}s)`
+              : `Running ${selectedMode} Scan Cycle... (${elapsedSec}s)`;
+          }
+          continue;
+        }
+
+        // Scan has completed or reached terminal state
+        const lastCycleStatus = (statusData.last_cycle_status || 'SUCCESS').toUpperCase();
+        if (lastCycleStatus === 'SUCCESS' || lastCycleStatus === 'PARTIAL') {
+          clearScanDebugUI();
+          const latestRes = await api.fetchLatestScan();
+          if (latestRes && latestRes.data) {
+            state.latestScan = latestRes.data;
+            renderDashboardView(latestRes.data);
+          }
+          await refreshScanHistory();
+          if (state.currentView === 'events') {
+            await loadEventsData();
+          }
+          try {
+            if (state.currentView === 'opportunities') {
+              await loadOpportunitiesData();
+            } else if (state.currentView === 'playerprops') {
+              await loadPlayerPropsData();
+            } else if (state.currentView === 'dashboard') {
+              await loadDashboardData();
+            }
+          } catch (refreshErr) {
+            console.error('Post-scan view refresh failed:', refreshErr);
+          }
+          const dur = latestRes?.data?.duration_seconds || Math.round((Date.now() - scanStartTime) / 1000);
+          if (lastCycleStatus === 'PARTIAL') {
+            showToast(`${selectedMode} Scan completed with PARTIAL status (${dur}s)`);
+          } else {
+            showToast(`${selectedMode} Scan complete (${dur}s) — Status: ${lastCycleStatus}`);
+          }
+        } else if (lastCycleStatus === 'FAILED' || lastCycleStatus === 'ERROR') {
+          if (alertBox) {
+            alertBox.innerHTML = `<div class="alert-banner error"><strong>Scan Failed:</strong> The scan cycle encountered a failure during execution.</div>`;
+          }
+          showToast(`${selectedMode} Scan FAILED. See details.`, 'error');
+        } else {
+          showToast(`Scan ended with status: ${lastCycleStatus}`);
+        }
+        return;
+      } catch (pollErr) {
+        console.warn('Scan status poll error (retrying):', pollErr);
+      }
+    }
+
+    // Polling timeout exceeded
+    showToast('Scan is taking longer than expected. Please check scan status later.', 'warning');
+  }
 
   async function handleRunScan() {
     const btnRun = document.getElementById('btn-run-scan');
@@ -2604,7 +2676,12 @@
 
       document.querySelectorAll('.dash-flow-stage').forEach(stg => stg.classList.remove('is-running'));
 
-      if (res && res.status_code === 200 && res.data) {
+      if (res && (res.status_code === 202 || (res.status_code === 200 && res.data && res.data.status === 'SCANNING'))) {
+        clearScanDebugUI();
+        const execId = res.data?.execution_id || res.metadata?.execution_id;
+        showToast(`${selectedMode} Scan initiated in background...`);
+        await pollScanUntilComplete(selectedMode, isUltra, scanStartTime, execId);
+      } else if (res && res.status_code === 200 && res.data && res.data.counts) {
         clearScanDebugUI();
         state.latestScan = res.data;
         renderDashboardView(res.data);

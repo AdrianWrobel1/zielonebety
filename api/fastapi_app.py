@@ -141,10 +141,10 @@ def get_readiness(response: Response):
 # Production Scanner Control & Cycle Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.post("/api/v1/scan/run")
-@app.post("/api/scan/run")
+@app.post("/api/v1/scan/run", status_code=202)
+@app.post("/api/scan/run", status_code=202)
 def trigger_scan(response: Response, payload: Optional[Dict[str, Any]] = Body(default=None), admin: dict = Depends(require_admin)):
-    """Trigger a production scan cycle across registered providers."""
+    """Trigger a production scan cycle asynchronously across registered providers."""
     api_res = router_instance.handle_post_run_scan(payload=payload)
     response.status_code = api_res.status_code
     return api_res.to_dict()

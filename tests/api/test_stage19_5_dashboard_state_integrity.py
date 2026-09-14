@@ -137,7 +137,8 @@ class TestStage195DashboardStateIntegrity(unittest.TestCase):
 
         # Run scan
         run_res = self.router.handle_post_run_scan()
-        self.assertEqual(run_res.status_code, 200)
+        self.assertEqual(run_res.status_code, 202)
+        self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
 
         # 1. Latest scan
         latest_res = self.router.handle_get_latest_scan()
@@ -188,17 +189,21 @@ class TestStage195DashboardStateIntegrity(unittest.TestCase):
             self.assertEqual(quota.errors_count, 0)
 
     def test_05_genuine_backend_failure_returns_error_envelope_and_resets_lock(self):
-        """Verify genuine backend error returns 500 status and unlocks the scanner for future scans."""
+        """Verify genuine backend error in async worker unlocks the scanner and reports FAILED in status."""
         mock_orchestrator = MagicMock(spec=ProductionScanOrchestrator)
         mock_orchestrator.run_scan_cycle.side_effect = RuntimeError("Fatal scraper memory exhaustion")
         self.service.scan_orchestrator = mock_orchestrator
 
         run_res = self.router.handle_post_run_scan()
-        self.assertEqual(run_res.status_code, 500)
-        self.assertIn("Fatal scraper memory exhaustion", run_res.errors[0])
+        self.assertEqual(run_res.status_code, 202)
+        self.assertTrue(self.service.wait_for_current_scan(timeout=2.0))
 
         # Ensure lock was released and status can be recovered
         self.assertFalse(self.service._is_scanning)
+        self.assertFalse(self.service._scan_lock.locked())
+        status_res = self.router.handle_get_scan_status()
+        self.assertEqual(status_res.data["status"], "ERROR")
+        self.assertEqual(status_res.data["last_cycle_status"], "FAILED")
 
 
 if __name__ == "__main__":

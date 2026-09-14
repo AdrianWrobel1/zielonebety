@@ -2563,6 +2563,8 @@ class PlatformAPIService:
         self._scan_lock = threading.Lock()
         self._is_scanning = False
         self._scanner_status = "READY"
+        self._current_execution_id: Optional[str] = None
+        self._current_scan_thread: Optional[threading.Thread] = None
         self._last_scan_result: Optional[Dict[str, Any]] = None
         self._last_ultra_scan_result: Optional[Dict[str, Any]] = None
         self._scan_history: List[Dict[str, Any]] = []
@@ -2959,6 +2961,8 @@ class PlatformAPIService:
         config: Optional[ScanConfig] = None,
         providers: Optional[Dict[str, Any]] = None,
         scan_source: str = "MANUAL",
+        execution_id: Optional[str] = None,
+        _lock_acquired: bool = False,
     ) -> Dict[str, Any]:
         """Executes a production scan cycle with concurrency protection.
 
@@ -2966,24 +2970,32 @@ class PlatformAPIService:
             config: Optional ScanConfig override for this cycle.
             providers: Optional explicit provider instances dict.
             scan_source: "MANUAL" or "AUTOMATED" — recorded in history.
+            execution_id: Optional explicit execution ID generated at trigger time.
+            _lock_acquired: True if caller already acquired self._scan_lock.
 
         Raises:
             APIError(status_code=409) if a scan is already running.
         """
-        # Attempt to acquire non-blocking lock to prevent duplicate scans
-        acquired = self._scan_lock.acquire(blocking=False)
-        if not acquired:
-            raise APIError("Scan is already in progress. Please wait for the current cycle to complete.", status_code=409)
+        if not _lock_acquired:
+            acquired = self._scan_lock.acquire(blocking=False)
+            if not acquired:
+                raise APIError("Scan is already in progress. Please wait for the current cycle to complete.", status_code=409)
 
         self._is_scanning = True
         self._scanner_status = "SCANNING"
+        now_dt = datetime.now(timezone.utc)
+        exec_id = execution_id or f"scan_{now_dt.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        self._current_execution_id = exec_id
 
         try:
             # If a custom config is passed, update orchestrator config temporarily if needed
             if config is not None:
                 self.scan_orchestrator.config = config
 
-            scan_cycle_result: ScanCycleResult = self.scan_orchestrator.run_scan_cycle(providers=providers)
+            scan_cycle_result: ScanCycleResult = self.scan_orchestrator.run_scan_cycle(
+                providers=providers,
+                execution_id=exec_id,
+            )
 
             serialized = _serialize_scan_cycle_result(scan_cycle_result)
             serialized["scan_source"] = scan_source
@@ -3029,12 +3041,93 @@ class PlatformAPIService:
         except Exception as exc:
             self._scanner_status = "ERROR"
             logger.error("Scan cycle execution failed at application service layer", exc_info=True)
+            failed_entry = {
+                "execution_id": exec_id,
+                "status": "FAILED",
+                "cycle_status": "FAILED",
+                "started_at": now_dt.isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "duration_seconds": round((datetime.now(timezone.utc) - now_dt).total_seconds(), 2),
+                "events_discovered": 0,
+                "events_selected": 0,
+                "events_matched": 0,
+                "surebets_count": 0,
+                "scan_source": scan_source,
+                "errors": [str(exc)],
+            }
+            self._last_scan_result = failed_entry
+            self._scan_history.insert(0, failed_entry)
+            if len(self._scan_history) > 20:
+                self._scan_history.pop()
             sanitized_msg = _sanitize_text(str(exc))
             raise APIError(f"Scan cycle execution failed: {sanitized_msg}", status_code=500)
 
         finally:
             self._is_scanning = False
-            self._scan_lock.release()
+            self._current_execution_id = None
+            if self._scan_lock.locked():
+                self._scan_lock.release()
+
+    def trigger_scan_async(
+        self,
+        config: Optional[ScanConfig] = None,
+        providers: Optional[Dict[str, Any]] = None,
+        scan_source: str = "MANUAL",
+    ) -> Dict[str, Any]:
+        """Initiates a production scan cycle asynchronously with concurrency protection.
+
+        Returns immediately with status='SCANNING' and execution_id.
+        Raises APIError(status_code=409) if a scan is already running.
+        """
+        acquired = self._scan_lock.acquire(blocking=False)
+        if not acquired:
+            raise APIError("Scan is already in progress. Please wait for the current cycle to complete.", status_code=409)
+
+        self._is_scanning = True
+        self._scanner_status = "SCANNING"
+        now_dt = datetime.now(timezone.utc)
+        exec_id = f"scan_{now_dt.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        self._current_execution_id = exec_id
+
+        def _worker():
+            try:
+                self.run_scan(
+                    config=config,
+                    providers=providers,
+                    scan_source=scan_source,
+                    execution_id=exec_id,
+                    _lock_acquired=True,
+                )
+            except Exception as exc:
+                logger.error("Asynchronous scan cycle worker caught exception for %s: %s", exec_id, exc, exc_info=True)
+                self._scanner_status = "ERROR"
+            finally:
+                self._is_scanning = False
+                self._current_execution_id = None
+                if self._scan_lock.locked():
+                    self._scan_lock.release()
+
+        worker_thread = threading.Thread(
+            target=_worker,
+            name=f"ScanWorker-{exec_id}",
+            daemon=True,
+        )
+        self._current_scan_thread = worker_thread
+        worker_thread.start()
+
+        return {
+            "status": "SCANNING",
+            "execution_id": exec_id,
+            "started_at": now_dt.isoformat(),
+        }
+
+    def wait_for_current_scan(self, timeout: float = 10.0) -> bool:
+        """Helper for tests to await background scan completion deterministically."""
+        th = getattr(self, "_current_scan_thread", None)
+        if th is not None and th.is_alive():
+            th.join(timeout=timeout)
+            return not th.is_alive()
+        return True
 
     def get_latest_scan(self) -> Optional[Dict[str, Any]]:
         """Returns the most recent scan cycle result (regular or ultra), or None if no scan has run yet."""
@@ -3295,13 +3388,18 @@ class PlatformAPIService:
                 if t_ultra >= t_reg:
                     latest = ultra_res
 
+        current_id = getattr(self, "_current_execution_id", None)
+        last_id = current_id if (self._is_scanning and current_id) else (latest.get("execution_id") if latest else None)
+        last_status = "SCANNING" if self._is_scanning else ((latest.get("status") or latest.get("cycle_status") or "NOT_RUN") if latest else "NOT_RUN")
+
         return {
             "status": self._scanner_status,
             "is_scanning": self._is_scanning,
-            "has_run": latest is not None,
-            "last_scan_id": latest.get("execution_id") if latest else None,
+            "current_execution_id": current_id,
+            "has_run": latest is not None or self._is_scanning,
+            "last_scan_id": last_id,
             "last_scan_time": latest.get("completed_at") if latest else None,
-            "last_cycle_status": (latest.get("status") or latest.get("cycle_status") or "NOT_RUN") if latest else "NOT_RUN",
+            "last_cycle_status": last_status,
         }
 
     def get_scan_history(self, limit: int = 10) -> List[Dict[str, Any]]:
